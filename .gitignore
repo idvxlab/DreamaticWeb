@@ -1,0 +1,36 @@
+# Dependencies and generated build output
+node_modules/
+dist/
+coverage/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Runtime data (projects, uploads, settings and API keys)
+workspace/
+
+# Local environment and credentials; keep shareable examples
+.env
+.env.*
+!.env.example
+!.env.*.example
+.npmrc
+*.pem
+*.key
+
+# Logs and test artifacts
+*.log
+playwright-report/
+test-results/
+blob-report/
+
+# Local editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
