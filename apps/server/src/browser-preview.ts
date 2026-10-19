@@ -36,7 +36,12 @@ export function registerBrowserPreview(app: Express, open = openSystemBrowser) {
       .parse(req.body);
     const result = await validatePage(project, html);
     if (!result.valid)
-      return res.status(400).json({ error: "页面验证未通过，无法打开" });
+      return res
+        .status(400)
+        .json({
+          error: "页面验证未通过，无法打开",
+          issues: result.issues.filter((i) => i.severity === "error"),
+        });
     const directory = path.join(projectDir(project.id), "previews", "browser");
     await mkdir(directory, { recursive: true });
     const files = await Promise.all(

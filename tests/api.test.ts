@@ -193,6 +193,33 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       await new Promise((r) => setTimeout(r, 50));
     }
     assert.equal(generated.status, "complete", generated.error);
+    assert.equal(generated.pagePreviews, undefined);
+    assert.ok(generated.run?.id);
+    for (const checkpoint of Object.values(generated.run.checkpoints) as any[])
+      assert.equal(
+        checkpoint.result,
+        undefined,
+        "polling responses omit duplicate stage artifacts",
+      );
+    assert.equal(
+      (await request(`/projects/${interrupted}/resume`, { method: "POST" }))
+        .status,
+      409,
+      "legacy tasks must not invent checkpoints",
+    );
+    const messageCount = generated.messages.length;
+    assert.equal(
+      (await request(`/projects/${p.id}/resume`, { method: "POST" })).status,
+      202,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    const resumed = await (await request(`/projects/${p.id}`)).json();
+    assert.equal(resumed.versions.length, generated.versions.length);
+    assert.equal(
+      resumed.messages.length,
+      messageCount,
+      "resume does not append duplicate requests",
+    );
     assert.ok(
       await stat(
         path.join(

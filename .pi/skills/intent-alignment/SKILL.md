@@ -14,6 +14,6 @@ Identify audience, purpose, primary action and constraints. Preserve exact user 
 
 输入：对话、已保存页面、来源摘要。
 
-输出及错误处理：保持协调器 brief JSON 契约；缺少关键决策时返回 needsInput 和问题。
+输出及错误处理：遵循 Orchestrator 简报结构和 submit_result 提交契约；关键偏好阻塞时优先调用 ask_user 并停止，needsInput 仅为兼容路径。
 
 权限：只提供知识指导，不执行命令、网络请求或本地脚本。未知来源与模型不可见内容不能当作已验证事实。

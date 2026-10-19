@@ -2,10 +2,20 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "./frontmatter.js";
 import { designCompletion, usedImages } from "./design-result.js";
-import { timeoutSetting, watchAgent } from "./watchdog.js";
+import { limitSetting, timeoutSetting, watchAgent } from "./watchdog.js";
 import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import { parseJSON, OutputFormatError } from "./structured-output.js";
 export { parseJSON } from "./structured-output.js";
+import {
+  imageHandoff,
+  recommendedImages,
+  visualEvidenceSchema,
+} from "./visual.js";
+import { roles, checkRoleTools } from "./roles.js";
+import { boundedInput } from "./input.js";
+import { taskFingerprint, stageFingerprint } from "./checkpoints.js";
+import { toolFailureSummary } from "./tool-errors.js";
+import { pageChecks } from "./page-checks.js";
 import { resolveModel } from "./models.js";
 import { Type } from "@earendil-works/pi-ai";
 import {
@@ -20,10 +30,12 @@ import type { Role, Project, RunEvent } from "./contracts.js";
 import { projectTools } from "./tools.js";
 import { readCandidate, validatePage } from "./pages.js";
 import {
-  readSourceText,
-  readSourceTable,
-} from "../../../apps/server/src/source-content.js";
+  evidenceSchema,
+  EvidenceValidationError,
+  validateFactEvidence,
+} from "./evidence.js";
 import { sanitizeHtml } from "../../../apps/server/src/html.js";
+import { submissionBriefSchema, budgetCell } from "./brief.js";
 const briefSchema = z.object({
   needsInput: z.boolean(),
   question: z
@@ -32,7 +44,7 @@ const briefSchema = z.object({
     .nullish()
     .transform((value) => value || ""),
   title: z.string().max(200),
-  brief: z.record(z.string(), z.unknown()),
+  brief: submissionBriefSchema,
 });
 const analysisSchema = z.object({
   summary: z.string(),
@@ -40,23 +52,7 @@ const analysisSchema = z.object({
     z.object({
       text: z.string(),
       sourceId: z.string(),
-      evidence: z
-        .discriminatedUnion("kind", [
-          z.object({
-            kind: z.literal("text"),
-            start: z.number().int().nonnegative(),
-            end: z.number().int().nonnegative(),
-            quote: z.string().min(1).max(4000),
-          }),
-          z.object({
-            kind: z.literal("cell"),
-            tableIndex: z.number().int().nonnegative(),
-            row: z.number().int().nonnegative(),
-            column: z.number().int().nonnegative(),
-            value: z.unknown(),
-          }),
-        ])
-        .optional(),
+      evidence: evidenceSchema.optional(),
     }),
   ),
   sections: z.array(z.object({ title: z.string(), content: z.string() })),
@@ -72,6 +68,7 @@ const analysisSchema = z.object({
       }),
     )
     .default([]),
+  visualEvidence: visualEvidenceSchema.optional(),
   dataInsights: z.array(z.string()),
   limitations: z.array(z.string()),
 });
@@ -95,6 +92,7 @@ export async function runProject(
   p: Project,
   save: (p: Project) => Promise<void>,
   emit: (event: RunEvent) => void,
+  options: { resume?: boolean } = {},
 ) {
   if (activeRuns.has(p.id)) throw new Error("项目正在运行");
   const controller = new AbortController();
@@ -129,19 +127,13 @@ export async function runProject(
     } = {},
   ) {
     if (controller.signal.aborted) throw new Error("已停止生成");
-    add(
-      role,
-      {
-        orchestrator: "正在理解需求并对齐设计目标",
-        analyst: "正在分析来源、提取关键信息和媒体",
-        designer: "正在设计界面并生成响应式页面",
-      }[role],
-    );
+    add(role, roles[role].status);
     const [shared, rolePrompt] = await Promise.all([
       readFile(path.resolve(".pi/APPEND_SYSTEM.md"), "utf8"),
       readFile(path.resolve(".pi/agents", role + ".md"), "utf8"),
     ]);
-    const prompt = shared + "\n" + matter(rolePrompt).content;
+    const parsedRole = matter(rolePrompt);
+    const prompt = shared + "\n" + parsedRole.content;
     const { models, model } = resolveModel(role);
     if (images.length && !model.input.includes("image"))
       add(role, "当前模型不支持图片输入，本阶段仅使用文本、表格和媒体元数据");
@@ -238,6 +230,17 @@ export async function runProject(
         },
       });
     }
+    if (
+      parsedRole.data.name !== roles[role].name ||
+      parsedRole.data.can_spawn !== false
+    )
+      throw new Error(`Role metadata contract mismatch: ${role}`);
+    if (!options.repairOnly)
+      checkRoleTools(
+        role,
+        parsedRole.data.allowed_tools,
+        tools.map((t) => t.name),
+      );
     const agent = new Agent({
       initialState: {
         systemPrompt:
@@ -258,13 +261,16 @@ export async function runProject(
     });
     const abort = () => agent.abort();
     let turns = 0;
-    const maxTurns = options.repairOnly ? 3 : 16;
+    const maxTurns = options.repairOnly
+      ? 3
+      : limitSetting("DREAMATIC_AGENT_MAX_TURNS", 0);
     const started = Date.now();
     const watchdog = watchAgent(
       {
         total: timeoutSetting(
           `DREAMATIC_${role.toUpperCase()}_TIMEOUT_MS`,
-          timeoutSetting("DREAMATIC_AGENT_TIMEOUT_MS", 600000),
+          timeoutSetting("DREAMATIC_AGENT_TIMEOUT_MS", 0, true),
+          true,
         ),
         first: timeoutSetting(
           "DREAMATIC_AGENT_FIRST_RESPONSE_TIMEOUT_MS",
@@ -283,23 +289,33 @@ export async function runProject(
     controller.signal.addEventListener("abort", abort, { once: true });
     const unsubscribe = agent.subscribe((event) => {
       watchdog.event(event);
+      if (event.type === "tool_execution_end" && event.isError) {
+        const summary = toolFailureSummary(event.result);
+        add(role, `工具错误：${event.toolName} · ${summary.reason}`, "status", {
+          tool: event.toolName,
+          ...summary,
+        });
+      }
       if (
         event.type === "tool_execution_end" &&
         (pendingQuestion || submitted !== undefined)
       )
         agent.abort();
-      if (event.type === "turn_start" && ++turns > maxTurns) agent.abort();
+      if (event.type === "turn_start" && ++turns > maxTurns && maxTurns > 0)
+        agent.abort();
     });
     try {
       await agent.prompt(
-        JSON.stringify(input),
+        boundedInput(input, options.repairOnly ? 500000 : 180000),
         model.input.includes("image") ? images : [],
       );
       if (controller.signal.aborted) throw new Error("已停止生成");
       if (pendingQuestion) throw new ClarificationRequested(pendingQuestion);
       if (watchdog.error) throw watchdog.error;
-      if (turns > maxTurns)
-        throw new Error("智能体达到工具调用上限，请缩小任务后重试");
+      if (maxTurns > 0 && turns > maxTurns)
+        throw new Error(
+          "智能体达到模型轮次上限，请调整 DREAMATIC_AGENT_MAX_TURNS 后重试",
+        );
       if (submitted !== undefined) {
         add(role, "结构化结果已接收", "status", {
           stopReason: "submitted",
@@ -354,15 +370,56 @@ export async function runProject(
     validate: (text: string) => T | Promise<T>,
     images: ImageContent[] = [],
   ): Promise<T> {
+    const key = await stageFingerprint(p, role, skills);
+    const checkpoint = p.run?.checkpoints[role];
+    if (options.resume && checkpoint?.key === key) {
+      try {
+        const value = await validate(
+          role === "designer"
+            ? String(checkpoint.result)
+            : JSON.stringify(checkpoint.result),
+        );
+        add(role, "复用已完成阶段，无需模型调用");
+        return role === "analyst"
+          ? {
+              ...value,
+              evidenceRepairs: (checkpoint.result as any).evidenceRepairs || [],
+              mediaPolicyAudit: (checkpoint.result as any).mediaPolicyAudit,
+            }
+          : value;
+      } catch {
+        add(role, "已保存阶段结果不再有效，重新执行");
+      }
+    }
+    if (p.run) {
+      p.run.activeRole = role;
+      const order: Role[] = ["orchestrator", "analyst", "designer"];
+      for (const downstream of order.slice(order.indexOf(role)))
+        delete p.run.checkpoints[downstream];
+      await save(p);
+    }
+    let accepted: { value: T } | undefined;
+    const check = async (text: string) => {
+      const value = await validate(text);
+      accepted = { value };
+      return value;
+    };
     const result = await call(role, input, images, {
-      validate,
+      validate: check,
     });
-    const pass = (value: T) => {
+    const pass = async (value: T) => {
+      if (p.run)
+        p.run.checkpoints[role] = {
+          key,
+          result: value,
+          completedAt: new Date().toISOString(),
+        };
+      await save(p);
       add(role, "结果校验通过，阶段完成");
       return value;
     };
     try {
-      return pass(await validate(result));
+      return pass(accepted ? accepted.value : await check(result));
     } catch (error) {
       if (controller.signal.aborted) throw new Error("已停止生成");
       const repairOnly =
@@ -379,22 +436,63 @@ export async function runProject(
           repairOnly,
         },
       );
+      let candidateDraft:
+        | {
+            candidateId: string;
+            baseVersionId: string;
+            html: string;
+            total: number;
+            nextOffset: number;
+          }
+        | undefined;
+      if (role === "designer") {
+        try {
+          const reference = z
+            .object({ candidateId: z.string().uuid() })
+            .parse(parseJSON(result));
+          const draft = await readCandidate(p, reference.candidateId);
+          candidateDraft = {
+            ...reference,
+            baseVersionId: draft.baseVersionId,
+            html: draft.html.slice(0, 40000),
+            total: draft.html.length,
+            nextOffset: Math.min(draft.html.length, 40000),
+          };
+        } catch {
+          /* An invalid or stale reference must not be silently reused. */
+        }
+      }
+      let pageIssues: unknown;
+      if (role === "designer" && error instanceof Error) {
+        try {
+          const parsed = JSON.parse(error.message);
+          if (Array.isArray(parsed)) pageIssues = parsed;
+        } catch {
+          /* Not a page issue list. */
+        }
+      }
       const repaired = await call(
         role,
         {
           originalInput: input,
+          candidateDraft,
+          pageIssues,
           invalidOutput: result.slice(0, 200000),
           outputWasClipped: result.length > 200000,
           repair: String(error).slice(0, 2000),
+          evidenceIssues:
+            error instanceof EvidenceValidationError ? error.issues : undefined,
           instruction: repairOnly
             ? "Repair only the result format using the existing evidence and draft. Do not redo analysis or invent missing evidence. Prefer submit_result for structured roles. Return one complete corrected result."
-            : "Correct the invalid fields or evidence. Follow the output contract and return a complete corrected result.",
+            : role === "designer"
+              ? "Use candidateDraft and pageIssues when supplied; otherwise correct invalidOutput using the reported validation error. Use page_patch with candidateId alone for an unsaved draft; never invent baseVersionId. Read remaining HTML using project_context_read(section:page,candidateId,offset) if nextOffset < total. Preview the changed candidate and return its latest candidateId."
+              : "Correct the invalid fields or evidence. Follow the output contract and return a complete corrected result.",
         },
         repairOnly ? [] : images,
-        { validate, repairOnly },
+        { validate: check, repairOnly },
       );
       try {
-        return pass(await validate(repaired));
+        return pass(accepted ? accepted.value : await check(repaired));
       } catch (failure) {
         add(role, "结果校验仍未通过，任务已停止", "error", {
           validation: failure instanceof Error ? failure.name : "unknown",
@@ -403,13 +501,29 @@ export async function runProject(
         });
         const reason = validationReason(failure);
         throw new Error(
-          `${{ orchestrator: "Orchestrator", analyst: "Document Analyst", designer: "Designer" }[role]} 结果校验失败，自动修复后仍未通过：${reason.slice(0, 1200)}`,
+          `${{ orchestrator: "Orchestrator", analyst: "Analyst", designer: "Designer" }[role]} 结果校验失败，自动修复后仍未通过：${reason.slice(0, 1200)}`,
         );
       }
     }
   }
 
   try {
+    const inputHash = await taskFingerprint(p);
+    if (
+      options.resume &&
+      p.run?.completedVersionId &&
+      p.run.completedInputHash === inputHash &&
+      p.versions.at(-1)?.id === p.run.completedVersionId
+    ) {
+      p.status = "complete";
+      await save(p);
+      return;
+    }
+    if (!options.resume || p.run?.inputHash !== inputHash) {
+      if (options.resume)
+        add("system", "任务输入已变化或没有可验证断点，将重新执行受影响流程");
+      p.run = { id: crypto.randomUUID(), inputHash, checkpoints: {} };
+    }
     const catalog = await discoverSkillCatalog();
     skills = catalog.skills;
     for (const warning of catalog.diagnostics) add("system", warning);
@@ -448,13 +562,9 @@ export async function runProject(
             ...t,
             rows: t.rows.slice(0, 100).map((row) =>
               row.slice(0, 60).map((value) => {
-                const cell =
-                  typeof value === "object"
-                    ? JSON.stringify(value)
-                    : String(value ?? "");
-                const bounded = cell.slice(0, Math.min(remaining, 2000));
-                remaining -= bounded.length;
-                return bounded;
+                const cell = budgetCell(value, remaining);
+                remaining = Math.max(0, remaining - cell.size);
+                return cell.value;
               }),
             ),
           })),
@@ -486,8 +596,6 @@ export async function runProject(
             excerpt: s.text.slice(0, 6000),
             characters: s.text.length,
             warnings: s.warnings,
-            instruction:
-              "The Analyst receives the extracted document. Do not ask the user to summarize its contents.",
           })),
           existingHtml: existing?.slice(0, 60000),
         },
@@ -508,15 +616,7 @@ export async function runProject(
             options: [],
           }),
         );
-      const images: ImageContent[] = [];
-      const imageInputOrder: {
-        position: number;
-        sourceId: string;
-        assetId: string;
-        url: string;
-        name: string;
-      }[] = [];
-      let imageBytes = 0;
+      const loadImages = imageHandoff(p);
       const imageCandidates = p.sources
         .flatMap((source) =>
           source.assets
@@ -528,45 +628,10 @@ export async function runProject(
             (b.asset.width || 0) * (b.asset.height || 0) -
             (a.asset.width || 0) * (a.asset.height || 0),
         );
-      for (const { source, asset } of imageCandidates) {
-        if (images.length >= 8) break;
-        if (
-          !asset.url.startsWith(`/assets/${p.id}/`) ||
-          !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(
-            asset.mime,
-          )
-        )
-          continue;
-        try {
-          const bytes = await readFile(
-            path.resolve(
-              process.env.DREAMATIC_WORKSPACE || "workspace",
-              "projects",
-              p.id,
-              "assets",
-              path.basename(asset.url),
-            ),
-          );
-          if (
-            bytes.length > 4 * 1024 * 1024 ||
-            imageBytes + bytes.length > 12 * 1024 * 1024
-          )
-            continue;
-          imageBytes += bytes.length;
-          images.push({
-            type: "image",
-            data: bytes.toString("base64"),
-            mimeType: asset.mime,
-          });
-          imageInputOrder.push({
-            position: images.length,
-            sourceId: source.id,
-            assetId: asset.id,
-            url: asset.url,
-            name: asset.name,
-          });
-        } catch {}
-      }
+      const { images, imageInputOrder } = await loadImages(
+        imageCandidates,
+        resolveModel("analyst").model.input.includes("image"),
+      );
       if (imageCandidates.length)
         add(
           "analyst",
@@ -576,52 +641,35 @@ export async function runProject(
         "analyst",
         {
           brief: brief.brief,
+          conversation,
+          clarificationAnswers: (p.questions || []).filter((q) => q.answeredAt),
+          existingHtml: existing,
           sources,
           imageInputOrder,
-          instruction:
-            "Review document images as well as text. imageInputOrder maps visual inputs (only when vision is supported) to source/asset IDs. Select useful images in assets with specific placement/purpose. Use asset_inspect for additional images, and record imageDecisions with assetId, decision use/skip/unverified and reason. Do not infer unseen visual content; if no useful images can be confirmed, state why. Use supplied text and tables directly; textCoverage identifies exact supplied offsets and whether the full stored text is present. Do not reread supplied ranges. Use source_read/source_search/table_query/asset_inspect only for missing evidence or targeted verification. Cite exact locations for significant claims.",
         },
         async (text) => {
           const result = analysisSchema.parse(parseJSON(text));
-          const ids = new Set(p.sources.map((s) => s.id));
-          for (const fact of result.facts)
-            if (!ids.has(fact.sourceId))
-              throw new Error(`未知事实来源 sourceId: ${fact.sourceId}`);
-          for (const fact of result.facts) {
-            const source = p.sources.find((s) => s.id === fact.sourceId)!;
-            const evidence = fact.evidence;
-            if (!evidence) continue; // Legacy outputs remain supported, but are not location-verified.
-            if (evidence.kind === "text") {
-              if (
-                evidence.end <= evidence.start ||
-                evidence.end - evidence.start > 4000
-              )
-                throw new Error("Invalid evidence range");
-              const actual = await readSourceText(
-                p.id,
-                source,
-                evidence.start,
-                evidence.end - evidence.start,
-              );
-              if (actual.text !== evidence.quote)
-                throw new Error(
-                  "Evidence quote does not match stored source text",
-                );
-            } else {
-              const table = await readSourceTable(
-                p.id,
-                source,
-                evidence.tableIndex,
-              );
-              if (
-                JSON.stringify(table.rows[evidence.row]?.[evidence.column]) !==
-                JSON.stringify(evidence.value)
-              )
-                throw new Error(
-                  "Evidence cell does not match stored table value",
-                );
-            }
+          const originalImageDecisions = structuredClone(result.imageDecisions);
+          const originalAssets = structuredClone(result.assets);
+          if (brief.brief.mediaPolicy === "text-only") {
+            const imageAssets = p.sources
+              .flatMap((source) => source.assets)
+              .filter((asset) => asset.type === "image");
+            const imageUrls = new Set(imageAssets.map((asset) => asset.url));
+            result.assets = result.assets.filter(
+              (asset) => !imageUrls.has(asset.url),
+            );
+            result.imageDecisions = imageAssets.map((asset) => ({
+              assetId: asset.id,
+              decision: "skip" as const,
+              reason: "User requested a text-only page",
+            }));
           }
+          const checked = await validateFactEvidence(
+            p,
+            result.facts,
+            controller.signal,
+          );
           for (const asset of result.assets) {
             if (
               !p.sources.some(
@@ -631,6 +679,22 @@ export async function runProject(
               )
             )
               throw new Error(`素材缺少有效来源: ${asset.url}`);
+          }
+          for (const clue of result.visualEvidence || []) {
+            const source = clue.sourceId
+              ? p.sources.find((s) => s.id === clue.sourceId)
+              : undefined;
+            if (clue.sourceId && !source)
+              throw new Error("visualEvidence references unknown sourceId");
+            if (
+              clue.assetId &&
+              !(source ? [source] : p.sources).some((s) =>
+                s.assets.some((a) => a.id === clue.assetId),
+              )
+            )
+              throw new Error(
+                "visualEvidence assetId must belong to its stated source",
+              );
           }
           const sourceImages = p.sources
             .flatMap((s) => s.assets)
@@ -658,25 +722,53 @@ export async function runProject(
             throw new Error(
               "Review source images: recommend relevant images in assets, or record imageDecisions with reasons for skip/unverified. Do not silently omit all document images.",
             );
+          if (checked.evidenceRepairs.length)
+            add(
+              "analyst",
+              `已在本地修复 ${checked.evidenceRepairs.length} 条引用定位，无需模型重试`,
+              "status",
+              { repairedCitations: checked.evidenceRepairs.length },
+            );
           return {
             ...result,
-            facts: result.facts.map((fact) => ({
-              ...fact,
-              locationVerified: Boolean(fact.evidence),
-            })),
+            facts: checked.facts,
+            mediaPolicyAudit:
+              brief.brief.mediaPolicy === "text-only"
+                ? {
+                    originalAssets,
+                    originalImageDecisions,
+                    reason: "Explicit text-only brief",
+                  }
+                : undefined,
+            evidenceRepairs: checked.evidenceRepairs,
+            evidenceVerification:
+              "location-only; matching text/cells does not prove the fact's interpretation",
           };
         },
         images,
       );
       await save(p);
+      const designerBatch = await loadImages(
+        brief.brief.mediaPolicy === "text-only"
+          ? []
+          : recommendedImages(
+              p,
+              p.analysis as Parameters<typeof recommendedImages>[1],
+            ),
+        resolveModel("designer").model.input.includes("image"),
+      );
+      const designerImages = designerBatch.images;
+      const designerImageInputOrder = designerBatch.imageInputOrder;
       const html = await validated(
         "designer",
         {
           brief: brief.brief,
           analysis: p.analysis,
-          imageInputOrder,
-          instruction:
-            "Use the analyst-recommended source images in the actual page (img with descriptive alt, or CSS background). Preserve user intent on revisions. Do not replace relevant supplied photos with generic placeholders. If analysis could not verify images, inspect them using asset_inspect before choosing.",
+          imageInputOrder: designerImageInputOrder,
+          imageAvailability: {
+            unavailable: designerBatch.unavailable,
+            omitted: designerBatch.omitted,
+          },
           conversation,
           existingHtml: existing,
           assets: p.sources.flatMap((s) => s.assets),
@@ -699,36 +791,25 @@ export async function runProject(
                 report.issues.filter((i) => i.severity === "error"),
               ),
             );
-          const recommended = analysisSchema
-            .parse(p.analysis)
-            .assets.filter((selected) =>
-              p.sources.some((s) =>
-                s.assets.some(
-                  (a) => a.type === "image" && a.url === selected.url,
-                ),
-              ),
-            );
-          if (
-            recommended.length &&
-            !usedImages(p, report.html).some((a) =>
-              recommended.some((selected) => selected.url === a.url),
-            )
-          )
-            throw new Error(
-              "The page omitted all recommended document images. Include a relevant recommended image in img src or CSS background; preserve the user's requested design.",
-            );
           return report.html;
         },
-        images,
+        designerImages,
       );
       p.versions.push({
         id: crypto.randomUUID(),
         html,
+        runId: p.run?.id,
+        checks: pageChecks(p, html, (await validatePage(p, html)).issues),
         label: "生成版本 " + (p.versions.length + 1),
         createdAt: new Date().toISOString(),
       });
     }
     p.status = "complete";
+    if (p.run) {
+      p.run.completedVersionId = p.versions.at(-1)?.id;
+      p.run.completedInputHash = await taskFingerprint(p);
+      delete p.run.activeRole;
+    }
     p.messages.push({
       role: "assistant",
       text: designCompletion(

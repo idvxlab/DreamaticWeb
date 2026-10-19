@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileTypeFromBuffer } from "file-type";
 import { projectDir } from "./store.js";
 import { sanitizeHtml } from "./html.js";
+import { htmlHash } from "../../../packages/agents/src/page-checks.js";
+import { inspectTextContrast } from "./contrast.js";
 import type { Project } from "../../../packages/agents/src/contracts.js";
 export async function previewPage(
   project: Project,
@@ -114,6 +116,11 @@ export async function previewPage(
         })),
     }));
     const png = await page.screenshot({ type: "png", timeout: 5000 });
+    const textContrast = await page.evaluate<
+      ReturnType<typeof inspectTextContrast>
+    >(
+      `(() => { const __name = (value) => value; return (${inspectTextContrast.toString()})(); })()`,
+    );
     signal?.throwIfAborted();
     const id = crypto.randomUUID(),
       dir = path.join(projectDir(project.id), "previews");
@@ -122,6 +129,7 @@ export async function previewPage(
     const report = {
       viewport,
       ...metrics,
+      textContrast,
       blockedRequests: blocked.slice(0, 30),
       screenshot: `previews/${id}.png`,
       screenshotScope: "viewport",
@@ -131,7 +139,28 @@ export async function previewPage(
     await writeFile(path.join(dir, id + ".json"), JSON.stringify(report), {
       mode: 0o600,
     });
-    return { report, png };
+    const hash = htmlHash(sanitizeHtml(html));
+    project.pagePreviews = (project.pagePreviews || []).filter(
+      (p) =>
+        p.hash !== hash ||
+        p.width !== viewport.width ||
+        p.height !== viewport.height,
+    );
+    project.pagePreviews.push({
+      hash,
+      ...viewport,
+      overflow: metrics.horizontalOverflow,
+      missingImages: metrics.missingImages.filter((s): s is string =>
+        Boolean(s),
+      ),
+      contrast: textContrast.issues.map(({ selector, ratio, required }) => ({
+        selector,
+        ratio,
+        required,
+      })),
+    });
+    project.pagePreviews = project.pagePreviews.slice(-30);
+    return { report: { ...report, htmlHash: hash }, png };
   } finally {
     clearTimeout(deadline);
     signal?.removeEventListener("abort", abort);

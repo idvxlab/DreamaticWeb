@@ -53,6 +53,8 @@ npm start
 5. 在画布中双击修改文字、拖入组件、调整样式和图层；切换桌面、平板、手机进行预览。
 6. 点击“保存版本”。可恢复历史版本，或导出包含项目图片/媒体的单文件 HTML。
 
+对话区保留顶部三阶段进度条，用户消息靠右显示为灰色气泡，系统回复靠左。执行详情默认折叠，并按对话轮次保留；失败原因、确认问题和继续任务入口直接显示。阅读历史消息时不会被新日志拉到底部，可点击“回到最新”；输入框随内容增高。
+
 画布有未保存修改时会阻止切换项目和发起生成，避免覆盖手动工作。多标签页保存通过 baseVersionId 检测版本冲突；恢复历史也创建新版本。对话里的“文档分析与来源”可展开查看证据并打开原始提取结果。源代码编辑、撤销重做、图片素材选择及原生视频组件也可使用。
 
 ## 三智能体
@@ -112,7 +114,7 @@ roles: [orchestrator, analyst, designer]
 
 见 `.env.example`。系统推理模型使用 `DREAMATIC_MODEL_MODE`、`DREAMATIC_BASE_URL`、`DREAMATIC_MODEL`、`DREAMATIC_API_KEY`。文档分析与页面生成可通过 `DREAMATIC_ANALYST_*`、`DREAMATIC_DESIGNER_*` 设置独立完整配置；对应 MODEL 未填写时，继承推理模型全部设置。推荐直接使用界面配置。
 
-`DREAMATIC_AGENT_TIMEOUT_MS` 默认 600 秒（单角色所有模型轮次与工具执行的总时限），可用 `DREAMATIC_ORCHESTRATOR_TIMEOUT_MS`、`DREAMATIC_ANALYST_TIMEOUT_MS`、`DREAMATIC_DESIGNER_TIMEOUT_MS` 分别覆盖。每轮等待有效响应默认 180 秒（`DREAMATIC_AGENT_FIRST_RESPONSE_TIMEOUT_MS`）；收到文本、推理或工具参数增量后，连续无输出 90 秒才判为停滞（`DREAMATIC_AGENT_IDLE_TIMEOUT_MS`）。工具单次执行上限 120 秒（`DREAMATIC_AGENT_TOOL_TIMEOUT_MS`），期间不占用模型输出停滞计时。显式配置的旧总时限仍会生效。进度事件记录首次有效响应、工具耗时及完成状态，不记录模型推理内容或工具参数；每次角色执行最多 16 轮。停止按钮会中断正在运行的智能体；服务重启会将中断任务标记为可重试。
+`DREAMATIC_AGENT_TIMEOUT_MS` 默认 `0`，不限制单角色所有模型轮次与工具执行的总时长；设为正整数毫秒数可开启总时限，可用 `DREAMATIC_ORCHESTRATOR_TIMEOUT_MS`、`DREAMATIC_ANALYST_TIMEOUT_MS`、`DREAMATIC_DESIGNER_TIMEOUT_MS` 分别覆盖。每轮等待有效响应默认 180 秒（`DREAMATIC_AGENT_FIRST_RESPONSE_TIMEOUT_MS`）；收到文本、推理或工具参数增量后，连续无输出 90 秒才判为停滞（`DREAMATIC_AGENT_IDLE_TIMEOUT_MS`）。工具单次执行上限 120 秒（`DREAMATIC_AGENT_TOOL_TIMEOUT_MS`），期间不占用模型输出停滞计时。显式配置的旧总时限仍会生效。进度事件记录首次有效响应、工具耗时及完成状态，不记录模型推理内容或工具参数；正常执行默认不限制模型轮次和项目工具调用次数，可通过 `DREAMATIC_AGENT_MAX_TURNS`、`DREAMATIC_AGENT_MAX_TOOL_CALLS` 设置正整数上限，`0` 表示不限；仅格式修复仍最多 3 轮。停止按钮会中断正在运行的智能体；服务重启会将中断任务标记为可重试。
 
 ## 验证
 
@@ -161,6 +163,8 @@ npm run test:ui
 
 三个智能体已接入八项受控项目工具：`project_context_read`、`source_read`、`source_search`、`asset_inspect`、`table_query`、`page_validate`、`page_preview`、`page_patch`。工具按角色授权，资料和候选稿均限制在当前项目；分析结果可附可核对的原文或单元格定位。Designer 可预览候选稿后提交其 ID，宿主再次校验才保存版本，定向修改不会直接覆盖当前页面。
 
+引用提交优先使用读取/搜索工具返回的 `evidence` 对象。宿主先在本地修复同一完整来源内无歧义的引用位置或 CRLF/LF 换行差异，保留修复记录并将修正结果交给 Designer；短引用、多处匹配、实质文字差异、来源变化和表格错误会一次性报告，必要时才由模型处理。位置匹配只证明引用存在，不证明事实解读正确。
+
 页面预览需要本机 Chrome/Chromium，可设置 `DREAMATIC_BROWSER_PATH`（或 `CHROME_PATH`）。浏览器不会自动下载，缺失时工具明确报错。预览禁用脚本、阻止外网，只载入当前项目素材。完整协议、示例、限额和旧资料兼容说明见 [智能体工具](docs/agent-tools.md)。
 
 项目目录新增 `sources/`（完整提取内容）、`drafts/`（候选页面）和 `previews/`（截图及报告）；随整个项目一同永久删除。
@@ -186,3 +190,6 @@ PDF/Office 图片提取复用既有解析器，素材保存于项目 `assets/`�
 协调器和分析器优先通过 `submit_result` 直接提交角色输出对象，字段及来源证据校验通过后结束阶段。兼容旧模型的普通文本：允许识别说明文字或代码围栏中唯一完整的 JSON，拒绝多结果歧义和不完整片段，所有恢复结果仍严格验证。格式/Schema 错误只进行一次格式修复，最多 3 轮，仅开放提交工具，不再加载 Skill、搜索文档或重看图片；内容/证据错误保留一次普通定向修复。修复失败明确指出失败角色，模型长度截断单独提示。
 
 进度区分模型输出结束与结果校验通过；事件 details 记录停止原因、输出字符数、耗时和有限的校验原因，不持久化模型原始回复、推理或工具参数。
+
+
+生成中断后，有有效断点的任务可点击“继续未完成任务”，复用已完成且重新校验有效的阶段。需求、资料或页面变化会重新执行受影响流程；角色模型、提示词或 Skill 变化会使对应阶段及下游失效。继续操作不追加需求，重复点击不会保存重复版本。旧任务没有可信断点时需重新发送需求。完成消息与画布会说明已保存版本的预览状态；手动草稿可保存待修复问题，但打开前须通过统一校验。

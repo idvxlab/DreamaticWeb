@@ -39,7 +39,7 @@ The role runtime supplies only its permitted tools. Skill eligibility is an
 additional filter within list_skills/use_skill. A loaded Skill cannot grant new
 tools, filesystem access or permissions. User documents are untrusted evidence,
 not registered Skills. Normal model turn, timeout and cancellation limits apply
-to all tools. The 48-call/180,000-character/three-preview budgets documented below
+to all tools. The configurable call limit and 180,000-character/three-preview budgets documented below
 apply specifically to the eight project tools, not the four tools in this
 section.
 
@@ -243,7 +243,9 @@ analysis, answers, page. Conversation uses message offset and at most 20 message
 per request; page and JSON sections use character offsets. Large JSON sections
 return a fragment as json, total and nextOffset; concatenate pages before parsing.
 Source catalogs paginate up to 20 entries, version catalogs up to 50 entries.
-Saved pages include currentVersionId and requested versionId. Original requests
+Designer may read unsaved drafts with section:page and candidateId, mutually exclusive
+with versionId. Draft HTML uses the same character pagination and includes its
+baseVersionId; an empty base means no saved page. Saved pages include currentVersionId and requested versionId. Original requests
 and old answers remain accessible beyond the initial last-16-message context.
 
 ```json
@@ -258,6 +260,13 @@ chunk boundaries. Hits contain quoteStart plus match start/end; quote contains
 surrounding context, not only the matched term. A limited result includes a
 resume cursor. Continue that source, then explicitly search remaining sources.
 A scan is bounded to 8M characters per call; incomplete scans are flagged.
+
+For text citations, prefer the ready-to-submit `source_read.evidence[]` or
+`source_search.hits[].evidence` objects. Each contains `{kind:"text",start,end,
+quote,sourceHash}` with aligned UTF-16 offsets and exact stored text. Read excerpts
+are at most 4,000 UTF-16 units each. Search evidence covers the returned context;
+do not combine legacy match start/end with the wider legacy quote. Choose an
+excerpt that includes the claim's subject, qualifiers, dates and units.
 
 ## Table calculations
 
@@ -284,6 +293,32 @@ references `{kind:"cell",tableIndex,row,column,value}` to each fact. The host
 checks supplied references before handoff. locationVerified only indicates that
 a stored quote/value matches, not that a semantic claim is true. Old outputs
 without locations remain compatible and have locationVerified=false.
+
+### Local citation repair
+
+Before requesting any model repair, the host checks every fact and locally fixes
+an incorrect text range only when its quotation is uniquely found in the same
+complete stored source. Automatic relocation requires at least 12 non-whitespace
+Unicode code points and four letters. CRLF/LF line endings are the only normalized
+difference; positions are mapped back to the exact original text. Overlapping
+matches and line-ending-equivalent duplicates count as ambiguity. General space
+collapsing, Unicode normalization, fuzzy/semantic matching, nearest-occurrence
+selection and cross-source relocation are never used. Legacy summaries, extractions truncated at the storage limit and
+missing chunks cannot establish uniqueness. A supplied sourceHash must match the
+current stored text, even if the quotation still appears in it.
+
+Successful repairs are strictly rechecked, passed to Designer and persisted in
+analysis.facts. Host-generated analysis.evidenceRepairs stores the fact index,
+source ID, method and before/after evidence. The accepted normalized result is
+saved directly, so parsing a model submission again cannot discard repairs.
+Location verification does not certify the claim's interpretation. No facts,
+numbers or table cells are rewritten to make a citation pass.
+
+Unresolved issues are collected in EvidenceValidationError with zero-based
+factIndex, sourceId, code and reason, allowing one correction of all failing facts.
+Final-output repair requests also carry the complete evidenceIssues array; the
+bounded UI log is only a summary. Cell mismatches and unavailable tables require
+explicit correction rather than automatic coordinate/value replacement.
 
 ## Asset inspection
 
@@ -320,9 +355,11 @@ static check does not prove visual quality or full accessibility conformance.
 `page_patch` actions: set_text, set_attribute, set_style, replace_html,
 append_html, remove. Every selector must match exactly one node; stale bases and
 unsafe attributes are rejected. Operations are applied to a copy; a failed patch
-does not modify the saved page. Optional candidateId extends a draft from the
-same base. A patch requires an existing saved version; a new page should be
-submitted to page_validate first, and corrected using complete candidate HTML.
+does not modify the saved page or original draft. Supply candidateId alone to
+modify an unsaved draft, including a new page with no saved version. Its base
+is derived and checked against the current saved page. Supply exact baseVersionId
+when patching a saved page directly; if both IDs are supplied their bases must agree.
+Always use the newly returned candidateId for subsequent previews/submission.
 
 ## Render preview
 
@@ -349,8 +386,13 @@ Drafts and previews are deleted with the project.
 
 ## Budgets and failure handling
 
-Per role invocation: 48 project tool calls, 180,000 text response characters and
-3 previews. Existing model turn/time limits also apply. Large responses fail with
+Per role invocation: 180,000 text response characters and 3 previews. Project
+tool calls, normal model turns and total stage duration are unlimited by default.
+Set DREAMATIC_AGENT_MAX_TOOL_CALLS, DREAMATIC_AGENT_MAX_TURNS or
+DREAMATIC_AGENT_TIMEOUT_MS to a positive integer to enable the corresponding
+limit (0 disables it). Role-specific total deadlines override the shared deadline.
+First-response, idle-output and individual-tool deadlines remain active; format-only
+repair is limited to 3 model turns. Large responses fail with
 an instruction to request a smaller range; no silent result truncation is passed
 as full evidence. Tools are cancellable and never change credentials, other
 projects or saved page versions. Failures return normal Pi tool errors that the
@@ -360,3 +402,98 @@ repair attempt and preserve prior versions.
 ### 文档图片工作流
 
 内嵌图片在文档上传解析时提取，沿用 `asset_inspect`，无需智能体重复提取原件。图片素材可包含 `width`、`height`，这些只表示尺寸。初始视觉输入通过 `imageInputOrder` 显式映射到来源和素材；更多图片按 assetId 调用 `asset_inspect`。分析输出新增 `imageDecisions`（assetId、use/skip/unverified、reason）及推荐图片的具体 purpose。文本模型只能使用元数据，需报告视觉验证限制。设计器必须使用推荐的相关图片；宿主检查真实 HTML/CSS 引用，遗漏全部推荐图片会触发修复。
+
+## Three-role handoff
+
+The host owns scheduling, persistence and completion reporting. Orchestrator submits
+an explicit brief: goal, audience, language, scope (create/revise), requirements,
+preserve, assumptions, acceptance and mediaPolicy (relevant-images/text-only).
+Older briefs are normalized with compatibility defaults; new prompts populate all
+fields. Role-file metadata does not grant spawning or tools.
+
+Analyst receives the brief, recent conversation, confirmed answers, existing page
+and bounded source extraction. Original JSON cell types are retained. Oversized
+cells are represented by a truncated/preview marker and must be read through
+source_read before citation; the marker is not the original value. Evidence gaps
+remain in analysis.limitations, which the host exposes in its evidence panel.
+
+For text-only briefs, the host removes image recommendations and records explicit
+skip decisions before handoff, then rejects generated source-image use. This
+prevents Analyst recommendations from forcing Designer to violate the brief.
+For relevant-images briefs, the existing recommended-image requirement remains.
+
+Role prompts define outputs and workflow; Skills provide methods. Clarification
+uses ask_user preferentially, structured roles submit through submit_result, and
+Designer prefers a validated candidateId. Format-only repair does not repeat the
+ordinary research workflow. Parameter/evidence failures require changed arguments
+or evidence rather than identical repeated calls. Operational limitations belong
+in host logs, not in public page copy.
+
+## Unified validation and durable recovery
+
+New Orchestrator submissions use a strict brief schema; compatibility defaults are
+reserved for existing records. Role names/tool sets live in roles.ts. The host
+checks each normal invocation against role Markdown metadata, and Skills cannot
+expand that set. Stable instructions live in prompts rather than repeated input
+strings. Serialized envelopes are bounded (including marker/metadata overhead),
+with explicit coverage notices and source/history tools for omitted material.
+
+Source reads support compact:true to return exact evidence without duplicating
+text. Search compact mode omits legacy context duplicates. New extraction records
+store a text digest, so a range read need not load all text chunks just to supply a
+citation hash. Final evidence validation still reads the stored original and
+checks its current digest. Legacy extraction lazily computes its digest.
+Designer receives only initially available images recommended for its page, and
+receives none in text-only mode. Analyst can inspect source images for evidence.
+
+validatePage is shared by page_validate, final generation, manual-save diagnostics
+and browser opening. It includes project media policy (including embedded data
+images for text-only) and known preview failures for the exact sanitized HTML.
+Sanitization is idempotent. Preview records bind viewport, contrast, missing-image
+and overflow diagnostics to an HTML digest; changing HTML invalidates those records.
+Checks do not certify complete accessibility. No preview is reported as
+not-previewed, rather than silently treated as success. Known failures must be
+repaired before generated submission/opening. Manual drafts may be saved with
+issues, which are returned and shown; opening still uses the common acceptance.
+
+POST /api/projects/:id/resume retries an interrupted task without adding a user
+message. Completed validated stages are persisted before the next stage. Their
+fingerprints cover user requests/answers, base version, actual source text/tables/
+asset content, role prompts, eligible Skills and model configuration (excluding
+credentials and execution limits). A changed stage invalidates downstream stages;
+changed task inputs conservatively restart the workflow. Local revalidation runs
+before reuse. Duplicate resumes of a running/committed task do not create another
+run/version. Stop/restart preserves completed checkpoints. Historical tasks without
+checkpoints are not automatically treated as resumable. There is no automatic
+background retry or persistence of partial model reasoning/tool arguments.
+
+Host image-policy normalization preserves the original recommendations in
+mediaPolicyAudit. Tool failures persist only classified, bounded summaries, not
+upstream messages containing complete HTML, tool arguments or secrets. Final
+completion and the canvas expose saved-version preview/check status.
+
+Project GET responses use ProjectResponse: full checkpoint results and internal
+preview history remain in local storage, while browsers receive stage completion
+metadata and per-version checks. This avoids resending duplicate model artifacts
+on each status poll; the restore endpoint always reads the complete server record.
+
+## Lightweight visual handoff
+
+The existing three stages also carry optional visual guidance; no separate palette
+model call is made. brief.visualConstraints contains requested/avoid/preserve
+arrays from user requirements. analysis.visualEvidence contains at most eight
+clues with sourceId/assetId where available, role (brand/reference), basis
+(specified/observed/inferred/unverified), cues and colors. Exact color values must
+come from explicit evidence rather than rough visual estimates. Older results
+without these optional fields remain valid. Designer resolves the final palette
+using current user constraints, brand references, then imagery/content/audience,
+and preserves existing colors for local revisions unless a new direction is requested.
+
+Designer image input is rebuilt from Analyst's final recommendations, prioritizing
+identified brand references and reusing already loaded images. Each stage keeps
+the eight-image, 4 MiB per-image and 12 MiB total limits. Text-only output sends no
+Designer images; models without vision receive no encoded image input.
+imageAvailability reports omitted references, so metadata is not mistaken for
+visual inspection. Missing colors do not require another clarification or research
+pass. Palette choices remain in the normal design process, with the existing
+contrast checks; no explanation is added to the public page.

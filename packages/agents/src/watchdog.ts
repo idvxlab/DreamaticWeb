@@ -1,10 +1,25 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
-export function timeoutSetting(name: string, fallback: number) {
+export function limitSetting(
+  name: string,
+  fallback: number,
+  max = Number.MAX_SAFE_INTEGER,
+) {
   const value = process.env[name];
   if (!value) return fallback;
-  const ms = Number(value);
-  if (!Number.isSafeInteger(ms) || ms <= 0 || ms > 2147483647)
+  const limit = Number(value);
+  if (!Number.isSafeInteger(limit) || limit < 0 || limit > max)
+    throw new Error(`${name} 必须是有效的非负整数（0 表示不限制）`);
+  return limit;
+}
+
+export function timeoutSetting(
+  name: string,
+  fallback: number,
+  allowZero = false,
+) {
+  const ms = limitSetting(name, fallback, 2147483647);
+  if (!allowZero && ms === 0)
     throw new Error(`${name} 必须是有效的正整数毫秒数`);
   return ms;
 }
@@ -38,10 +53,13 @@ export function watchAgent(
     turnStarted = Date.now();
     arm(limits.first, "等待模型有效响应超时，请检查模型服务或稍后重试");
   };
-  const totalTimer = setTimeout(
-    () => fail("智能体阶段总时限超时，请缩小任务或调整阶段时限"),
-    limits.total,
-  );
+  const totalTimer =
+    limits.total > 0
+      ? setTimeout(
+          () => fail("智能体阶段总时限超时，请缩小任务或调整阶段时限"),
+          limits.total,
+        )
+      : undefined;
   wait();
   return {
     get error() {

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
+import { BookOpen, ListTree, ChevronDown, Loader2 } from "lucide-react";
 import type { RunEvent } from "../../../packages/agents/src/contracts";
+import { roles } from "../../../packages/agents/src/roles";
 import { useI18n } from "./i18n";
 
 export default function RunLog({
@@ -13,7 +14,7 @@ export default function RunLog({
   demo: boolean;
 }) {
   const { t, language } = useI18n();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const list = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
@@ -35,9 +36,9 @@ export default function RunLog({
         {running ? (
           <Loader2 size={13} className="spin" />
         ) : (
-          <CheckCircle2 size={13} />
+          <ListTree size={13} />
         )}
-        <strong>{running ? t("智能体协作中") : t("最近运行记录")}</strong>
+        <strong>{t("执行详情")}</strong>
         <span className="run-log-count">{records.length}</span>
         <small>{demo ? t("演示") : "DREAMATIC"}</small>
         <ChevronDown size={14} className="run-log-chevron" />
@@ -84,14 +85,7 @@ export default function RunLog({
               </time>{" "}
               ·{" "}
               <strong>
-                {
-                  {
-                    orchestrator: "Orchestrator",
-                    analyst: "Document Analyst",
-                    designer: "Designer",
-                    system: t("系统"),
-                  }[event.role]
-                }
+                {event.role === "system" ? t("系统") : roles[event.role].name}
               </strong>{" "}
               · {t(event.text)}
             </span>

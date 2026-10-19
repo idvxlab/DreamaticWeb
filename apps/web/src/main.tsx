@@ -33,7 +33,7 @@ import {
   Leaf,
 } from "lucide-react";
 import type {
-  Project,
+  ProjectResponse as Project,
   Role,
   Source,
   RunEvent,
@@ -41,8 +41,7 @@ import type {
 import { api, download, token } from "./api";
 import "./styles.css";
 import Settings from "./Settings";
-import QuestionCard from "./QuestionCard";
-import RunLog from "./RunLog";
+import ConversationThread from "./ConversationThread";
 import ProjectActions from "./ProjectActions";
 import BrandMenu from "./BrandMenu";
 import { useI18n } from "./i18n";
@@ -59,7 +58,7 @@ const roles: {
     label: "理解与调度",
     icon: BrainCircuit,
   },
-  { id: "analyst", name: "分析智能体", label: "解析与提取", icon: ScanText },
+  { id: "analyst", name: "分析智能体", label: "分析与筛选", icon: ScanText },
   { id: "designer", name: "设计智能体", label: "设计与生成", icon: Paintbrush },
 ];
 function App() {
@@ -81,8 +80,15 @@ function App() {
     [version, setVersion] = useState(""),
     [history, setHistory] = useState(false);
   const drafts = useRef(new Map<string, string>());
-  const file = useRef<HTMLInputElement>(null),
-    bottom = useRef<HTMLDivElement>(null);
+  const file = useRef<HTMLInputElement>(null);
+  const composerInput = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const input = composerInput.current;
+    if (input) {
+      input.style.height = "auto";
+      input.style.height = Math.min(180, input.scrollHeight) + "px";
+    }
+  }, [text, view]);
   const running = project?.status === "running";
   const current =
     project?.versions.find((v) => v.id === version) || project?.versions.at(-1);
@@ -117,10 +123,6 @@ function App() {
   useEffect(() => {
     if (project) localStorage.setItem("dreamatic-project", project.id);
   }, [project?.id]);
-  useEffect(() => {
-    const scroll = bottom.current?.closest(".chat-scroll");
-    scroll?.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
-  }, [project?.messages.length, project?.events.length]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (dirty || drafts.current.size > 0) {
@@ -197,10 +199,20 @@ function App() {
       }),
     });
     drafts.current.delete(project.id);
-    setProject(await api("/projects/" + project.id));
+    const latest = await api<Project>("/projects/" + project.id);
+    setProject(latest);
     setVersion("");
     setDirty(false);
-    setError("");
+    const problems =
+      latest.versions
+        .at(-1)
+        ?.checks?.issues.filter((i) => i.severity === "error") || [];
+    setError(
+      problems.length
+        ? t("草稿已保存，打开前需要修复：") +
+            problems.map((i) => i.message).join("；")
+        : "",
+    );
   }
   function canLeave() {
     if (dirty) {
@@ -545,117 +557,90 @@ function App() {
               ))}
             </div>
             {view === "chat" ? (
-              <div className="chat-scroll">
+              <>
                 {!project?.messages.length ? (
-                  <div className="welcome">
-                    <div className="welcome-mark">
-                      <Sparkles size={26} />
-                    </div>
-                    <p className="eyebrow">FROM CONTENT TO EXPERIENCE</p>
-                    <h1>
-                      {t("你的资料，")}
-                      <br />
-                      {t("下一个精彩网页。")}
-                    </h1>
-                    <p>
-                      {t("上传文档，分享链接，或描述你的想法。")}
-                      <br />
-                      {t("让三位智能体一起，把内容变成体验。")}
-                    </p>
-                    <div className="suggestions">
-                      {[
-                        [
-                          t("品牌介绍页"),
-                          t(
-                            "将品牌资料变成有质感的品牌官网，突出品牌故事、产品特点和联系方式。",
-                          ),
-                        ],
-                        [
-                          t("数据可视化"),
-                          t(
-                            "根据我提供的表格制作一个清晰的数据展示网页，保留数值来源和单位。",
-                          ),
-                        ],
-                        [
-                          t("活动与提案"),
-                          t(
-                            "根据上传的提案制作活动介绍网页，突出议程、亮点和参与方式。",
-                          ),
-                        ],
-                      ].map(([label, prompt]) => (
-                        <button key={t(label)} onClick={() => setText(prompt)}>
-                          <span>{t(label)}</span>
-                          <ArrowUpRight size={14} />
-                        </button>
-                      ))}
+                  <div className="chat-scroll">
+                    <div className="welcome">
+                      <div className="welcome-mark">
+                        <Sparkles size={26} />
+                      </div>
+                      <p className="eyebrow">FROM CONTENT TO EXPERIENCE</p>
+                      <h1>
+                        {t("你的资料，")}
+                        <br />
+                        {t("下一个精彩网页。")}
+                      </h1>
+                      <p>
+                        {t("上传文档，分享链接，或描述你的想法。")}
+                        <br />
+                        {t("让三位智能体一起，把内容变成体验。")}
+                      </p>
+                      <div className="suggestions">
+                        {[
+                          [
+                            t("品牌介绍页"),
+                            t(
+                              "将品牌资料变成有质感的品牌官网，突出品牌故事、产品特点和联系方式。",
+                            ),
+                          ],
+                          [
+                            t("数据可视化"),
+                            t(
+                              "根据我提供的表格制作一个清晰的数据展示网页，保留数值来源和单位。",
+                            ),
+                          ],
+                          [
+                            t("活动与提案"),
+                            t(
+                              "根据上传的提案制作活动介绍网页，突出议程、亮点和参与方式。",
+                            ),
+                          ],
+                        ].map(([label, prompt]) => (
+                          <button
+                            key={t(label)}
+                            onClick={() => setText(prompt)}
+                          >
+                            <span>{t(label)}</span>
+                            <ArrowUpRight size={14} />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="messages">
-                    {project.messages.map((m, i) => (
-                      <article key={i} className={"message " + m.role}>
-                        <div className="message-author">
-                          {m.role === "assistant" ? (
-                            <span className="assistant-avatar">
-                              <Sparkles size={12} />
-                            </span>
-                          ) : (
-                            <span className="user-avatar">{t("你")}</span>
-                          )}
-                          <strong>
-                            {m.role === "assistant" ? "Dreamatic" : t("你")}
-                          </strong>
-                          <small>
-                            {new Date(m.time).toLocaleTimeString(
-                              language === "zh" ? "zh-CN" : "en-US",
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              },
-                            )}
-                          </small>
-                        </div>
-                        <p>{m.role === "assistant" ? t(m.text) : m.text}</p>
-                      </article>
-                    ))}
-                    {project.status === "needs_input" &&
-                      project.questions
-                        ?.filter((q) => !q.answeredAt)
-                        .map((question) => (
-                          <QuestionCard
-                            key={question.id}
-                            question={question}
-                            disabled={!!running || busy}
-                            onAnswer={async (answer) => {
-                              if (!canLeave())
-                                throw new Error(
-                                  t("请先保存画布修改再回答问题。"),
-                                );
-                              await api(
-                                `/projects/${project.id}/questions/${question.id}/answer`,
-                                {
-                                  method: "POST",
-                                  body: JSON.stringify(answer),
-                                },
-                              );
-                              setProject(
-                                await api<Project>("/projects/" + project.id),
-                              );
-                              setError("");
-                              setText("");
-                              setVersion("");
-                              await refresh();
-                            }}
-                          />
-                        ))}
-                    {(running || project.events.length > 0) && (
-                      <RunLog
-                        key={project.id}
-                        events={project.events}
-                        running={!!running}
-                        demo={health?.mode === "demo"}
-                      />
-                    )}
+                  <ConversationThread
+                    key={project.id}
+                    project={project}
+                    busy={busy}
+                    dirty={dirty}
+                    demo={health?.mode === "demo"}
+                    onAnswer={async (question, answer) => {
+                      if (!canLeave())
+                        throw new Error(t("请先保存画布修改再回答问题。"));
+                      await api(
+                        `/projects/${project.id}/questions/${question.id}/answer`,
+                        { method: "POST", body: JSON.stringify(answer) },
+                      );
+                      setProject(await api<Project>("/projects/" + project.id));
+                      setError("");
+                      setText("");
+                      setVersion("");
+                      await refresh();
+                    }}
+                    onResume={async () => {
+                      setBusy(true);
+                      try {
+                        await api(`/projects/${project.id}/resume`, {
+                          method: "POST",
+                        });
+                        setProject(await api(`/projects/${project.id}`));
+                      } catch (e) {
+                        handleError(e);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
                     {evidence?.summary && (
                       <details className="evidence-panel">
                         <summary>
@@ -688,10 +673,9 @@ function App() {
                         ))}
                       </details>
                     )}
-                    <div ref={bottom} />
-                  </div>
+                  </ConversationThread>
                 )}
-              </div>
+              </>
             ) : (
               <div className="sources-view">
                 <div className="sources-intro">
@@ -813,6 +797,8 @@ function App() {
                 }}
               >
                 <textarea
+                  ref={composerInput}
+                  rows={2}
                   aria-label={t("网页需求")}
                   placeholder={
                     current
@@ -898,7 +884,15 @@ function App() {
               </div>
               <span className="canvas-caption">
                 {current
-                  ? t("可视化编辑 \u00B7 HTML")
+                  ? dirty
+                    ? t("当前修改尚未检查")
+                    : current.checks?.issues.some((i) => i.severity === "error")
+                      ? t("草稿有待修复问题")
+                      : current.checks?.status === "warnings"
+                        ? t("检查存在警告")
+                        : current.checks?.status === "previewed"
+                          ? t("已检查对应版本")
+                          : t("尚未确认浏览器预览结果")
                   : t("把灵感，变成看得见的作品")}
               </span>
             </div>
@@ -1042,7 +1036,7 @@ function App() {
                   </span>
                   <span>
                     <Sparkles size={13} />
-                    {t("三智能体协作")}
+                    {t("多智能体协作")}
                   </span>
                   <span>
                     <MousePointer2 size={13} />

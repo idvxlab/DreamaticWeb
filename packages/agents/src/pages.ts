@@ -5,6 +5,7 @@ import { z } from "zod";
 import { projectDir } from "../../../apps/server/src/store.js";
 import { sanitizeHtml } from "../../../apps/server/src/html.js";
 import type { Project } from "./contracts.js";
+import { mediaIssues, pageChecks, generatedPageIssues } from "./page-checks.js";
 const uuid = z.string().uuid();
 export interface PageIssue {
   severity: "error" | "warning";
@@ -129,6 +130,10 @@ export async function validatePage(project: Project, raw: string) {
       code: "external_css",
       message: "External CSS/font/image requests are blocked by preview CSP",
     });
+  issues.push(
+    ...mediaIssues(project, html),
+    ...generatedPageIssues(pageChecks(project, html, [])),
+  );
   return {
     valid: !issues.some((i) => i.severity === "error"),
     issues: issues.slice(0, 100),
@@ -165,7 +170,7 @@ export async function readCandidate(project: Project, candidateId: string) {
   return draft;
 }
 export const patchSchema = z.object({
-  baseVersionId: z.string().uuid(),
+  baseVersionId: z.string().uuid().optional(),
   candidateId: z.string().uuid().optional(),
   operations: z
     .array(
@@ -189,13 +194,26 @@ export const patchSchema = z.object({
 export async function patchPage(project: Project, input: unknown) {
   const args = patchSchema.parse(input),
     current = project.versions.at(-1);
-  if (!current || current.id !== args.baseVersionId)
+  const draft = args.candidateId
+    ? await readCandidate(project, args.candidateId)
+    : undefined;
+  if (!draft && !current)
     throw new Error(
-      "Stale baseVersionId: read the latest saved version before patching",
+      "No saved version: create a candidate with page_validate(html), then patch using candidateId without baseVersionId",
     );
-  const base = args.candidateId
-    ? (await readCandidate(project, args.candidateId)).html
-    : current.html;
+  if (!draft && !args.baseVersionId)
+    throw new Error(
+      "Missing baseVersionId: read the current saved version identity before patching",
+    );
+  const baseVersionId = draft?.baseVersionId ?? current!.id;
+  if (
+    (args.baseVersionId && args.baseVersionId !== baseVersionId) ||
+    baseVersionId !== (current?.id || "")
+  )
+    throw new Error(
+      "Stale baseVersionId: read the latest saved version before patching; never replace it with a guessed ID",
+    );
+  const base = draft?.html ?? current!.html;
   const $ = cheerio.load(base),
     changes: string[] = [];
   for (const op of args.operations) {
@@ -232,14 +250,10 @@ export async function patchPage(project: Project, input: unknown) {
     changes.push(`${op.action}: ${op.selector}`);
   }
   const report = await validatePage(project, "<!doctype html>\n" + $.html());
-  const candidateId = await saveCandidate(
-    project,
-    report.html,
-    args.baseVersionId,
-  );
+  const candidateId = await saveCandidate(project, report.html, baseVersionId);
   return {
     candidateId,
-    baseVersionId: args.baseVersionId,
+    baseVersionId,
     changes,
     valid: report.valid,
     issues: report.issues,

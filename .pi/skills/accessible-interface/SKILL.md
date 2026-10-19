@@ -65,6 +65,6 @@ or completed assistive-technology testing without corresponding verification.
 
 ## Host contract
 
-Input: current brief, evidence and saved HTML. Output: the Designer full HTML contract. Use native elements and CSS; no scripts. If an interaction requires unavailable runtime capabilities, disclose that limitation instead of implying it works.
+Input: current brief, evidence and saved HTML. Output: follow the Designer submission contract (validated candidateId preferred; complete HTML fallback). Use native elements and CSS; no scripts. If an interaction requires unavailable runtime capabilities, disclose that limitation instead of implying it works.
 
 Adapted from Dreamatic `.pi/skills/accessible-interface/SKILL.md`.

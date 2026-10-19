@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { projectDir } from "./store.js";
@@ -59,6 +60,8 @@ export async function persistExtraction(source: Source, projectId?: string) {
     source.tables = tables.map(({ name, rows }) => ({ name, rows }));
     source.content = {
       textLength: text.length,
+      textHash: createHash("sha256").update(text).digest("hex"),
+      textTruncated: text.length < source.text.length,
       chunkSize: CHUNK,
       chunks,
       tables: tables.map(({ index, name, rows }) => ({

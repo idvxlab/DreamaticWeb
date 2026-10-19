@@ -115,6 +115,26 @@ export async function get(id: string) {
   }
   return p;
 }
+/** Polling clients need checkpoint status, not duplicate full model artifacts. */
+export function publicProject(
+  p: Project,
+): import("../../../packages/agents/src/contracts.js").ProjectResponse {
+  const { pagePreviews: _, ...view } = p;
+  return {
+    ...view,
+    run: p.run
+      ? {
+          ...p.run,
+          checkpoints: Object.fromEntries(
+            Object.entries(p.run.checkpoints).map(([role, checkpoint]) => [
+              role,
+              { completedAt: checkpoint?.completedAt },
+            ]),
+          ),
+        }
+      : undefined,
+  };
+}
 export async function create() {
   const p: Project = {
     id: crypto.randomUUID(),

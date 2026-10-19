@@ -14,6 +14,11 @@ export const questionSchema = z
       .default([]),
   })
   .superRefine((q, ctx) => {
+    if (q.mode === "text" && q.options.length)
+      ctx.addIssue({
+        code: "custom",
+        message: "Text questions require empty options",
+      });
     if (q.mode !== "text" && q.options.length < 2)
       ctx.addIssue({
         code: "custom",

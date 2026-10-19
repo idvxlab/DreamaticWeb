@@ -4,6 +4,7 @@ import "grapesjs/dist/css/grapes.min.css";
 import zh from "grapesjs/locale/zh";
 import { useI18n } from "./i18n";
 import { api } from "./api";
+import { parseEditorCss } from "./editor-css";
 import { blockCard } from "./block-cards";
 import { PREVIEW_CSP } from "../../../packages/shared/html-policy";
 import type { Asset } from "../../../packages/agents/src/contracts";
@@ -55,6 +56,15 @@ export default function Editor({
   });
   const rememberMetadata = (value: string) => {
     const doc = new DOMParser().parseFromString(value, "text/html");
+    bodyAttributes.current = Object.fromEntries(
+      Array.from(doc.body.attributes)
+        .filter((attribute) =>
+          /^(id|class|style|lang|dir|title|role|aria-[\w-]+|data-[\w-]+)$/.test(
+            attribute.name,
+          ),
+        )
+        .map((attribute) => [attribute.name, attribute.value]),
+    );
     metadata.current = {
       title: doc.title || "Dreamatic · Web",
       lang: doc.documentElement.lang || "zh-CN",
@@ -63,6 +73,10 @@ export default function Editor({
           .querySelector('meta[name="description"]')
           ?.getAttribute("content") || "",
     };
+  };
+  const bodyAttributes = useRef<Record<string, string>>({});
+  const restoreBody = (e: GrapesEditor) => {
+    e.getWrapper()?.setAttributes(bodyAttributes.current);
   };
   const snapshot = (e: GrapesEditor) => e.getHtml() + "\n" + e.getCss();
   const [tab, setTab] = useState("styles"),
@@ -96,6 +110,7 @@ export default function Editor({
           .map((a) => ({ src: a.url, name: a.name })),
       },
       parser: {
+        parserCss: parseEditorCss,
         optionsHtml: {
           allowScripts: false,
           allowUnsafeAttr: false,
@@ -266,11 +281,13 @@ export default function Editor({
     rememberMetadata(html);
     e.setStyle("");
     e.setComponents(html);
+    restoreBody(e);
     baseline.current = snapshot(e);
     if (initial && draftHtml) {
       rememberMetadata(draftHtml);
       e.setStyle("");
       e.setComponents(draftHtml);
+      restoreBody(e);
     }
     e.UndoManager.clear();
     resetting.current = false;
@@ -337,7 +354,15 @@ export default function Editor({
     style.textContent = e.getCss() || "";
     doc.head.prepend(charset);
     doc.head.append(viewport, description, style);
-    doc.body.innerHTML = e.getHtml();
+    const exported = new DOMParser().parseFromString(e.getHtml(), "text/html");
+    doc.body.innerHTML = exported.body.innerHTML;
+    for (const attribute of Array.from(exported.body.attributes))
+      doc.body.setAttribute(attribute.name, attribute.value);
+    for (const [name, value] of Object.entries(
+      e.getWrapper()?.getAttributes() || {},
+    ))
+      if (value !== undefined && value !== null)
+        doc.body.setAttribute(name, String(value));
     return "<!doctype html>" + doc.documentElement.outerHTML;
   };
   async function openInBrowser() {
@@ -363,6 +388,7 @@ export default function Editor({
     e.select();
     e.setStyle("");
     e.setComponents(html);
+    restoreBody(e);
     e.UndoManager.clear();
     baseline.current = snapshot(e);
     resetting.current = false;
@@ -553,6 +579,7 @@ export default function Editor({
                   rememberMetadata(source);
                   editor.current?.setStyle("");
                   editor.current?.setComponents(source);
+                  if (editor.current) restoreBody(editor.current);
                   setCode(false);
                   onDirty(true);
                 }}

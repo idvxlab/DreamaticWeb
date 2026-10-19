@@ -22,7 +22,8 @@ not decorative filler. Vary image scale, whitespace and density within a coheren
 system. Preserve exact copy and numeric data. Plan image crops, captions, credits,
 tables and actual anchor navigation.
 
-Output: follow the Designer full HTML contract with responsive inline CSS. For
+Output: follow the Designer submission contract: prefer a validated candidateId;
+complete HTML with responsive inline CSS is the fallback. For
 missing images, fonts or evidence, adapt the composition and disclose material
 gaps through the host; never invent sources or use unavailable external resources.
 Use the accessible-interface skill when access needs require detailed treatment.

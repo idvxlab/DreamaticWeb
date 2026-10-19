@@ -34,6 +34,40 @@ const invoke = async (
     content: result.content,
   };
 };
+test("project tools allow more than 48 calls by default and respect configured limits and cancellation", async () => {
+  const p = await create();
+  const name = "DREAMATIC_AGENT_MAX_TOOL_CALLS";
+  const before = process.env[name];
+  try {
+    delete process.env[name];
+    const controller = new AbortController();
+    const tools = projectTools(p, "analyst", {
+      vision: false,
+      signal: controller.signal,
+    });
+    for (let i = 0; i < 60; i++) {
+      await invoke(tools, "project_context_read", { section: "brief" });
+    }
+    controller.abort();
+    await assert.rejects(
+      () => invoke(tools, "project_context_read", { section: "brief" }),
+      /abort/i,
+    );
+    process.env[name] = "2";
+    const limited = projectTools(p, "analyst", { vision: false });
+    for (let i = 0; i < 2; i++) {
+      await invoke(limited, "project_context_read", { section: "brief" });
+    }
+    await assert.rejects(
+      () => invoke(limited, "project_context_read", { section: "brief" }),
+      /call budget exhausted/,
+    );
+  } finally {
+    if (before === undefined) delete process.env[name];
+    else process.env[name] = before;
+    await removeProject(p.id);
+  }
+});
 test("source tools read beyond UI truncation, locate boundary matches, scope IDs, and paginate context", async () => {
   const p = await create();
   try {
@@ -68,6 +102,30 @@ test("source tools read beyond UI truncation, locate boundary matches, scope IDs
     assert.equal(unicodeRead.data.text, "🌿产品");
     const hit = await invoke(tools, "source_search", { query: "BOUNDARY" });
     assert.equal(hit.data.hits[0].start, 15998);
+    const foundEvidence = hit.data.hits[0].evidence;
+    assert.equal(foundEvidence.start, hit.data.hits[0].quoteStart);
+    assert.equal(
+      foundEvidence.end - foundEvidence.start,
+      foundEvidence.quote.length,
+    );
+    assert.equal(foundEvidence.quote, hit.data.hits[0].quote);
+    assert.match(foundEvidence.sourceHash, /^[a-f0-9]{64}$/);
+    assert.notEqual(
+      foundEvidence.start,
+      hit.data.hits[0].start,
+      "legacy keyword coordinates differ from ready-to-submit excerpt",
+    );
+    assert.ok(
+      tail.data.evidence.every(
+        (e: any) =>
+          e.quote.length <= 4000 && e.end - e.start === e.quote.length,
+      ),
+    );
+    assert.equal(
+      tail.data.evidence.map((e: any) => e.quote).join(""),
+      tail.data.text,
+    );
+    assert.equal(unicodeRead.data.evidence[0].quote, "🌿产品");
     const end = await invoke(tools, "source_search", { query: "TARGET" });
     assert.ok(end.data.hits[0].start > 180000);
     await assert.rejects(() =>
@@ -267,6 +325,7 @@ test("isolated browser preview reports overflow, serves project assets and saves
     const preview = await previewPage(p, html, { width: 390, height: 800 });
     assert.equal(preview.report.title, "Preview");
     assert.equal(preview.report.horizontalOverflow, true);
+    assert.ok(Array.isArray(preview.report.textContrast.issues));
     assert.equal(preview.report.missingImages.length, 0);
     assert.ok(preview.png.length > 100);
     assert.ok(
@@ -274,7 +333,8 @@ test("isolated browser preview reports overflow, serves project assets and saves
     );
     const tools = projectTools(p, "designer", { vision: true });
     const validated = await invoke(tools, "page_validate", { html });
-    assert.equal(validated.data.valid, true);
+    assert.equal(validated.data.valid, false);
+    assert.ok(validated.data.issues.some((i: any) => i.code === "overflow"));
     const rendered = await invoke(tools, "page_preview", {
       candidateId: validated.data.candidateId,
       width: 390,
@@ -286,6 +346,119 @@ test("isolated browser preview reports overflow, serves project assets and saves
     controller.abort();
     await assert.rejects(() =>
       previewPage(p, html, { width: 390, height: 800 }, controller.signal),
+    );
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
+test("new-page candidates can be read and repaired without a saved base, while newer versions invalidate drafts", async () => {
+  const p = await create();
+  const operations = [
+    { selector: "#copy", action: "set_style", name: "color", value: "#111" },
+  ];
+  try {
+    const tools = projectTools(p, "designer", { vision: false });
+    await assert.rejects(
+      () => patchPage(p, { operations }),
+      /No saved version/,
+    );
+    const initial = (
+      await invoke(tools, "page_validate", {
+        html: '<!doctype html><html><head><title>Draft</title></head><body style="background:white"><h1>Draft</h1><p id="copy" style="color:white">Readable after repair</p></body></html>',
+      })
+    ).data;
+    assert.equal(initial.baseVersionId, "");
+    const first = (
+      await invoke(tools, "project_context_read", {
+        section: "page",
+        candidateId: initial.candidateId,
+        limit: 50,
+      })
+    ).data;
+    const rest = (
+      await invoke(tools, "project_context_read", {
+        section: "page",
+        candidateId: initial.candidateId,
+        offset: first.nextOffset,
+      })
+    ).data;
+    assert.equal(
+      first.html + rest.html,
+      (await readCandidate(p, initial.candidateId)).html,
+    );
+    await assert.rejects(
+      () =>
+        invoke(tools, "project_context_read", {
+          section: "page",
+          candidateId: initial.candidateId,
+          versionId: crypto.randomUUID(),
+        }),
+      /cannot be combined/,
+    );
+    await assert.rejects(
+      () =>
+        invoke(
+          projectTools(p, "analyst", { vision: false }),
+          "project_context_read",
+          { section: "page", candidateId: initial.candidateId },
+        ),
+      /Only Designer/,
+    );
+    await invoke(tools, "page_preview", {
+      candidateId: initial.candidateId,
+      width: 390,
+    });
+    const rejected = (
+      await invoke(tools, "page_validate", { candidateId: initial.candidateId })
+    ).data;
+    assert.equal(rejected.valid, false);
+    assert.ok(rejected.issues.some((i: any) => i.code === "contrast"));
+    const repaired = (
+      await invoke(tools, "page_patch", {
+        candidateId: initial.candidateId,
+        operations,
+      })
+    ).data;
+    assert.equal(repaired.baseVersionId, "");
+    assert.equal(p.versions.length, 0, "patching must not save a version");
+    assert.match(
+      (await readCandidate(p, initial.candidateId)).html,
+      /color:white/,
+    );
+    await invoke(tools, "page_preview", {
+      candidateId: repaired.candidateId,
+      width: 390,
+    });
+    const accepted = (
+      await invoke(tools, "page_validate", {
+        candidateId: repaired.candidateId,
+      })
+    ).data;
+    assert.equal(accepted.valid, true);
+    assert.ok(!accepted.issues.some((i: any) => i.code === "contrast"));
+    await assert.rejects(
+      () =>
+        patchPage(p, {
+          candidateId: repaired.candidateId,
+          baseVersionId: crypto.randomUUID(),
+          operations,
+        }),
+      /Stale baseVersionId/,
+    );
+    p.versions.push({
+      id: crypto.randomUUID(),
+      html: "new manual page",
+      label: "manual",
+      createdAt: "",
+    });
+    await assert.rejects(
+      () => patchPage(p, { candidateId: repaired.candidateId, operations }),
+      /Candidate is stale/,
+    );
+    await assert.rejects(
+      () => patchPage(p, { operations }),
+      /Missing baseVersionId/,
     );
   } finally {
     await removeProject(p.id);

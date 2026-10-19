@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { limitSetting } from "./watchdog.js";
+import { pageChecks } from "./page-checks.js";
+import { readSourceText } from "../../../apps/server/src/source-content.js";
+import { sourceSnapshots, textEvidence } from "./evidence.js";
 import { imageSize } from "image-size";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
@@ -6,10 +10,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { Project, Role, Source } from "./contracts.js";
 import { projectDir } from "../../../apps/server/src/store.js";
-import {
-  readSourceText,
-  readSourceTable,
-} from "../../../apps/server/src/source-content.js";
+import { readSourceTable } from "../../../apps/server/src/source-content.js";
 import { previewPage } from "../../../apps/server/src/page-preview.js";
 import {
   patchSchema,
@@ -45,6 +46,8 @@ export function projectTools(
   let remaining = 180000,
     calls = 0,
     previews = 0;
+  const maxCalls = limitSetting("DREAMATIC_AGENT_MAX_TOOL_CALLS", 0);
+  const snapshotFor = sourceSnapshots(project.id);
   const output = (data: unknown, image?: ImageContent) => {
     const text = JSON.stringify(data);
     if (text.length > remaining)
@@ -75,7 +78,7 @@ export function projectTools(
     execute: async (_id, input, signal) => {
       options.signal?.throwIfAborted();
       signal?.throwIfAborted();
-      if (++calls > 48)
+      if (++calls > maxCalls && maxCalls > 0)
         throw new Error("Project tool call budget exhausted for this stage");
       options.onUse?.(name);
       const combined =
@@ -109,7 +112,7 @@ export function projectTools(
   const tools: AgentTool[] = [
     define(
       "project_context_read",
-      "Read this project only. Select brief/analysis/answers/source catalog/version catalog or paginate the complete conversation. Designer can also read a saved page by versionId. Returns current version identity for safe revisions.",
+      "Read this project only. Select brief/analysis/answers/source catalog/version catalog or paginate the complete conversation. Designer can read page HTML by candidateId or versionId (mutually exclusive); candidateId reads unsaved drafts. Returns current version identity for safe revisions.",
       z.object({
         section: z.enum([
           "summary",
@@ -122,10 +125,15 @@ export function projectTools(
           "page",
         ]),
         versionId: sourceId.optional(),
+        candidateId: sourceId.optional(),
         offset: integer(10000000, 0),
         limit: z.number().int().min(1).max(20000).default(8000),
       }),
       async (input) => {
+        if (input.candidateId && (input.section !== "page" || input.versionId))
+          throw new Error(
+            "candidateId requires section:page and cannot be combined with versionId",
+          );
         const base = {
           projectId: project.id,
           title: project.title,
@@ -187,21 +195,32 @@ export function projectTools(
           });
         if (input.section === "page") {
           if (role !== "designer")
-            throw new Error("Saved page reading is restricted to Designer");
+            throw new Error("Only Designer can read page HTML");
+          const draft = input.candidateId
+            ? await readCandidate(project, input.candidateId)
+            : undefined;
           const version = input.versionId
             ? project.versions.find((v) => v.id === input.versionId)
             : project.versions.at(-1);
-          if (!version) throw new Error("Unknown versionId");
+          if (!draft && !version)
+            throw new Error(
+              input.versionId
+                ? "Unknown saved versionId: read the versions catalog; candidates must be read using candidateId"
+                : "No saved version: read an unsaved page with section:page and candidateId returned by page_validate",
+            );
+          const html = draft?.html ?? version!.html;
           return output({
             ...base,
-            versionId: version.id,
+            ...(draft
+              ? {
+                  candidateId: input.candidateId,
+                  baseVersionId: draft.baseVersionId,
+                }
+              : { versionId: version!.id }),
             offset: input.offset,
-            total: version.html.length,
-            html: version.html.slice(input.offset, input.offset + input.limit),
-            nextOffset: Math.min(
-              version.html.length,
-              input.offset + input.limit,
-            ),
+            total: html.length,
+            html: html.slice(input.offset, input.offset + input.limit),
+            nextOffset: Math.min(html.length, input.offset + input.limit),
           });
         }
         if (input.section === "conversation") {
@@ -236,13 +255,14 @@ export function projectTools(
     ),
     define(
       "source_read",
-      "Read extracted evidence in the current project. Text offsets are zero-based UTF-16 character offsets; table row/column indices are zero-based including the header. Use returned locations for citations. Old sources may contain only a truncated legacy summary.",
+      "Read extracted evidence in the current project. Prefer compact:true to return exact evidence without duplicating the text. Text offsets are zero-based UTF-16; table indices include header row zero. Copy a returned evidence object unchanged into facts[].evidence. Text evidence excerpts are at most 4000 units; select one supporting the claim, not an unrelated range. Old sources may contain only a legacy summary.",
       z.object({
         sourceId,
         kind: z.enum(["text", "table"]).default("text"),
         tableIndex: integer(99, 0),
         offset: integer(10000000, 0),
         limit: z.number().int().min(1).max(16000).default(8000),
+        compact: z.boolean().default(false),
       }),
       async (input) => {
         const source = findSource(input.sourceId);
@@ -253,6 +273,32 @@ export function projectTools(
             input.offset,
             input.limit,
           );
+          // New sources carry a persisted digest; older data needs one full read once.
+          const hash =
+            source.content?.textHash || (await snapshotFor(source)).hash;
+          const snapshot = {
+            text: result.text,
+            hash,
+            complete: !result.legacySummaryOnly,
+          };
+          const evidence = [];
+          for (let at = input.offset; at < input.offset + result.text.length;) {
+            let end = Math.min(input.offset + result.text.length, at + 4000);
+            // Never split a surrogate pair between ready-to-submit excerpts.
+            const code = result.text.charCodeAt(end - input.offset - 1);
+            if (
+              end < input.offset + result.text.length &&
+              code >= 0xd800 &&
+              code <= 0xdbff
+            )
+              end--;
+            evidence.push({
+              ...textEvidence(snapshot, at - input.offset, end - input.offset),
+              start: at,
+              end,
+            });
+            at = end;
+          }
           return output({
             sourceId: source.id,
             provenance: source.provenance,
@@ -260,6 +306,10 @@ export function projectTools(
             end: input.offset + result.text.length,
             nextOffset: input.offset + result.text.length,
             ...result,
+            ...(input.compact ? { text: undefined } : {}),
+            evidence,
+            verificationScope:
+              "Stored text location only; confirm the excerpt supports the claim and includes needed context",
             warnings: source.warnings,
           });
         }
@@ -284,10 +334,11 @@ export function projectTools(
     ),
     define(
       "source_search",
-      "Literal keyword search across complete stored text, not regex or web search. Returns quotes with source IDs and character ranges, plus a cursor for more results. Follow up with source_read for context.",
+      "Literal keyword search across stored text. Prefer compact:true to omit duplicated legacy context. Copy hit.evidence unchanged for citations: legacy start/end locate the keyword, while legacy quote/quoteStart contain wider context. evidence contains aligned quote/range and sourceHash. Check the context supports the fact; follow source_read for more. Follow cursors for incomplete results.",
       z.object({
         sourceId: sourceId.optional(),
         query: z.string().trim().min(1).max(200),
+        compact: z.boolean().default(false),
         offset: integer(10000000, 0),
         limit: z.number().int().min(1).max(20).default(10),
       }),
@@ -298,14 +349,13 @@ export function projectTools(
         const hits: unknown[] = [];
         let scanned = 0;
         for (const source of sources) {
+          const snapshot = await snapshotFor(source);
           const total = source.content?.textLength ?? source.text.length;
           for (let offset = input.offset; offset < total; offset += 16000) {
             options.signal?.throwIfAborted();
-            const { text } = await readSourceText(
-              project.id,
-              source,
+            const text = snapshot.text.slice(
               offset,
-              16000 + input.query.length - 1,
+              offset + 16000 + input.query.length - 1,
             );
             scanned += text.length;
             if (scanned > 8000000)
@@ -323,6 +373,9 @@ export function projectTools(
               const at = match.index!;
               if (at >= 16000) break;
               const start = offset + at;
+              const quoteStart = offset + Math.max(0, at - 100);
+              const quoteEnd =
+                offset + Math.min(text.length, at + input.query.length + 200);
               hits.push({
                 sourceId: source.id,
                 name: source.name,
@@ -332,7 +385,11 @@ export function projectTools(
                   Math.max(0, at - 100),
                   at + input.query.length + 200,
                 ),
-                quoteStart: offset + Math.max(0, at - 100),
+                quoteStart,
+                ...(input.compact ? { quote: undefined } : {}),
+                evidence: textEvidence(snapshot, quoteStart, quoteEnd),
+                verificationScope:
+                  "Location only; keyword/context may not support the fact",
                 legacySummaryOnly: !source.content,
               });
               if (hits.length >= input.limit)
@@ -568,6 +625,7 @@ export function projectTools(
             baseVersionId: project.versions.at(-1)?.id || "",
             valid: report.valid,
             issues: report.issues,
+            checks: pageChecks(project, report.html, report.issues),
             instruction:
               "Repair errors, preview candidate, then return JSON {candidateId} to submit this exact candidate.",
           });
@@ -577,7 +635,7 @@ export function projectTools(
     tools.push(
       define(
         "page_patch",
-        "Produce a candidate by applying atomic operations to the latest saved page. Requires exact baseVersionId and selectors matching exactly one element. Does not overwrite manual edits or save a version. Can extend a prior candidate from the same base.",
+        "Patch an unsaved candidate using candidateId alone, including newly generated pages with no saved version. To patch a saved page directly, supply its exact baseVersionId. If both IDs are supplied their bases must agree. Each selector must match exactly one element. Returns a new candidateId; never saves or overwrites a version.",
         patchSchema,
         async (input) => output(await patchPage(project, input)),
       ),
@@ -585,7 +643,7 @@ export function projectTools(
     tools.push(
       define(
         "page_preview",
-        "Render the policy-sanitized candidate at a bounded viewport, with scripts disabled and all external network blocked. Returns screenshot and overflow/missing-image diagnostics. Requires installed Chrome/Chromium; unavailable preview is reported as an error.",
+        "Render the policy-sanitized candidate at a bounded viewport, with scripts disabled and external network blocked. Returns screenshot, overflow/missing-image diagnostics and textContrast issues with selectors and ratios. Repair low-contrast text before submission; unchecked complex backgrounds require visual review. Requires installed Chrome/Chromium.",
         z
           .object({
             html: z.string().max(2500000).optional(),

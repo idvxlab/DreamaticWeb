@@ -159,9 +159,12 @@ try {
   await page.keyboard.press("Meta+a");
   await page.keyboard.type("A greener tomorrow.");
   await frame.locator("nav").click();
+  assert.equal(await page.locator(".message-author").count(), 0);
+  assert.equal(await page.locator(".run-log-list").isVisible(), false, "details default to collapsed");
+  await page.getByRole("button", { name: "展开运行记录" }).click();
   const logLines = await page.locator(".run-log .log-line").allTextContents();
   assert.ok(logLines.some((line) => /Orchestrator ·/.test(line)));
-  assert.ok(logLines.every((line) => /^\d{2}:\d{2}:\d{2} · (?:Orchestrator|Document Analyst|Designer|系统) ·/.test(line.trim())));
+  assert.ok(logLines.every((line) => /^\d{2}:\d{2}:\d{2} · (?:Orchestrator|Analyst|Designer|系统) ·/.test(line.trim())));
   await page.getByRole("button", { name: "收起运行记录" }).click();
   assert.equal(await page.getByRole("button", { name: "展开运行记录" }).getAttribute("aria-expanded"), "false");
   assert.equal(await page.locator(".run-log-list").isVisible(), false);
@@ -177,6 +180,13 @@ try {
 
 
   let openedCanvas = "";
+  await page.getByRole("button", { name: "HTML 源码", exact: true }).click();
+  const sourceEditor = page.getByLabel("HTML 源码编辑");
+  const bodySource = (await sourceEditor.inputValue())
+    .replace(/<body[^>]*>/i, '<body id="top" class="body-theme">')
+    .replace('</body>', '<a href="#top">Back to top</a></body>');
+  await sourceEditor.fill(bodySource);
+  await page.getByRole("button", { name: "应用到画布", exact: true }).click();
   await page.route("**/api/projects/*/open", async (route) => {
     openedCanvas = route.request().postDataJSON().html;
     await route.fulfill({ json: { opened: true } });
@@ -184,6 +194,8 @@ try {
   await page.getByRole("button", { name: "打开", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.editor-toolbar button[title="在系统默认浏览器中打开当前页面"]')?.disabled);
   assert.match(openedCanvas, /A greener tomorrow/);
+  assert.match(openedCanvas, /<body[^>]*id="top"/);
+  assert.match(openedCanvas, /class="body-theme"/);
   await page.unroute("**/api/projects/*/open");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await page.waitForTimeout(400);
@@ -270,6 +282,33 @@ try {
   await page.getByRole("button", { name: "保存名称", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "hidden" });
   assert.equal((await (await fetch(base + "/api/projects/" + p.id)).json()).title, "我的品牌网站");
+  // The recovery control resumes a task, without submitting the composer again.
+  let interruptedView = true;
+  let resumeClicks = 0;
+  await page.route(`**/api/projects/${p.id}`, async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    if (interruptedView) {
+      data.status = "error";
+      data.error = "模型输出停滞超时";
+      data.run ||= { id: "recovery-test", checkpoints: {} };
+    }
+    await route.fulfill({ json: data });
+  });
+  await page.route(`**/api/projects/${p.id}/resume`, async (route) => {
+    assert.equal(route.request().method(), "POST");
+    assert.equal(route.request().postData(), null);
+    resumeClicks++;
+    interruptedView = false;
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "继续未完成任务", exact: true }).click();
+  await page.getByRole("button", { name: "继续未完成任务", exact: true }).waitFor({ state: "detached" });
+  assert.equal(resumeClicks, 1);
+  await page.unroute(`**/api/projects/${p.id}`);
+  await page.unroute(`**/api/projects/${p.id}/resume`);
+
   await page.getByRole("button", { name: "项目操作: 我的品牌网站", exact: true }).click();
   await page.getByRole("menuitem", { name: "删除项目", exact: true }).click();
   await page.getByRole("button", { name: "取消", exact: true }).click();
@@ -290,6 +329,7 @@ try {
     const card = page.getByRole("form", { name: "回答智能体问题" });
     await card.waitFor();
     if (mode === "single") {
+      await page.getByRole("button", { name: "展开运行记录" }).click();
       const activity = page.locator(".run-log-list");
       assert.equal(await activity.locator(".log-line").count(), 24, "older records remain accessible");
       const scrollable = await activity.evaluate((element) => element.scrollHeight > element.clientHeight && element.clientHeight <= 240);
@@ -313,7 +353,7 @@ try {
       await card.getByRole("checkbox", { name: "产品介绍" }).check();
       await card.getByRole("checkbox", { name: "公司故事" }).check();
     }
-    await card.getByRole("textbox", { name: "你的回答" }).fill("请使用 PDF 全部信息，自行分析重点");
+    await card.getByRole("textbox", { name: "回答" }).fill("请使用 PDF 全部信息，自行分析重点");
     if (mode === "multiple") await page.screenshot({ path: "docs/screenshots/question-card.png", fullPage: true });
     await card.getByRole("button", { name: "提交并继续" }).click();
     await page.getByText("演示设计完成", { exact: false }).waitFor();

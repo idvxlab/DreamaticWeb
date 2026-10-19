@@ -7,7 +7,7 @@ asked the user which document content to include. After the user answered that
 all content should be used and the agent should determine emphasis, the run
 failed validation twice: the coordinator output omitted `question`, while the
 host required a string even when no question remained. The run stopped before
-Document Analyst. This was an output contract bug, not a PDF parsing failure.
+Analyst. This was an output contract bug, not a PDF parsing failure.
 
 The brief contract now accepts omitted/null/empty question when needsInput is
 false. needsInput=true still requires a nonempty question. A regression test runs
@@ -45,7 +45,7 @@ replies through the regular composer remain compatible and answer the pending
 question. Existing legacy needsInput JSON becomes a text card.
 
 User preferences are clarification targets. Facts already present in uploaded
-material belong to Document Analyst, not a request for the user to manually
+material belong to Analyst, not a request for the user to manually
 summarize the document. Explicit delegation to choose emphasis should continue
 with analysis rather than repeat the same question.
 

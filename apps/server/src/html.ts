@@ -62,7 +62,9 @@ export function sanitizeHtml(html: string) {
   $("head").prepend(
     `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`,
   );
-  return "<!doctype html>\n" + $.html();
+  // Serialize the document element once: $.html() can retain an existing
+  // doctype, making repeated validation change otherwise identical candidates.
+  return "<!doctype html>\n" + $("html").toString();
 }
 function cleanCss(css: string) {
   return css

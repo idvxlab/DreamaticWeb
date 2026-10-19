@@ -14,6 +14,7 @@ import {
   removeProject,
   projectDir,
   projectIds,
+  publicProject,
 } from "./store.js";
 import { extractUrl, FORMATS } from "./extract.js";
 import {
@@ -26,7 +27,6 @@ import {
   discoverSkillCatalog,
 } from "../../../packages/agents/src/skills.js";
 import { ingest } from "./ingest.js";
-import { sanitizeHtml } from "./html.js";
 import type { RunEvent } from "../../../packages/agents/src/contracts.js";
 import {
   initConfig,
@@ -35,6 +35,8 @@ import {
   configUpdating,
 } from "./config.js";
 import { acceptAnswer } from "../../../packages/agents/src/questions.js";
+import { pageChecks } from "../../../packages/agents/src/page-checks.js";
+import { validatePage } from "../../../packages/agents/src/pages.js";
 import { APP_VERSION } from "../../../packages/shared/app-info.js";
 await initStore();
 await initConfig();
@@ -44,7 +46,9 @@ for (const name of await projectIds()) {
     const p = await get(name);
     if (p.status === "running") {
       p.status = "error";
-      p.error = "服务重启中断了生成，可重新发送需求继续。";
+      p.error = p.run
+        ? "服务重启中断了生成，可点击继续未完成任务。"
+        : "服务重启中断了生成，历史任务无断点，请重新发送需求。";
       await save(p);
     }
   } catch {}
@@ -156,7 +160,7 @@ app.post("/api/projects", async (_req, res) =>
   res.status(201).json(await create()),
 );
 app.get("/api/projects/:id", async (req, res) =>
-  res.json(await get(req.params.id)),
+  res.json(publicProject(await get(req.params.id))),
 );
 const sourceJobs = new Set<string>();
 function mutable(id: string) {
@@ -276,6 +280,24 @@ app.post("/api/projects/:id/run", async (req, res) => {
   );
   res.status(202).json({ ok: true });
 });
+app.post("/api/projects/:id/resume", async (req, res) => {
+  const p = await get(req.params.id);
+  if (activeRuns.has(p.id))
+    return res.status(202).json({ ok: true, alreadyRunning: true });
+  mutable(p.id);
+  if (!["error", "cancelled", "complete"].includes(p.status))
+    return res
+      .status(409)
+      .json({ error: "当前任务不能继续，请先完成待回答的问题" });
+  if (!p.run)
+    return res
+      .status(409)
+      .json({ error: "历史任务没有可验证断点，请重新发送需求" });
+  void runProject(p, save, (e) => emit(p.id, e), { resume: true }).catch(() =>
+    console.error("恢复任务保存失败"),
+  );
+  res.status(202).json({ ok: true });
+});
 app.post("/api/projects/:id/cancel", async (req, res) => {
   activeRuns.get(req.params.id)?.abort();
   res.json({ ok: true });
@@ -317,9 +339,11 @@ app.post("/api/projects/:id/versions", async (req, res) => {
     return res
       .status(409)
       .json({ error: "页面已有新版本，请重新加载后再编辑，当前修改尚未保存" });
+  const report = await validatePage(p, html);
   const v = {
     id: crypto.randomUUID(),
-    html: sanitizeHtml(html),
+    html: report.html,
+    checks: pageChecks(p, report.html, report.issues),
     label,
     createdAt: new Date().toISOString(),
   };

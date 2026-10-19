@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import { watchAgent, timeoutSetting } from "../packages/agents/src/watchdog.js";
+import {
+  watchAgent,
+  timeoutSetting,
+  limitSetting,
+} from "../packages/agents/src/watchdog.js";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const delta = {
   type: "message_update",
@@ -67,6 +71,39 @@ test("first response and total deadlines are distinct", async () => {
     assert.match(total.error!.message, /阶段总时限超时/);
   } finally {
     total.close();
+  }
+});
+
+test("disabled total deadline still enforces stalled output and validates opt-in limits", async () => {
+  const watch = watchAgent(
+    { total: 0, first: 1000, idle: 80, tool: 1000 },
+    () => {},
+    () => {},
+  );
+  try {
+    for (let i = 0; i < 4; i++) {
+      watch.event(delta);
+      await sleep(20);
+    }
+    assert.equal(watch.error, undefined);
+    await sleep(120);
+    assert.match(watch.error!.message, /输出停滞超时/);
+  } finally {
+    watch.close();
+  }
+  const name = "DREAMATIC_TEST_LIMIT";
+  try {
+    assert.equal(limitSetting(name, 0), 0);
+    process.env[name] = "0";
+    assert.equal(timeoutSetting(name, 100, true), 0);
+    process.env[name] = "72";
+    assert.equal(limitSetting(name, 0), 72);
+    for (const value of ["-1", "1.5", "NaN", "Infinity"]) {
+      process.env[name] = value;
+      assert.throws(() => limitSetting(name, 0));
+    }
+  } finally {
+    delete process.env[name];
   }
 });
 

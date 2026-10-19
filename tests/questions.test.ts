@@ -22,6 +22,13 @@ const question = (
 });
 test("question answers validate selection, custom text and reject duplicate submissions", () => {
   assert.throws(() =>
+    questionSchema.parse({
+      title: "Answer",
+      mode: "text",
+      options: [{ id: "a", label: "Choice" }],
+    }),
+  );
+  assert.throws(() =>
     questionSchema.parse({ title: "", mode: "single", options: [] }),
   );
   assert.throws(() => acceptAnswer(question(), { selected: ["a", "b"] }));

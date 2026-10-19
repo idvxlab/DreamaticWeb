@@ -21,6 +21,8 @@ export interface Source {
   originalFile?: string;
   content?: {
     textLength: number;
+    textHash?: string;
+    textTruncated?: boolean;
     chunkSize: number;
     chunks: number;
     tables: { index: number; name: string; rows: number }[];
@@ -44,6 +46,8 @@ export interface Version {
   html: string;
   label: string;
   createdAt: string;
+  runId?: string;
+  checks?: import("./page-checks.js").PageCheck;
 }
 export interface Project {
   id: string;
@@ -59,4 +63,29 @@ export interface Project {
   brief?: unknown;
   analysis?: unknown;
   error?: string;
+  pagePreviews?: {
+    hash: string;
+    width: number;
+    height: number;
+    overflow: boolean;
+    missingImages: string[];
+    contrast: { selector: string; ratio: number; required: number }[];
+  }[];
+  run?: {
+    id: string;
+    inputHash: string;
+    activeRole?: Role;
+    completedVersionId?: string;
+    completedInputHash?: string;
+    checkpoints: Partial<
+      Record<Role, { key: string; result: unknown; completedAt: string }>
+    >;
+  };
 }
+
+/** Browser responses expose progress, while full checkpoint artifacts stay local. */
+export type ProjectResponse = Omit<Project, "run" | "pagePreviews"> & {
+  run?: Omit<NonNullable<Project["run"]>, "checkpoints"> & {
+    checkpoints: Partial<Record<Role, { completedAt: string }>>;
+  };
+};

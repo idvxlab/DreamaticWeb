@@ -36,7 +36,7 @@ export default function QuestionCard({
     >
       <div className="question-card-heading">
         <MessageCircleQuestion size={16} />
-        <strong>{t("需要你的选择")}</strong>
+        <strong>{t("请确认")}</strong>
         <span>
           {t(
             question.mode === "multiple"
@@ -77,9 +77,9 @@ export default function QuestionCard({
           </div>
         )}
         <label className="question-custom">
-          {t(question.mode === "text" ? "你的回答" : "自己的答案或补充说明")}
+          {t(question.mode === "text" ? "回答" : "自己的答案或补充说明")}
           <textarea
-            aria-label={t("你的回答")}
+            aria-label={t("回答")}
             value={text}
             maxLength={20000}
             rows={3}
