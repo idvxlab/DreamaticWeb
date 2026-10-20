@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Project, Source } from "./contracts.js";
 import {
-  readSourceText,
+  readCanonicalSource,
   readSourceTable,
 } from "../../../apps/server/src/source-content.js";
 
@@ -30,34 +29,11 @@ type TextEvidence = Extract<Evidence, { kind: "text" }>;
 type Fact = { text: string; sourceId: string; evidence?: Evidence };
 export type SourceSnapshot = { text: string; hash: string; complete: boolean };
 
-/** Cache only within a tool invocation/stage validation, never across source updates. */
+/** Share verified Markdown snapshots with reads and table tools. */
 export function sourceSnapshots(projectId: string) {
-  const cache = new Map<string, Promise<SourceSnapshot>>();
-  return (source: Source) => {
-    let snapshot = cache.get(source.id);
-    if (!snapshot) {
-      snapshot = (async () => {
-        const length = source.content?.textLength ?? source.text.length;
-        if (length > 8000000)
-          throw new Error("Stored source exceeds evidence scan limit");
-        const { text } = await readSourceText(projectId, source, 0, length);
-        if (text.length !== length)
-          throw new Error("Stored source text is incomplete");
-        return {
-          text,
-          hash: createHash("sha256").update(text).digest("hex"),
-          // Legacy summaries cannot establish uniqueness in the original document.
-          complete:
-            Boolean(source.content) &&
-            !source.content?.textTruncated &&
-            !source.warnings.some((warning) =>
-              warning.startsWith("完整文本超过"),
-            ),
-        };
-      })();
-      cache.set(source.id, snapshot);
-    }
-    return snapshot;
+  return async (source: Source): Promise<SourceSnapshot> => {
+    const { markdown, hash } = await readCanonicalSource(projectId, source);
+    return { text: markdown, hash, complete: true };
   };
 }
 
@@ -191,14 +167,14 @@ export async function validateFactEvidence<T extends Fact>(
     } catch {
       issue(
         "source_unavailable",
-        "Cannot read complete stored source; no relocation attempted",
+        "Cannot read verified canonical Markdown; no relocation attempted",
       );
       continue;
     }
     if (evidence.sourceHash && evidence.sourceHash !== snapshot.hash) {
       issue(
         "stale_source",
-        "Source text changed since evidence was read; read this source again",
+        "Canonical Markdown changed since evidence was read; read this source again",
       );
       continue;
     }
@@ -209,7 +185,7 @@ export async function validateFactEvidence<T extends Fact>(
     if (!snapshot.complete) {
       issue(
         "incomplete_source",
-        "Only a legacy summary or truncated extraction is available; cannot establish unique original location",
+        "Canonical Markdown is incomplete; cannot establish unique original location",
       );
       continue;
     }

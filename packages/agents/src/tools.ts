@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { limitSetting } from "./watchdog.js";
 import { pageChecks } from "./page-checks.js";
-import { readSourceText } from "../../../apps/server/src/source-content.js";
+import { readSourceMarkdown } from "../../../apps/server/src/source-content.js";
 import { sourceSnapshots, textEvidence } from "./evidence.js";
 import { imageSize } from "image-size";
 import path from "node:path";
@@ -163,17 +163,11 @@ export function projectTools(
                 name: s.name,
                 format: s.format,
                 provenance: s.provenance,
-                textLength: s.content?.textLength ?? s.text.length,
-                tables:
-                  s.content?.tables ??
-                  s.tables.map((t, index) => ({
-                    index,
-                    name: t.name,
-                    rows: t.rows.length,
-                  })),
+                markdownLength: s.content?.markdownLength,
+                tables: s.content?.tables || [],
+                requiresReimport: s.content?.readingFormat !== "markdown-v2",
                 assets: s.assets,
                 warnings: s.warnings,
-                legacySummaryOnly: !s.content,
               })),
           });
         if (input.section === "versions")
@@ -255,10 +249,10 @@ export function projectTools(
     ),
     define(
       "source_read",
-      "Read extracted evidence in the current project. Prefer compact:true to return exact evidence without duplicating the text. Text offsets are zero-based UTF-16; table indices include header row zero. Copy a returned evidence object unchanged into facts[].evidence. Text evidence excerpts are at most 4000 units; select one supporting the claim, not an unrelated range. Old sources may contain only a legacy summary.",
+      "Read the sole canonical Markdown document. All ranges and sourceHash use Markdown UTF-16 offsets, zero-based and end exclusive. Copy returned evidence unchanged into facts[].evidence; excerpts are at most 4000 units. compact:true omits duplicate content. kind:text is a compatibility alias for the same Markdown, never raw extraction. kind:table decodes typed cells from the same Markdown, with zero-based table/row/column indices. Missing, invalid or old documents require reimport.",
       z.object({
         sourceId,
-        kind: z.enum(["text", "table"]).default("text"),
+        kind: z.enum(["text", "table", "markdown"]).default("markdown"),
         tableIndex: integer(99, 0),
         offset: integer(10000000, 0),
         limit: z.number().int().min(1).max(16000).default(8000),
@@ -266,20 +260,18 @@ export function projectTools(
       }),
       async (input) => {
         const source = findSource(input.sourceId);
-        if (input.kind === "text") {
-          const result = await readSourceText(
+        if (input.kind !== "table") {
+          const reading = await readSourceMarkdown(
             project.id,
             source,
             input.offset,
             input.limit,
           );
-          // New sources carry a persisted digest; older data needs one full read once.
-          const hash =
-            source.content?.textHash || (await snapshotFor(source)).hash;
+          const result = { text: reading.markdown, total: reading.total };
           const snapshot = {
-            text: result.text,
-            hash,
-            complete: !result.legacySummaryOnly,
+            text: reading.markdown,
+            hash: reading.sourceHash,
+            complete: true,
           };
           const evidence = [];
           for (let at = input.offset; at < input.offset + result.text.length;) {
@@ -306,10 +298,18 @@ export function projectTools(
             end: input.offset + result.text.length,
             nextOffset: input.offset + result.text.length,
             ...result,
-            ...(input.compact ? { text: undefined } : {}),
+            ...(input.kind === "markdown"
+              ? {
+                  text: undefined,
+                  markdown: input.compact ? undefined : result.text,
+                }
+              : input.compact
+                ? { text: undefined }
+                : {}),
+            format: "markdown-v2",
             evidence,
             verificationScope:
-              "Stored text location only; confirm the excerpt supports the claim and includes needed context",
+              "Canonical Markdown location only; confirm the excerpt supports the claim and includes needed context",
             warnings: source.warnings,
           });
         }
@@ -328,13 +328,12 @@ export function projectTools(
             .slice(input.offset, input.offset + count)
             .map((cells, i) => ({ row: input.offset + i, cells })),
           nextOffset: Math.min(table.rows.length, input.offset + count),
-          legacySummaryOnly: !source.content,
         });
       },
     ),
     define(
       "source_search",
-      "Literal keyword search across stored text. Prefer compact:true to omit duplicated legacy context. Copy hit.evidence unchanged for citations: legacy start/end locate the keyword, while legacy quote/quoteStart contain wider context. evidence contains aligned quote/range and sourceHash. Check the context supports the fact; follow source_read for more. Follow cursors for incomplete results.",
+      "Literal keyword search across canonical Markdown. Prefer compact:true to omit duplicated legacy context. Copy hit.evidence unchanged for citations: legacy start/end locate the keyword, while legacy quote/quoteStart contain wider context. evidence contains aligned quote/range and sourceHash. Check the context supports the fact; follow source_read for more. Follow cursors for incomplete results.",
       z.object({
         sourceId: sourceId.optional(),
         query: z.string().trim().min(1).max(200),
@@ -350,7 +349,7 @@ export function projectTools(
         let scanned = 0;
         for (const source of sources) {
           const snapshot = await snapshotFor(source);
-          const total = source.content?.textLength ?? source.text.length;
+          const total = snapshot.text.length;
           for (let offset = input.offset; offset < total; offset += 16000) {
             options.signal?.throwIfAborted();
             const text = snapshot.text.slice(
@@ -390,7 +389,6 @@ export function projectTools(
                 evidence: textEvidence(snapshot, quoteStart, quoteEnd),
                 verificationScope:
                   "Location only; keyword/context may not support the fact",
-                legacySummaryOnly: !source.content,
               });
               if (hits.length >= input.limit)
                 return output({
@@ -605,7 +603,7 @@ export function projectTools(
             matchedRows: rows.length,
             rows: rows.slice(input.offset, input.offset + input.limit),
             aggregate,
-            legacySummaryOnly: !source.content,
+
             warnings: source.warnings,
           });
         },

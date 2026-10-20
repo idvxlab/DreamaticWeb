@@ -219,18 +219,18 @@ not dynamically picked up until the next generation run.
 
 ## Source storage and references
 
-New uploads and URL imports store bounded complete extraction under
-`projects/<id>/sources/<source-id>/`: manifest.json, text/<chunk>.json and
-tables/<index>.json. Text chunks preserve UTF-16 offsets even when a surrogate
-pair crosses a chunk boundary. project.json/UI keep a smaller summary.
+New uploads and URL imports store one canonical artifact at
+`projects/<id>/sources/<source-id>/reading.md`, plus manifest.json with its
+markdown-v2 format, completeness, UTF-16 length, SHA-256 and table catalog.
+No plain-text summaries/chunks, raw-text.json, structure.json or independent table
+JSON files are generated. Project/UI Markdown and table previews are derived display
+caches; searches and validation never read them as authority.
 
-Limits: 8 million text characters per source, 100 tables, 100,000 cells and 8 million serialized table characters total per
-source, 200 columns per row, 4,000 characters per text cell. Limits produce
-warnings. Text reads return at most 16,000 characters, table reads 100 rows.
-The old 180,000-character project summary and 3,000-row table summaries are no
-longer the only accessible content for new imports. Old sources without sidecars
-return legacySummaryOnly=true; their lost content cannot be reconstructed by a
-read tool. Re-upload the original to obtain full extraction.
+Conversion runs locally without model inference. Maximums are 8 million Markdown
+UTF-16 units, 100 tables and 100,000 cells. Limits fail conversion rather than publish
+partial evidence. All typed table values round-trip through JSON cell bodies in the
+Markdown table; no row is presumed to be a header. Reads return at most 16,000 units
+or 100 table rows. Missing, damaged, incomplete or older sources require reimport.
 
 ## Read and search
 
@@ -254,7 +254,7 @@ and old answers remain accessible beyond the initial last-16-message context.
 {"query":"Product-X","limit":10}
 ```
 
-`source_read` returns source identity, text start/end offsets or original row
+`source_read` defaults to mandatory Markdown reading. Explicit kind:text is a compatibility alias for the same Markdown; kind:table returns original row
 indices. `source_search` performs literal case-insensitive text search, including
 chunk boundaries. Hits contain quoteStart plus match start/end; quote contains
 surrounding context, not only the matched term. A limited result includes a
@@ -300,12 +300,11 @@ Before requesting any model repair, the host checks every fact and locally fixes
 an incorrect text range only when its quotation is uniquely found in the same
 complete stored source. Automatic relocation requires at least 12 non-whitespace
 Unicode code points and four letters. CRLF/LF line endings are the only normalized
-difference; positions are mapped back to the exact original text. Overlapping
+difference; positions are mapped back to the exact canonical Markdown. Overlapping
 matches and line-ending-equivalent duplicates count as ambiguity. General space
 collapsing, Unicode normalization, fuzzy/semantic matching, nearest-occurrence
-selection and cross-source relocation are never used. Legacy summaries, extractions truncated at the storage limit and
-missing chunks cannot establish uniqueness. A supplied sourceHash must match the
-current stored text, even if the quotation still appears in it.
+selection and cross-source relocation are never used. Missing, damaged, incomplete or older Markdown blocks verification. A supplied
+sourceHash must match the current canonical Markdown, even if the quotation still appears in it.
 
 Successful repairs are strictly rechecked, passed to Designer and persisted in
 analysis.facts. Host-generated analysis.evidenceRepairs stores the fact index,
@@ -379,6 +378,17 @@ horizontal overflow, overflowing elements and failed images. Screenshots/reports
 are stored under previews/. Text-only models receive diagnostics without image
 content. Chromium has a 20-second execution deadline and is closed on cancellation.
 
+The normal preview budget is three attempts per invocation, including failures.
+Aim for desktop/mobile checks first and use the remaining attempt for the most
+affected viewport after a fix. A changed candidate does not inherit preview coverage
+from an older candidate; untested widths remain unverified. Revalidate corrected
+HTML even if the preview budget is exhausted; missing coverage alone does not
+require another design stage. Known failures remain subject to final validation.
+
+Targeted repair may include candidateDraft and pageIssues when recoverable. These
+are optional: without a readable candidate, recover corrected complete HTML from
+invalidOutput/originalInput and the reported error, then create a new candidate.
+
 Finish by returning only `{"candidateId":"UUID"}` to submit that exact draft,
 or use the original complete HTML output format. The host resolves the scoped
 candidate, rejects stale versions, validates again and commits only a valid page.
@@ -412,10 +422,10 @@ Older briefs are normalized with compatibility defaults; new prompts populate al
 fields. Role-file metadata does not grant spawning or tools.
 
 Analyst receives the brief, recent conversation, confirmed answers, existing page
-and bounded source extraction. Original JSON cell types are retained. Oversized
-cells are represented by a truncated/preview marker and must be read through
-source_read before citation; the marker is not the original value. Evidence gaps
-remain in analysis.limitations, which the host exposes in its evidence panel.
+and bounded canonical Markdown with explicit coverage. Initial table catalogs
+contain row counts, not cell arrays. Read cells through source_read(kind:"table")
+or table_query; both preserve types from the Markdown. Evidence gaps remain in
+analysis.limitations, which the host exposes in its evidence panel.
 
 For text-only briefs, the host removes image recommendations and records explicit
 skip decisions before handoff, then rejects generated source-image use. This
@@ -438,11 +448,10 @@ expand that set. Stable instructions live in prompts rather than repeated input
 strings. Serialized envelopes are bounded (including marker/metadata overhead),
 with explicit coverage notices and source/history tools for omitted material.
 
-Source reads support compact:true to return exact evidence without duplicating
-text. Search compact mode omits legacy context duplicates. New extraction records
-store a text digest, so a range read need not load all text chunks just to supply a
-citation hash. Final evidence validation still reads the stored original and
-checks its current digest. Legacy extraction lazily computes its digest.
+Source reads support compact:true to return exact Markdown evidence without a
+duplicate body. Search compact mode omits legacy context duplicates. Every read
+validates the canonical document's current SHA-256 and length; citation validation
+uses that same document. No original-text or table sidecar is consulted.
 Designer receives only initially available images recommended for its page, and
 receives none in text-only mode. Analyst can inspect source images for evidence.
 
@@ -458,7 +467,7 @@ issues, which are returned and shown; opening still uses the common acceptance.
 
 POST /api/projects/:id/resume retries an interrupted task without adding a user
 message. Completed validated stages are persisted before the next stage. Their
-fingerprints cover user requests/answers, base version, actual source text/tables/
+fingerprints cover user requests/answers, base version, actual canonical Markdown/
 asset content, role prompts, eligible Skills and model configuration (excluding
 credentials and execution limits). A changed stage invalidates downstream stages;
 changed task inputs conservatively restart the workflow. Local revalidation runs
@@ -497,3 +506,63 @@ imageAvailability reports omitted references, so metadata is not mistaken for
 visual inspection. Missing colors do not require another clarification or research
 pass. Palette choices remain in the normal design process, with the existing
 contrast checks; no explanation is added to the public page.
+
+## Bounded runtime observations
+
+Progress distinguishes waiting, provider processing without a business result,
+response text and tool-argument generation. Per-turn elapsed/first-response times
+and UTF-16 text/argument character counts are recorded; these are not token counts
+or a provider-compute breakdown. Progress is throttled to 15 seconds, with at most
+one immediate notification for each newly encountered response phase per turn.
+Thinking deltas keep the stall watchdog alive but their content is never stored.
+
+Completed assistant text and schema-parsed submit_result business payloads are
+available under collapsed execution details, separately marked unvalidated,
+accepted or rejected. Validation reasons and field paths can be expanded too.
+No other raw tool arguments or tool-result bodies are captured. Each business
+excerpt is limited to 8,000 UTF-16 units; retained excerpts across project events
+are limited to 64,000 units, with older content evicted while metrics remain.
+Configured API keys are redacted. This local diagnostic capture adds no model
+request and is not sent back into agent context. It does not retroactively recover
+older output or expose partial structured arguments before submission.
+
+Facts may include optional assetIds (up to three image UUIDs from that fact's own
+source). Analyst supplies only supported associations during the existing analysis;
+no extra image-inspection pass is required. The facts panel displays only these
+explicitly linked images. Source-level recommendations, filenames and document proximity are not
+fallback associations. Legacy facts or facts without valid assetIds remain text-only. Images load lazily and expand inside the card; this metadata does not override page media
+policy or require an image in the generated page.
+
+## Canonical Markdown
+
+Parser nodes supply paragraph/title/page/list boundaries. Table data is embedded in
+reading.md with zero-based table indices and JSON cell bodies, preserving types,
+whitespace and nested formula/cache objects. Source content is escaped, never run.
+The generator validates structure ranges and round-trips every table value/name.
+
+source_read(kind:"markdown",sourceId,offset,limit) is the default. It returns
+Markdown and ready-to-submit evidence objects. compact:true omits the duplicate
+body while retaining exact evidence. kind:"text" is a compatibility alias returning
+the same Markdown, never raw extraction. All text evidence, search hits and sourceHash
+refer directly to the Markdown UTF-16 coordinate space (zero-based, end exclusive).
+Use kind:table for typed cells and table_query for calculations; both decode the
+verified canonical Markdown, without an independent cell store.
+
+Runtime, tools and authenticated GET /api/projects/:id/sources/:source/reading
+validate format, completeness, length and SHA-256 before use. Missing, damaged,
+truncated or markdown-v1 sources block execution, including checkpoint resume;
+there is no fallback to legacy text or tables. Reimport the original. Previous
+citation coordinates and checkpoints must not be reused across this format change.
+No additional model stage or model call is introduced for conversion or validation.
+
+Structural extraction uses one traversal for body text, lists, notes/comments and
+table values/indices, including annotations on inline descendants. HTML uploads and
+websites use semantic headings/paragraphs/lists/table boundaries, without appending
+flattened table text again. Nested tables have their own indices. Merged HTML cells
+keep the top-left value and empty covered positions, with a warning.
+
+Verified Markdown and decoded table data share a weakly held per-source cache.
+Every access checks the file path/inode/size/mtime/ctime and expected format/hash/
+length/completeness. A change invalidates the cached verification and table parse;
+unchanged versions reuse both. Consumers receive cloned table values so they cannot
+mutate this cache. No additional model call or independent authority is introduced.

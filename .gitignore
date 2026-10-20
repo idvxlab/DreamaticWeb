@@ -34,3 +34,7 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# Optional local document parser runtime
+.venv-documents/
+__pycache__/

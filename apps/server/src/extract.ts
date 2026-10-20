@@ -1,7 +1,13 @@
+import { structureHtml } from "./html-structure.js";
+import {
+  structureDocument,
+  type StructuredExtraction,
+} from "./document-structure.js";
+import { enhancePdf } from "./pdf-structure.js";
 import { imageSize } from "image-size";
 import path from "node:path";
 import { writeFile, mkdir } from "node:fs/promises";
-import { parseOffice, type OfficeContentNode } from "officeparser";
+import { parseOffice } from "officeparser";
 import ExcelJS from "exceljs";
 import { parse } from "csv-parse/sync";
 import AdmZip from "adm-zip";
@@ -112,6 +118,7 @@ export async function extract(
     warnings: [],
     provenance: "upload:" + name,
   };
+  let structured: StructuredExtraction | undefined;
   if (TEXT.has(ext)) s.text = buffer.toString("utf8");
   else if (["csv", "tsv"].includes(ext)) {
     const rows = parse(buffer, {
@@ -121,14 +128,19 @@ export async function extract(
       skip_empty_lines: true,
     });
     s.tables.push({ name, rows });
-    s.text = rows.map((r: unknown[]) => r.join(" | ")).join("\n");
+
     if (rows.length > 3000)
       s.warnings.push("表格摘要仅显示前 3000 行，完整存储可按需读取");
   } else if (["html", "htm"].includes(ext)) {
     const $ = cheerio.load(buffer.toString("utf8"));
-    $("script,style,noscript").remove();
-    s.text = $("body").text();
-    s.warnings.push("HTML 上传只提取文本；外部素材请使用网站 URL。");
+    const html = structureHtml($);
+    structured = html.structured;
+    s.text = structured.text;
+    s.tables = structured.tables;
+    s.warnings.push(
+      ...html.warnings,
+      "HTML 已转换为结构化 Markdown；外部素材请使用网站 URL。",
+    );
   } else if (
     [
       "png",
@@ -191,9 +203,6 @@ export async function extract(
             ws.name + " 表格摘要仅显示前 3000 行，完整存储可按需读取",
           );
       });
-      s.text = s.tables
-        .map((t) => t.name + "\n" + t.rows.map((r) => r.join(" | ")).join("\n"))
-        .join("\n");
     } else {
       const parsed = await parseOffice(buffer, {
         extractAttachments: true,
@@ -204,29 +213,33 @@ export async function extract(
         },
         pdfParserConfig: { maxTimeMs: 30000 },
       });
-      s.text = String((await parsed.to("text")).value);
-      const collect = (nodes: OfficeContentNode[]) => {
-        for (const n of nodes) {
-          if (n.type === "table") {
-            const rows = (n.children || [])
-              .filter((r) => r.type === "row")
-              .map((r) =>
-                (r.children || []).map(
-                  (c) =>
-                    c.text ||
-                    (c.children || []).map((x) => x.text || "").join(" "),
-                ),
-              );
-            s.tables.push({
-              name: "Table " + (s.tables.length + 1),
-              rows,
-            });
-            if (rows.length > 3000)
-              s.warnings.push("表格摘要仅显示前 3000 行，完整存储可按需读取");
-          } else if (n.children) collect(n.children);
+      structured = structureDocument(parsed.content);
+      s.tables = structured.tables;
+      if (ext === "pdf" && process.env.DREAMATIC_PDF_ENHANCE === "true") {
+        try {
+          const enhanced = await enhancePdf(buffer);
+          const next = structureDocument(enhanced.nodes, "pdfplumber");
+          if (
+            !enhanced.nodes.some((n) =>
+              n.children?.some((c) => c.type !== "table" && c.text?.trim()),
+            )
+          )
+            throw new Error("No PDF text layer");
+          // The PDF enhancer owns typed cell values; its nodes share this traversal's order.
+          if (next.tables.length !== enhanced.tables.length)
+            throw new Error("PDF table mapping mismatch");
+          next.tables = enhanced.tables;
+          structured = next;
+          s.tables = next.tables;
+        } catch {
+          s.warnings.push(
+            "本地 PDF 增强不可用或超出限额，已保留 officeparser 结构结果",
+          );
         }
-      };
-      collect(parsed.content);
+      }
+      s.text = structured.text;
+      if (structured.truncated)
+        s.warnings.push("结构化阅读文本达到存储上限，请拆分材料");
       s.warnings.push(...parsed.warnings.map((w) => w.message));
       for (const a of parsed.attachments.slice(0, 40)) {
         if (
@@ -246,53 +259,42 @@ export async function extract(
       }
       if (ext === "pdf")
         s.warnings.push(
-          "PDF 提取文本与可用附件；扫描页如无文字层，需要额外 OCR Skill。",
+          "PDF 提取文本与可用附件；扫描页如无文字层，需要另外接入 OCR 工具。",
         );
     }
   }
-  return persistExtraction(s, projectId);
+  return persistExtraction(s, projectId, structured);
 }
 export async function extractUrl(url: string, projectId?: string) {
   const r = await fetchPublic(url);
   if (!/text\/html|text\/plain|application\/json/.test(r.type))
     throw new Error("此 URL 不是 HTML/文本网页，请下载后上传文档");
   const $ = cheerio.load(r.body.toString("utf8"));
-  $("script,style,noscript,nav,footer").remove();
-  const title = $("title").text() || new URL(r.url).hostname;
+
+  const html = /text\/html/.test(r.type) ? structureHtml($, true) : undefined;
+  const title = (html ? $("title").text() : "") || new URL(r.url).hostname;
   const s: Source = {
     id: crypto.randomUUID(),
     name: title,
     format: "website",
-    text: ($("main,article").first().text() || $("body").text()).replace(
-      /\s+/g,
-      " ",
-    ),
+    text: "",
     tables: [],
     assets: [],
     warnings: ["静态 HTML 抓取；登录内容、客户端渲染与站外链接未自动遍历。"],
     provenance: r.url,
   };
-  $("table").each((i, t) => {
-    const rows: unknown[][] = [];
-    $(t)
-      .find("tr")
-      .each((_j, tr) => {
-        rows.push(
-          $(tr)
-            .find("th,td")
-            .map((_k, c) => $(c).text())
-            .get(),
-        );
-      });
-    s.tables.push({ name: "Table " + (i + 1), rows });
-  });
+  // Plain text/JSON responses are data, not HTML: preserve literal angle brackets.
+  s.text = html ? html.structured.text : r.body.toString("utf8");
+  s.tables = html?.structured.tables || [];
+  s.warnings.push(...(html?.warnings || []));
   const urls = new Set<string>();
-  $("img[src],video[src],video source[src]").each((_i, e) => {
-    try {
-      const u = new URL($(e).attr("src")!, r.url).href;
-      if (urls.size < 12) urls.add(u);
-    } catch {}
-  });
+  if (html)
+    $("img[src],video[src],video source[src]").each((_i, e) => {
+      try {
+        const u = new URL($(e).attr("src")!, r.url).href;
+        if (urls.size < 12) urls.add(u);
+      } catch {}
+    });
   for (const u of urls) {
     try {
       const media = await fetchPublic(u);
@@ -307,5 +309,5 @@ export async function extractUrl(url: string, projectId?: string) {
       s.warnings.push("无法导入网站素材：" + u);
     }
   }
-  return persistExtraction(s, projectId);
+  return persistExtraction(s, projectId, html?.structured);
 }

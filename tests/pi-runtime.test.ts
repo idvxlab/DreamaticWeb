@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { persistExtraction } from "../apps/server/src/source-content.js";
 import { extract } from "../apps/server/src/extract.js";
 import { removeProject, save, projectDir } from "../apps/server/src/store.js";
 import { acceptAnswer } from "../packages/agents/src/questions.js";
@@ -60,9 +61,42 @@ test("Actual Pi 1.3 harness runs three agents, calls dynamic Skills, validates o
       .join("\n");
     const role = system.includes("# Brief and clarification")
       ? "orchestrator"
-      : system.includes("Analyze already extracted")
+      : system.includes("# Responsibility and inputs")
         ? "analyst"
         : "designer";
+    for (const message of input.messages.filter(
+      (m: any) => m.role === "user",
+    )) {
+      const segments =
+        typeof message.content === "string"
+          ? [message.content]
+          : (message.content || [])
+              .filter((c: any) => c.type === "text")
+              .map((c: any) => c.text);
+      for (const segment of segments) {
+        let envelope;
+        try {
+          envelope = JSON.parse(segment);
+        } catch {
+          continue;
+        }
+        for (const source of envelope.sources ||
+          envelope.originalInput?.sources ||
+          []) {
+          assert.equal(
+            source.text,
+            undefined,
+            "models must not receive raw source text",
+          );
+          assert.equal(
+            typeof source.markdown,
+            "string",
+            "document input must be Markdown",
+          );
+          assert.ok(source.markdownCoverage);
+        }
+      }
+    }
     seen.push(role);
     if (
       role === "designer" &&
@@ -119,22 +153,30 @@ test("Actual Pi 1.3 harness runs three agents, calls dynamic Skills, validates o
                       },
                     },
                   ]
-                : invalidSource
-                  ? [{ text: "Claim", sourceId: "invented" }]
-                  : exerciseTools
-                    ? [
-                        {
-                          text: "Supported claim",
-                          sourceId: toolSourceId,
-                          evidence: {
-                            kind: "text",
-                            start: 0,
-                            end: 8,
-                            quote: invalidEvidence ? "Wrong!!!" : "Evidence",
+                : imageAsset
+                  ? [
+                      {
+                        text: "Identified source logo",
+                        sourceId: imageSourceId,
+                        assetIds: [imageAsset.id],
+                      },
+                    ]
+                  : invalidSource
+                    ? [{ text: "Claim", sourceId: "invented" }]
+                    : exerciseTools
+                      ? [
+                          {
+                            text: "Supported claim",
+                            sourceId: toolSourceId,
+                            evidence: {
+                              kind: "text",
+                              start: 0,
+                              end: 8,
+                              quote: invalidEvidence ? "Wrong!!!" : "Evidence",
+                            },
                           },
-                        },
-                      ]
-                    : [],
+                        ]
+                      : [],
               sections: [],
               assets: imageAsset
                 ? [
@@ -551,6 +593,35 @@ test("Actual Pi 1.3 harness runs three agents, calls dynamic Skills, validates o
       await removeProject(draftRepair.id);
     }
 
+    const missingMarkdown = project();
+    missingMarkdown.sources = [
+      {
+        id: crypto.randomUUID(),
+        name: "legacy.txt",
+        format: "txt",
+        text: "raw legacy text",
+        tables: [],
+        assets: [],
+        warnings: [],
+        provenance: "test",
+      },
+    ];
+    const callsBeforeMissing = seen.length;
+    await runProject(
+      missingMarkdown,
+      async () => {},
+      () => {},
+    );
+    assert.equal(missingMarkdown.status, "error");
+    assert.match(missingMarkdown.error || "", /Markdown/);
+    assert.equal(
+      seen.length,
+      callsBeforeMissing,
+      "missing Markdown must fail before any model request",
+    );
+    await save(missingMarkdown);
+    await removeProject(missingMarkdown.id);
+
     exerciseTools = true;
     const toolRun = project();
     toolSourceId = crypto.randomUUID();
@@ -567,6 +638,7 @@ test("Actual Pi 1.3 harness runs three agents, calls dynamic Skills, validates o
         provenance: "upload:evidence.txt",
       },
     ];
+    await persistExtraction(toolRun.sources[0], toolRun.id);
     toolRun.versions.push({
       id: toolBaseVersionId,
       html: '<html><body><h1 id="hero">Manual page</h1></body></html>',
@@ -585,7 +657,13 @@ test("Actual Pi 1.3 harness runs three agents, calls dynamic Skills, validates o
     assert.equal((toolRun.analysis as any).facts[0].locationVerified, true);
     invalidEvidence = true;
     const ungrounded = project();
-    ungrounded.sources = toolRun.sources;
+    ungrounded.sources = [
+      {
+        ...structuredClone(toolRun.sources[0]),
+        text: "Evidence for this website",
+      },
+    ];
+    await persistExtraction(ungrounded.sources[0], ungrounded.id);
     await runProject(
       ungrounded,
       async () => {},
@@ -688,6 +766,9 @@ test("Actual Pi 1.3 harness runs three agents, calls dynamic Skills, validates o
         () => {},
       );
       assert.equal(illustrated.status, "complete", illustrated.error);
+      assert.deepEqual((illustrated.analysis as any).facts[0].assetIds, [
+        imageAsset.id,
+      ]);
       assert.match(illustrated.versions[0].html, new RegExp(imageAsset.url));
       assert.equal(
         imageDesignerAttempts,
@@ -790,6 +871,27 @@ test("Actual Pi 1.3 harness runs three agents, calls dynamic Skills, validates o
     assert.ok(
       structured.events.some((event) =>
         event.text.includes("工具失败：submit_result"),
+      ),
+    );
+
+    assert.ok(
+      structured.events.some(
+        (e) =>
+          e.role === "analyst" &&
+          e.details?.outputState === "rejected" &&
+          typeof e.details.businessOutput === "string",
+      ),
+    );
+    assert.ok(
+      structured.events.some(
+        (e) => e.role === "analyst" && e.details?.outputState === "accepted",
+      ),
+    );
+    assert.ok(
+      structured.events.some(
+        (e) =>
+          e.details?.phase === "complete" &&
+          typeof e.details.toolArgumentCharacters === "number",
       ),
     );
 

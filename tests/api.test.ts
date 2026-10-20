@@ -148,6 +148,21 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
     assert.equal(result.sources.length, 1, JSON.stringify(result));
     assert.equal(result.errors.length, 1);
     assert.equal(result.sources[0].tables[0].rows[1][1], "42");
+    const reading = await request(
+      `/projects/${p.id}/sources/${result.sources[0].id}/reading`,
+    );
+    assert.equal(reading.status, 200);
+    assert.match(reading.headers.get("content-type") || "", /text\/markdown/);
+    assert.match(await reading.text(), /测试/);
+    assert.equal(
+      (
+        await request(
+          `/projects/${p.id}/sources/${crypto.randomUUID()}/reading`,
+        )
+      ).status,
+      404,
+    );
+
     const imageForm = new FormData();
     const png = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9JkAAAAASUVORK5CYII=",

@@ -33,30 +33,19 @@ export async function taskFingerprint(p: Project) {
         files.push("missing");
       }
     }
-    const tables = [];
-    if (source.content)
-      for (const table of source.content.tables) {
-        try {
-          tables.push(
-            await readFile(
-              path.join(
-                projectDir(p.id),
-                "sources",
-                source.id,
-                "tables",
-                table.index + ".json",
-              ),
-              "utf8",
-            ),
-          );
-        } catch {
-          tables.push("missing");
-        }
-      }
-    sourceHashes.push({ source, textHash: text.hash, files, tables });
+    sourceHashes.push({
+      id: source.id,
+      name: source.name,
+      format: source.format,
+      provenance: source.provenance,
+      warnings: source.warnings,
+      assets: source.assets,
+      markdownHash: text.hash,
+      files,
+    });
   }
   return fingerprint({
-    version: 2,
+    version: 4,
     mode: process.env.DREAMATIC_MODE || "live",
     messages: p.messages.filter((m) => m.role === "user"),
     answers: p.questions?.filter((q) => q.answeredAt),

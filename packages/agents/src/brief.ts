@@ -34,25 +34,3 @@ export const submissionBriefSchema = z
     mediaPolicy: z.enum(["relevant-images", "text-only"]),
   })
   .strict();
-
-/** Never turn a truncated display string into apparently exact cell evidence. */
-export function budgetCell(value: unknown, remaining: number) {
-  const serialized = JSON.stringify(value) ?? "null";
-  const size = serialized.length;
-  if (size <= Math.min(remaining, 2000)) return { value, size };
-  const preview = serialized.slice(0, Math.max(0, Math.min(remaining, 2000)));
-  return {
-    value: {
-      truncated: true,
-      preview,
-      instruction:
-        "Use source_read for the original typed cell; this preview is not citation evidence",
-    },
-    size: JSON.stringify({
-      truncated: true,
-      preview,
-      instruction:
-        "Use source_read for the original typed cell; this preview is not citation evidence",
-    }).length,
-  };
-}

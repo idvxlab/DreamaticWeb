@@ -4,7 +4,7 @@ description: Use for editorial, brand storytelling, portfolios and long-form con
 license: MIT
 metadata:
   roles: [designer]
-  tasks: [website, storytelling]
+  tasks: [website, storytelling, visual-style]
   permissions: [guidance]
 ---
 
@@ -17,10 +17,11 @@ using the same material. Develop a content-specific hierarchy instead of boxing
 everything identically.
 
 Specify margins, columns and text roles. Tune line length, leading, alignment and
-contrast to the script and density. Establish bilingual ordering; translation is
-not decorative filler. Vary image scale, whitespace and density within a coherent
-system. Preserve exact copy and numeric data. Plan image crops, captions, credits,
-tables and actual anchor navigation.
+contrast to the script and density. When bilingual content is requested, establish
+consistent language ordering; translation is not decorative filler. Vary image scale,
+whitespace and density within a coherent system. Follow Designer copy-scope rules: adapt source prose faithfully, preserve
+approved exact-copy text, and retain numeric conditions. Plan image crops, captions,
+credits, tables and actual anchor navigation.
 
 Output: follow the Designer submission contract: prefer a validated candidateId;
 complete HTML with responsive inline CSS is the fallback. For

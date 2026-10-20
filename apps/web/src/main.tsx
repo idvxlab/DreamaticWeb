@@ -42,6 +42,8 @@ import { api, download, token } from "./api";
 import "./styles.css";
 import Settings from "./Settings";
 import ConversationThread from "./ConversationThread";
+import FactsView from "./FactsView";
+import { factsFor } from "./fact-model";
 import ProjectActions from "./ProjectActions";
 import BrandMenu from "./BrandMenu";
 import { useI18n } from "./i18n";
@@ -72,7 +74,7 @@ function App() {
     [busy, setBusy] = useState(false),
     [dirty, setDirty] = useState(false),
     [side, setSide] = useState(() => window.innerWidth >= 760),
-    [view, setView] = useState<"chat" | "sources">("chat"),
+    [view, setView] = useState<"chat" | "sources" | "facts">("chat"),
     [modal, setModal] = useState<"url" | "skills" | "settings" | null>(null),
     [url, setUrl] = useState(""),
     [query, setQuery] = useState(""),
@@ -352,10 +354,13 @@ function App() {
           {t("资料与素材")}
           <span>{project?.sources.length || 0}</span>
         </button>
-        <button className="nav-button" onClick={() => setModal("skills")}>
-          <BookOpen size={15} />
-          {t("技能库")}
-          <span>{skills.length}</span>
+        <button
+          className={"nav-button " + (view === "facts" ? "active" : "")}
+          onClick={() => setView("facts")}
+        >
+          <ScanText size={15} />
+          {t("事实列表")}
+          <span>{factsFor(project).length}</span>
         </button>
         <div className="project-label">
           <p className="nav-label">{t("最近项目")}</p>
@@ -526,9 +531,19 @@ function App() {
               <div>
                 <span className="orange-dot" />
                 <strong>
-                  {view === "chat" ? t("与想法对话") : t("资料与素材")}
+                  {view === "chat"
+                    ? t("与想法对话")
+                    : view === "facts"
+                      ? t("事实列表")
+                      : t("资料与素材")}
                 </strong>
-                <small>{view === "chat" ? "CHAT" : "SOURCES"}</small>
+                <small>
+                  {view === "chat"
+                    ? "CHAT"
+                    : view === "facts"
+                      ? "FACTS"
+                      : "SOURCES"}
+                </small>
               </div>
               <button
                 className="icon-button"
@@ -648,24 +663,10 @@ function App() {
                           {t("文档分析与来源")}
                         </summary>
                         <p>{evidence.summary}</p>
-                        {evidence.facts?.map((fact, i) => {
-                          const source = project.sources.find(
-                            (s) => s.id === fact.sourceId,
-                          );
-                          return (
-                            <div key={i}>
-                              <p>{fact.text}</p>
-                              {source && (
-                                <button
-                                  onClick={() => setSelectedSource(source)}
-                                >
-                                  <FileText size={11} />
-                                  {source.name}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
+                        <button onClick={() => setView("facts")}>
+                          <ScanText size={12} />
+                          {t("查看事实列表")}
+                        </button>
                         {evidence.limitations?.map((limitation, i) => (
                           <p className="evidence-limit" key={i}>
                             {limitation}
@@ -676,6 +677,8 @@ function App() {
                   </ConversationThread>
                 )}
               </>
+            ) : view === "facts" ? (
+              <FactsView key={project?.id || "no-project"} project={project} />
             ) : (
               <div className="sources-view">
                 <div className="sources-intro">
@@ -714,7 +717,7 @@ function App() {
                     <div>
                       <strong>{s.name}</strong>
                       <small>
-                        {s.text.length.toLocaleString()}
+                        {(s.content?.markdownLength ?? 0).toLocaleString()}
                         {t("字符 \u00B7")} {s.assets.length}
                         {t("素材 \u00B7")}
                         {s.tables.length}
@@ -1181,6 +1184,20 @@ function App() {
               {t("来源：")}
               {selectedSource.provenance}
             </p>
+            {selectedSource.content?.readingFormat && project && (
+              <button
+                className="secondary"
+                onClick={() =>
+                  void download(
+                    `/projects/${project.id}/sources/${selectedSource.id}/reading`,
+                    selectedSource.name.replace(/\.[^.]+$/, "") + ".md",
+                  ).catch(handleError)
+                }
+              >
+                <Download size={13} />
+                {t("下载 Markdown 文档")}
+              </button>
+            )}
             {selectedSource.warnings.map((w, i) => (
               <p className="source-warning" key={i}>
                 <AlertCircle size={13} />
@@ -1213,8 +1230,8 @@ function App() {
               </div>
             ))}
             <pre>
-              {selectedSource.text.slice(0, 20000) ||
-                t("此来源无文本内容，请查看素材。")}
+              {selectedSource.markdown?.slice(0, 20000) ||
+                t("此来源没有可用的 Markdown 文档，请重新导入。")}
             </pre>
           </section>
         </div>

@@ -31,7 +31,8 @@ adding a slogan.
 
 Keep essential content in semantic HTML. Give informative images descriptions
 of their relevant information; decorative images should not repeat nearby copy.
-Provide text alongside a canvas visualization when its meaning matters. Label
+Use semantic HTML tables or CSS charts with textual values; canvas elements and
+script-driven visualizations are unsupported by this host. Label
 controls persistently and distinguish actions from navigation. Selected, error
 and status states need a cue beyond color. Names exposed to assistive technology
 should agree with visible wording.
@@ -39,10 +40,12 @@ should agree with visible wording.
 ## Keyboard and focus
 
 Use native elements first. Make keyboard order follow the task and keep focus
-visible above sticky regions. For custom dialogs, define initial focus, Escape,
-focus containment and return to the trigger; background controls must not remain
-accidentally operable. Opening a section must not unexpectedly move focus. For
-changing status, announce the useful result without repeatedly reading the page.
+visible above sticky regions. Prefer in-page content and native details/summary
+for disclosure. Do not author custom modal dialogs, focus traps, dynamic status
+announcements or other behaviors that require scripts. A dialog-shaped block or
+CSS-only overlay does not implement modal keyboard behavior. Choose a working
+native alternative rather than implying unsupported interactions. Expanding a
+section should preserve logical focus and reading order.
 
 ## Contrast and adaptation
 

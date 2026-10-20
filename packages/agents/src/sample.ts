@@ -20,21 +20,22 @@ export function demoPage(p: Project) {
     : [
         {
           name: "有意义的内容",
-          text: "上传你的文档、数据或图片，把真实信息转化为独特的数字体验。",
+          markdown:
+            "上传你的文档、数据或图片，把真实信息转化为独特的数字体验。",
         },
         {
           name: "有温度的表达",
-          text: "通过细腻的字体、留白与色彩，让每一个重要信息清晰传达。",
+          markdown: "通过细腻的字体、留白与色彩，让每一个重要信息清晰传达。",
         },
         {
           name: "持续生长的想法",
-          text: "直接选择元素进行修改，让页面随着你的想法不断完善。",
+          markdown: "直接选择元素进行修改，让页面随着你的想法不断完善。",
         },
       ]
   )
     .map(
       (s, i) =>
-        `<article class="card"><span>0${i + 1}</span><h3>${esc(s.name)}</h3><p>${esc(s.text.slice(0, 200))}</p></article>`,
+        `<article class="card"><span>0${i + 1}</span><h3>${esc(s.name)}</h3><p>${esc((s.markdown || "").slice(0, 200))}</p></article>`,
     )
     .join(
       "",

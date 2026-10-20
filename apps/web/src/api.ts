@@ -19,14 +19,14 @@ export async function api<T = any>(
   }
   return res.json();
 }
-export async function download(url: string) {
+export async function download(url: string, filename = "dreamatic-page.html") {
   const res = await fetch("/api" + url, {
     headers: token() ? { Authorization: "Bearer " + token() } : undefined,
   });
   if (!res.ok) throw new Error("导出失败");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(await res.blob());
-  a.download = "dreamatic-page.html";
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

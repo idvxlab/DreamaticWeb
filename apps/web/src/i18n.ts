@@ -10,6 +10,68 @@ export function setLanguage(next: Language) {
   for (const listener of listeners) listener();
 }
 const english: Record<string, string> = {
+  "下载 Markdown 文档": "Download Markdown document",
+  事实: "Fact",
+  关联图片: "Linked images",
+  在卡片中查看图片: "View image in card",
+  收起图片: "Collapse image",
+  "查看 Markdown 依据": "View Markdown evidence",
+  "Markdown 引用": "Markdown excerpt",
+  单元格原值: "Original cell value",
+  事实列表: "Facts",
+  "从资料中发现事实。": "Facts from your sources.",
+  "查看 Analyst 已保存的事实与来源。引用位置核对不代表事实解读已被独立证实。":
+    "Review facts and sources saved by Analyst. Verified citation locations do not independently confirm the interpretation.",
+  分析摘要与限制: "Analysis summary and limitations",
+  "当前展示上次已保存的分析结果，本次分析完成后将更新。":
+    "Showing the previous saved analysis until the current analysis is complete.",
+  搜索事实: "Search facts",
+  搜索事实或来源: "Search facts or sources",
+  按来源筛选事实: "Filter facts by source",
+  全部来源: "All sources",
+  来源不可用: "Source unavailable",
+  显示事实: "Showing facts",
+  未提供引用定位: "Citation location not provided",
+  引用位置已核对: "Citation location checked",
+  引用位置未核对: "Citation location not checked",
+  文本范围: "Text range",
+  表格索引: "Table index",
+  行索引: "Row index",
+  列索引: "Column index",
+  "索引从 0 开始，行索引包含表头。":
+    "Indices start at zero; row indices include the header.",
+  "此事实未保存可展示的Markdown 引用。":
+    "No original citation was saved for this fact.",
+  "没有匹配的事实，请调整搜索或来源筛选。":
+    "No matching facts. Adjust the search or source filter.",
+  "选择或创建项目后查看分析事实。": "Select or create a project to view facts.",
+  "本次分析暂无已提取的事实。": "This analysis contains no extracted facts.",
+  "正在等待 Analyst 保存分析结果。":
+    "Waiting for Analyst to save the analysis.",
+  "分析完成后，相关事实将在这里展示。":
+    "Facts will appear here after analysis.",
+  查看事实列表: "View facts",
+  正在等待模型响应: "Waiting for model response",
+  本轮模型响应完成: "Model turn finished",
+  正在生成业务回复: "Generating response text",
+  正在生成工具参数: "Generating tool arguments",
+  "模型处理中，尚未返回业务结果":
+    "Model processing; business result not available yet",
+  "结构化业务输出（校验通过）": "Structured business output (validated)",
+  "结构化业务输出（校验未通过）":
+    "Structured business output (validation failed)",
+  "业务回复（未作为最终结果校验）":
+    "Response text (not validated as final output)",
+  本轮耗时: "Turn elapsed",
+  回复字符: "Response characters",
+  工具参数字符: "Tool argument characters",
+  查看业务输出: "View business output",
+  输出字符: "Output characters",
+  "仅展示业务内容，不含内部推理":
+    "Business content only; no internal reasoning",
+  内容已截断: "Content truncated",
+  "较早的业务输出已省略，仅保留统计": "Older output omitted; metrics retained",
+  查看校验详情: "View validation details",
   系统消息: "System message",
   用户消息: "User message",
   对话记录: "Conversation",
@@ -198,8 +260,8 @@ const english: Record<string, string> = {
   "来源：": "Source: ",
   "预览显示前 30 行；完整提取数据保存在项目中。":
     "Previewing the first 30 rows. Full extracted data is saved in the project.",
-  "此来源无文本内容，请查看素材。":
-    "No text in this source. Please check its assets.",
+  "此来源没有可用的 Markdown 文档，请重新导入。":
+    "No Markdown document is available. Please reimport this source.",
   布局: "Layout",
   文字: "Text",
   外观: "Appearance",

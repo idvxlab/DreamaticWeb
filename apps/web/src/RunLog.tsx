@@ -88,6 +88,47 @@ export default function RunLog({
                 {event.role === "system" ? t("系统") : roles[event.role].name}
               </strong>{" "}
               · {t(event.text)}
+              {typeof event.details?.elapsedMs === "number" &&
+                typeof event.details?.textCharacters === "number" && (
+                  <small className="run-metrics">
+                    {t("本轮耗时")} {Math.round(event.details.elapsedMs / 1000)}
+                    s · {t("回复字符")} {event.details.textCharacters} ·{" "}
+                    {t("工具参数字符")} {event.details.toolArgumentCharacters}
+                  </small>
+                )}
+              {typeof event.details?.businessOutput === "string" && (
+                <details className="run-output">
+                  <summary>{t("查看业务输出")}</summary>
+                  <small>
+                    {t("输出字符")} {event.details.outputCharacters} ·{" "}
+                    {t("仅展示业务内容，不含内部推理")}
+                    {event.details.outputTruncated
+                      ? " · " + t("内容已截断")
+                      : ""}
+                  </small>
+                  <pre>{event.details.businessOutput}</pre>
+                </details>
+              )}
+              {event.details?.outputOmitted === true && (
+                <small className="run-metrics">
+                  {t("较早的业务输出已省略，仅保留统计")}
+                </small>
+              )}
+              {((event.details?.validation && event.details?.reason) ||
+                event.details?.fields) && (
+                <details className="run-output">
+                  <summary>{t("查看校验详情")}</summary>
+                  <pre>
+                    {[
+                      event.details.validation,
+                      event.details.fields,
+                      event.details.reason,
+                    ]
+                      .filter(Boolean)
+                      .join("\n")}
+                  </pre>
+                </details>
+              )}
             </span>
             {event.kind === "skill" && <BookOpen size={11} />}
           </div>

@@ -1,6 +1,13 @@
 /** Budget the actual serialized envelope, including metadata and truncation markers. */
 export function boundedInput(input: unknown, limit = 180000): string {
   const data = structuredClone(input) as Record<string, any>;
+  if (
+    Array.isArray(data.sources) &&
+    data.sources.some((s: any) => s.text !== undefined)
+  )
+    throw new Error(
+      "Raw source text is not a model input; canonical Markdown is required",
+    );
   let omitted = false;
   if (data.originalInput && typeof data.originalInput === "object") {
     data.originalInput = JSON.parse(
@@ -28,49 +35,20 @@ export function boundedInput(input: unknown, limit = 180000): string {
   ) {
     const sources = Array.isArray(data.sources) ? data.sources : [];
     const source = sources
-      .filter((s: any) => (s.text?.length || 0) > 1000)
-      .sort((a: any, b: any) => b.text.length - a.text.length)[0];
+      .filter((s: any) => (s.markdown?.length || 0) > 1000)
+      .sort(
+        (a: any, b: any) =>
+          (b.markdown?.length || 0) - (a.markdown?.length || 0),
+      )[0];
     if (source) {
-      source.text = source.text.slice(0, Math.floor(source.text.length / 2));
-      if (source.textCoverage) {
-        source.textCoverage.end = source.text.length;
-        source.textCoverage.complete = false;
+      source.markdown = source.markdown.slice(
+        0,
+        Math.floor(source.markdown.length / 2),
+      );
+      if (source.markdownCoverage) {
+        source.markdownCoverage.end = source.markdown.length;
+        source.markdownCoverage.complete = false;
       }
-      omitted = true;
-      continue;
-    }
-    const table = sources
-      .flatMap((s: any) => s.tables || [])
-      .filter((t: any) => t.rows?.length > 1)
-      .sort((a: any, b: any) => b.rows.length - a.rows.length)[0];
-    if (table) {
-      table.rows = table.rows.slice(0, Math.floor(table.rows.length / 2));
-      omitted = true;
-      continue;
-    }
-    let shortenedCell = false;
-    for (const source of sources) {
-      for (const table of source.tables || []) {
-        for (const row of table.rows || []) {
-          const column = row.findIndex(
-            (cell: unknown) => (JSON.stringify(cell) || "").length > 2000,
-          );
-          if (column >= 0) {
-            row[column] = {
-              truncated: true,
-              preview: JSON.stringify(row[column]).slice(0, 500),
-              instruction:
-                "Read the original typed cell with source_read before citing",
-            };
-            shortenedCell = true;
-            break;
-          }
-        }
-        if (shortenedCell) break;
-      }
-      if (shortenedCell) break;
-    }
-    if (shortenedCell) {
       omitted = true;
       continue;
     }
@@ -111,7 +89,7 @@ export function boundedInput(input: unknown, limit = 180000): string {
   if (omitted)
     data.inputCoverage = {
       complete: false,
-      note: "Context budget omitted history, page or source ranges/rows. Use project_context_read and source tools for missing context; supplied extracts are not complete. Original stored data is unchanged.",
+      note: "Context budget omitted history, page or Markdown ranges. Use project_context_read and source tools for missing context; supplied extracts are not complete. Original stored data is unchanged.",
     };
   const result = encode();
   if (result.length > limit)

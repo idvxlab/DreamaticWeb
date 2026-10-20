@@ -18,7 +18,7 @@ const citation = (quote: string, start = 0) => ({
   quote,
 });
 
-test("local relocation reads complete chunks, preserves UTF-16 and audits unchanged facts", async () => {
+test("local relocation reads canonical Markdown, preserves UTF-16 and audits unchanged facts", async () => {
   const p = await create();
   try {
     const quote = "🌿公司年度报告说明实际收入为100万元。";
@@ -184,7 +184,7 @@ test("ambiguous, short, numeric, substantive, legacy, stale and table problems a
             "short_quote",
             "short_quote",
             "quote_not_found",
-            "incomplete_source",
+            "source_unavailable",
             "stale_source",
             "unknown_source",
             "cell_mismatch",
@@ -215,7 +215,7 @@ test("already correct short quotes and cells verify location only, while absent 
       {
         text: "This interpretation is not certified",
         sourceId: source.id,
-        evidence: citation("名称"),
+        evidence: citation("名称", source.markdown!.indexOf("名称")),
       },
       {
         text: "金额",
@@ -240,7 +240,7 @@ test("already correct short quotes and cells verify location only, while absent 
   }
 });
 
-test("missing chunks block repair rather than searching a partial snapshot; cancellation is honored", async () => {
+test("missing Markdown blocks repair rather than searching a partial snapshot; cancellation is honored", async () => {
   const p = await create();
   try {
     const source = await extract(
@@ -249,9 +249,7 @@ test("missing chunks block repair rather than searching a partial snapshot; canc
       p.id,
     );
     p.sources.push(source);
-    await rm(
-      path.join(projectDir(p.id), "sources", source.id, "text", "1.json"),
-    );
+    await rm(path.join(projectDir(p.id), "sources", source.id, "reading.md"));
     await assert.rejects(
       () =>
         validateFactEvidence(p, [
@@ -295,8 +293,8 @@ test("source hashes reject changed text; repairs never cross sources or trust tr
     // Replace a same-length stored extraction; stale checks must run even when
     // the old offset/quotation could otherwise be repaired.
     await writeFile(
-      path.join(projectDir(p.id), "sources", source.id, "text", "0.json"),
-      JSON.stringify(quote.replace("100", "200")),
+      path.join(projectDir(p.id), "sources", source.id, "reading.md"),
+      quote.replace("100", "200"),
     );
     await assert.rejects(
       () =>
@@ -312,24 +310,24 @@ test("source hashes reject changed text; repairs never cross sources or trust tr
         assert.ok(e instanceof EvidenceValidationError);
         assert.deepEqual(
           e.issues.map((i) => i.code),
-          ["stale_source", "quote_not_found"],
+          ["source_unavailable", "quote_not_found"],
         );
         return true;
       },
     );
-    other.content!.textTruncated = true;
+    other.content!.readingComplete = false;
     await assert.rejects(
       () =>
         validateFactEvidence(p, [
           {
             text: "截断",
             sourceId: other.id,
-            evidence: citation(other.text, 9000),
+            evidence: citation(other.markdown!, 9000),
           },
         ]),
       (e: unknown) =>
         e instanceof EvidenceValidationError &&
-        e.issues[0].code === "incomplete_source",
+        e.issues[0].code === "source_unavailable",
     );
   } finally {
     await removeProject(p.id);

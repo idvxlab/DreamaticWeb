@@ -13,18 +13,19 @@ export interface Source {
   id: string;
   name: string;
   format: string;
-  text: string;
+  /** Legacy data only. New imports never persist this field. */
+  text?: string;
+  markdown?: string;
   assets: Asset[];
   tables: { name: string; rows: unknown[][] }[];
   warnings: string[];
   provenance: string;
   originalFile?: string;
   content?: {
-    textLength: number;
-    textHash?: string;
-    textTruncated?: boolean;
-    chunkSize: number;
-    chunks: number;
+    readingFormat?: "markdown-v1" | "markdown-v2";
+    readingHash?: string;
+    readingComplete?: boolean;
+    markdownLength?: number;
     tables: { index: number; name: string; rows: number }[];
   };
 }

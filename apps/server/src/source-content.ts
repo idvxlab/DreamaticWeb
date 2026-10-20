@@ -1,157 +1,206 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import * as cheerio from "cheerio";
 import { projectDir } from "./store.js";
 import type { Source } from "../../../packages/agents/src/contracts.js";
-const CHUNK = 16000;
-// Full, bounded extraction is separate from the small project/UI summary.
-export async function persistExtraction(source: Source, projectId?: string) {
+import {
+  readingMarkdown,
+  type StructuredExtraction,
+} from "./document-structure.js";
+const MAX = 8000000;
+const digest = (value: string) =>
+  createHash("sha256").update(value).digest("hex");
+
+/** Tables are derived solely from the canonical Markdown; no independent cell store. */
+export function markdownTables(markdown: string) {
+  const $ = cheerio.load(markdown, { xmlMode: false });
+  return $("table[data-source-table]")
+    .toArray()
+    .map((node, index) => {
+      if ($(node).attr("data-source-table") !== String(index))
+        throw new Error("Invalid Markdown table index");
+      const name = JSON.parse($(node).attr("data-name") || "null");
+      if (typeof name !== "string")
+        throw new Error("Invalid Markdown table name");
+      const rows = $(node)
+        .find("tr")
+        .toArray()
+        .map((row) =>
+          $(row)
+            .children("td")
+            .toArray()
+            .map((cell) => JSON.parse($(cell).text())),
+        );
+      return { name, rows };
+    });
+}
+
+export async function persistExtraction(
+  source: Source,
+  projectId?: string,
+  structured?: StructuredExtraction,
+) {
+  if ((source.text?.length ?? 0) > MAX || structured?.truncated)
+    throw new Error(
+      "Markdown conversion incomplete; split and reimport this source",
+    );
+  const sourceTables = structured?.tables ?? source.tables;
+  if (
+    sourceTables.length > 100 ||
+    sourceTables.reduce(
+      (n, t) => n + t.rows.reduce((sum, r) => sum + r.length, 0),
+      0,
+    ) > 100000
+  )
+    throw new Error(
+      "Markdown table limit exceeded; split and reimport this source",
+    );
+  // Normalize exactly as JSON storage does, including sparse/undefined cells.
+  const tables = JSON.parse(JSON.stringify(sourceTables)) as Source["tables"];
+  const reading = readingMarkdown(
+    source.text ?? "",
+    structured?.blocks || [],
+    tables,
+  );
+  if (
+    reading.truncated ||
+    reading.markdown.length > MAX ||
+    (!reading.markdown.trim() && !source.assets.length)
+  )
+    throw new Error(
+      "Markdown conversion incomplete; split and reimport this source",
+    );
+  // Round trip every typed cell/name before committing the canonical artifact.
+  const decoded = markdownTables(reading.markdown);
+  if (JSON.stringify(decoded) !== JSON.stringify(tables))
+    throw new Error("Markdown table round-trip validation failed");
+  source.content = {
+    readingFormat: "markdown-v2",
+    readingHash: digest(reading.markdown),
+    readingComplete: true,
+    markdownLength: reading.markdown.length,
+    tables: decoded.map((t, index) => ({
+      index,
+      name: t.name,
+      rows: t.rows.length,
+    })),
+  };
+  // This is a Markdown preview, never a plain-text extraction summary.
+  source.markdown = reading.markdown.slice(0, 180000);
+  delete source.text;
+  source.tables = decoded.map((t) => ({ ...t, rows: t.rows.slice(0, 3000) }));
   if (projectId) {
     const dir = path.join(projectDir(projectId), "sources", source.id);
-    await mkdir(path.join(dir, "text"), { recursive: true });
-    await mkdir(path.join(dir, "tables"), { recursive: true });
-    const text = source.text.slice(0, 8000000);
-    if (text.length < source.text.length)
-      source.warnings.push("完整文本超过 8,000,000 字符，已达到提取存储上限");
-    const chunks = Math.ceil(text.length / CHUNK);
-    for (let i = 0; i < chunks; i++)
-      await writeFile(
-        path.join(dir, "text", i + ".json"),
-        JSON.stringify(text.slice(i * CHUNK, (i + 1) * CHUNK)),
-        { mode: 0o600 },
-      );
-    let cells = 0,
-      tableCharacters = 0;
-    const tables = source.tables.slice(0, 100).map((table, index) => {
-      const rows: unknown[][] = [];
-      for (const row of table.rows) {
-        const rowSize = JSON.stringify(row.slice(0, 200)).length;
-        if (cells + row.length > 100000 || tableCharacters + rowSize > 8000000)
-          break;
-        tableCharacters += rowSize;
-        rows.push(
-          row
-            .slice(0, 200)
-            .map((cell) =>
-              typeof cell === "string" ? cell.slice(0, 4000) : cell,
-            ),
-        );
-        cells += row.length;
-      }
-      if (
-        rows.length !== table.rows.length ||
-        table.rows.some(
-          (r) =>
-            r.length > 200 ||
-            r.some((cell) => typeof cell === "string" && cell.length > 4000),
-        )
-      )
-        source.warnings.push(`${table.name}: 完整表格达到存储上限，请拆分材料`);
-      return { index, name: table.name, rows };
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "reading.md"), reading.markdown, {
+      mode: 0o600,
     });
-    if (source.tables.length > 100)
-      source.warnings.push("完整表格只保留前 100 张");
-    for (const table of tables)
-      await writeFile(
-        path.join(dir, "tables", table.index + ".json"),
-        JSON.stringify(table),
-        { mode: 0o600 },
-      );
-    source.tables = tables.map(({ name, rows }) => ({ name, rows }));
-    source.content = {
-      textLength: text.length,
-      textHash: createHash("sha256").update(text).digest("hex"),
-      textTruncated: text.length < source.text.length,
-      chunkSize: CHUNK,
-      chunks,
-      tables: tables.map(({ index, name, rows }) => ({
-        index,
-        name,
-        rows: rows.length,
-      })),
-    };
     await writeFile(
       path.join(dir, "manifest.json"),
       JSON.stringify({ ...source.content, warnings: source.warnings }),
       { mode: 0o600 },
     );
+    // Only this freshly persisted source is cleaned; old sources require reimport.
+    for (const obsolete of [
+      "text",
+      "tables",
+      "raw-text.json",
+      "structure.json",
+    ])
+      await rm(path.join(dir, obsolete), { recursive: true, force: true });
   }
-  if (source.text.length > 180000) {
-    source.text = source.text.slice(0, 180000);
-    source.warnings.push(
-      projectId
-        ? "项目摘要截断；可用 source_read/source_search 读取完整提取内容"
-        : "文本超过 180,000 字符，已截断",
-    );
-  }
-  source.tables = source.tables
-    .slice(0, 100)
-    .map((t) => ({ ...t, rows: t.rows.slice(0, 3000) }));
   return source;
 }
-export async function readSourceText(
+
+type CanonicalDocument = {
+  markdown: string;
+  hash: string;
+  tables?: ReturnType<typeof markdownTables>;
+};
+// Weak keys release finished projects; entries contain only verified data, never previews.
+const documents = new WeakMap<
+  Source,
+  { key: string; value: Promise<CanonicalDocument> }
+>();
+export async function readCanonicalSource(projectId: string, source: Source) {
+  const content = source.content;
+  if (content?.readingFormat !== "markdown-v2")
+    throw new Error(
+      "This older source has no canonical Markdown document; reimport it before running agents",
+    );
+  if (
+    !content.readingComplete ||
+    !content.readingHash ||
+    !Number.isInteger(content.markdownLength)
+  )
+    throw new Error(
+      `Markdown integrity check failed for ${source.name}; reimport the source before running agents`,
+    );
+  const filename = path.join(
+    projectDir(projectId),
+    "sources",
+    source.id,
+    "reading.md",
+  );
+  const file = await stat(filename, { bigint: true });
+  const key = [
+    filename,
+    file.ino,
+    file.size,
+    file.mtimeNs,
+    file.ctimeNs,
+    content.readingFormat,
+    content.readingComplete,
+    content.readingHash,
+    content.markdownLength,
+  ].join(":");
+  const cached = documents.get(source);
+  if (cached?.key === key) return cached.value;
+  // Reject oversized files before allocating the complete UTF-8 buffer.
+  if (file.size > BigInt(MAX * 4))
+    throw new Error("Markdown file exceeds storage limit");
+  const value = (async (): Promise<CanonicalDocument> => {
+    const markdown = await readFile(filename, "utf8");
+    const hash = digest(markdown);
+    if (
+      markdown.length > MAX ||
+      markdown.length !== content.markdownLength ||
+      hash !== content.readingHash
+    )
+      throw new Error(
+        `Markdown integrity check failed for ${source.name}; reimport the source before running agents`,
+      );
+    return { markdown, hash };
+  })();
+  documents.set(source, { key, value });
+  return value;
+}
+export async function readSourceMarkdown(
   projectId: string,
   source: Source,
   offset: number,
   limit: number,
 ) {
-  if (!source.content)
-    return {
-      text: source.text.slice(offset, offset + limit),
-      total: source.text.length,
-      legacySummaryOnly: true,
-    };
-  const { textLength, chunkSize } = source.content;
-  const end = Math.min(textLength, offset + limit),
-    parts: string[] = [];
-  for (
-    let i = Math.floor(offset / chunkSize);
-    i < Math.ceil(end / chunkSize);
-    i++
-  ) {
-    const chunk = JSON.parse(
-      await readFile(
-        path.join(
-          projectDir(projectId),
-          "sources",
-          source.id,
-          "text",
-          i + ".json",
-        ),
-        "utf8",
-      ),
-    ) as string;
-    parts.push(
-      chunk.slice(
-        Math.max(0, offset - i * chunkSize),
-        Math.min(chunkSize, end - i * chunkSize),
-      ),
-    );
-  }
-  return { text: parts.join(""), total: textLength, legacySummaryOnly: false };
+  const { markdown, hash } = await readCanonicalSource(projectId, source);
+  return {
+    markdown: markdown.slice(offset, offset + limit),
+    sourceHash: hash,
+    total: markdown.length,
+    nextOffset: Math.min(markdown.length, offset + limit),
+    instruction:
+      "All offsets and sourceHash refer to this canonical Markdown (zero-based UTF-16, end exclusive). Copy tool-returned evidence unchanged. Table tools decode typed cells from this same Markdown.",
+  };
 }
 export async function readSourceTable(
   projectId: string,
   source: Source,
   index: number,
 ) {
-  if (!source.content) {
-    const table = source.tables[index];
-    if (!table) throw new Error("Unknown table index");
-    return table;
-  }
-  if (!source.content.tables.some((t) => t.index === index))
-    throw new Error("Unknown table index");
-  return JSON.parse(
-    await readFile(
-      path.join(
-        projectDir(projectId),
-        "sources",
-        source.id,
-        "tables",
-        index + ".json",
-      ),
-      "utf8",
-    ),
-  ) as { name: string; rows: unknown[][] };
+  const document = await readCanonicalSource(projectId, source);
+  document.tables ??= markdownTables(document.markdown);
+  const table = document.tables[index];
+  if (!table) throw new Error("Unknown Markdown table index");
+  // Tool consumers cannot mutate the shared verified cache.
+  return structuredClone(table);
 }

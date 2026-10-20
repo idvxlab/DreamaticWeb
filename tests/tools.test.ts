@@ -78,8 +78,9 @@ test("source tools read beyond UI truncation, locate boundary matches, scope IDs
       "TARGET product-900";
     p.sources.push(await extract(Buffer.from(text), "large.txt", p.id));
     await save(p);
-    assert.equal(p.sources[0].text.length, 180000);
-    assert.equal(p.sources[0].content?.textLength, text.length);
+    assert.equal(p.sources[0].text, undefined);
+    assert.equal(p.sources[0].markdown?.length, 180000);
+    assert.equal(p.sources[0].content?.markdownLength, text.length);
     const unicode = await extract(
       Buffer.from("x".repeat(15999) + "🌿产品"),
       "unicode.txt",
@@ -88,6 +89,7 @@ test("source tools read beyond UI truncation, locate boundary matches, scope IDs
     p.sources.push(unicode);
     const tools = projectTools(p, "analyst", { vision: false });
     const tail = await invoke(tools, "source_read", {
+      kind: "text",
       sourceId: p.sources[0].id,
       offset: 200000,
       limit: 10000,
@@ -95,6 +97,7 @@ test("source tools read beyond UI truncation, locate boundary matches, scope IDs
     assert.match(tail.data.text, /product-900/);
     assert.equal(tail.data.total, text.length);
     const unicodeRead = await invoke(tools, "source_read", {
+      kind: "text",
       sourceId: unicode.id,
       offset: 15999,
       limit: 4,

@@ -95,3 +95,9 @@ unchanged failures. Missing evidence belongs in requirements/assumptions, not
 invented facts. In FORMAT REPAIR ONLY, only submit_result is available: repair the
 supplied invalidOutput using originalInput, without Skills, research or new questions.
 The host grants one final-output repair; this is distinct from tool-result correction.
+
+Document reading must use supplied Markdown or source_read(kind:"markdown").
+All search/citation offsets and hashes refer to canonical Markdown. Tables are
+decoded from that Markdown. Never substitute raw extraction text or an independent
+table store. Missing, damaged, truncated or older Markdown requires reimport.
+Derived briefs and verified analysis remain valid handoff inputs.

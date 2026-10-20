@@ -50,20 +50,22 @@ test("serialized input budget includes metadata; trimming is explicit and never 
     sources: [
       {
         id: "s",
-        text: "x".repeat(90000),
-        textCoverage: { end: 90000, complete: true },
-        tables: [
-          { rows: Array.from({ length: 100 }, () => ["value".repeat(2000)]) },
-        ],
+        markdown: "x".repeat(90000),
+        markdownCoverage: { end: 90000, complete: true },
+        tables: [{ index: 0, name: "Sheet", rows: 100 }],
       },
     ],
   };
+  assert.throws(
+    () => boundedInput({ sources: [{ text: "must never be sent" }] }),
+    /canonical Markdown/,
+  );
   const before = structuredClone(input);
   const result = boundedInput(input, 12000);
   assert.ok(result.length <= 12000);
   const parsed = JSON.parse(result);
   assert.equal(parsed.inputCoverage.complete, false);
-  assert.equal(parsed.sources[0].textCoverage.complete, false);
+  assert.equal(parsed.sources[0].markdownCoverage.complete, false);
   assert.equal(parsed.conversation.at(-1).text, "latest request");
   assert.deepEqual(input, before);
   const repair = JSON.parse(
@@ -178,7 +180,7 @@ test("role configuration fingerprints invalidate downstream work but not credent
   }
 });
 
-test("compact range reads use persisted source digests without reading unrelated chunks", async () => {
+test("compact Markdown reads provide exact evidence from the validated canonical document", async () => {
   const p = await create();
   try {
     const source = await extract(
@@ -187,13 +189,12 @@ test("compact range reads use persisted source digests without reading unrelated
       p.id,
     );
     p.sources.push(source);
-    await rm(
-      path.join(projectDir(p.id), "sources", source.id, "text", "1.json"),
-    );
+
     const tool = projectTools(p, "analyst", { vision: false }).find(
       (t) => t.name === "source_read",
     )!;
     const result = await tool.execute("range", {
+      kind: "text",
       sourceId: source.id,
       offset: 0,
       limit: 14,
@@ -202,7 +203,7 @@ test("compact range reads use persisted source digests without reading unrelated
     const data = JSON.parse((result.content[0] as any).text);
     assert.equal(data.text, undefined);
     assert.equal(data.evidence[0].quote, "Company report");
-    assert.equal(data.evidence[0].sourceHash, source.content?.textHash);
+    assert.equal(data.evidence[0].sourceHash, source.content?.readingHash);
     assert.equal(data.evidence[0].end, 14);
   } finally {
     await removeProject(p.id);

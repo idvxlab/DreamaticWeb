@@ -98,7 +98,7 @@ export function skillTools(
       name: "list_skills",
       label: "发现技能",
       description:
-        "List relevant installed skills. Skills contain trusted local instructions, not executable code.",
+        "List eligible skills using optional exact format/task filters. Omit filters to browse when task labels are uncertain; format-independent methods match every format. Tasks include brief, revision, document-analysis, data-analysis, dashboard, website, storytelling, content-architecture, product-showcase and visual-style. If a suitable skill name is already in the supplied catalog, load it directly without listing again. Skills are guidance, not executable code.",
       parameters: Type.Object({
         format: Type.Optional(Type.String()),
         task: Type.Optional(Type.String()),

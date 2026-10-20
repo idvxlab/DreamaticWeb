@@ -166,3 +166,42 @@ test("watchdog disposal clears timers and timeout settings reject invalid values
     delete process.env[name];
   }
 });
+
+test("progress distinguishes response phases and records counts without retaining streamed content", () => {
+  const entries: {
+    text: string;
+    details?: Record<string, string | number | boolean>;
+  }[] = [];
+  const watch = watchAgent(
+    { total: 1000, first: 500, idle: 500, tool: 500 },
+    () => {},
+    (text, details) => entries.push({ text, details }),
+  );
+  try {
+    watch.event({ type: "turn_start" } as AgentEvent);
+    const send = (type: string, delta: string) =>
+      watch.event({
+        type: "message_update",
+        assistantMessageEvent: { type, delta },
+      } as AgentEvent);
+    send("thinking_delta", "PRIVATE_THINKING");
+    send("text_delta", "abc");
+    send("toolcall_delta", "1234");
+    watch.event({ type: "turn_end" } as AgentEvent);
+    assert.ok(entries.some((e) => e.details?.phase === "waiting"));
+    assert.ok(entries.some((e) => e.details?.phase === "text"));
+    assert.ok(entries.some((e) => e.details?.phase === "tool_arguments"));
+    const complete = entries.at(-1)!.details!;
+    assert.equal(complete.textCharacters, 3);
+    assert.equal(complete.toolArgumentCharacters, 4);
+    assert.equal(typeof complete.firstResponseMs, "number");
+    assert.doesNotMatch(JSON.stringify(entries), /PRIVATE_THINKING|abc|1234/);
+    watch.event({ type: "turn_start" } as AgentEvent);
+    send("text_delta", "x");
+    watch.event({ type: "turn_end" } as AgentEvent);
+    assert.equal(entries.at(-1)!.details!.textCharacters, 1);
+    assert.equal(entries.at(-1)!.details!.toolArgumentCharacters, 0);
+  } finally {
+    watch.close();
+  }
+});

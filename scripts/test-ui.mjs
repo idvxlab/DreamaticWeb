@@ -252,10 +252,70 @@ try {
   await page.locator(".source-card").click();
   await page.getByRole("heading", { name: "品牌资料.csv" }).waitFor();
   assert.match(await page.locator(".source-table").innerText(), /2022/);
+  const readingDownload=page.waitForEvent("download");
+  await page.getByRole("button",{name:"下载 Markdown 文档",exact:true}).click();
+  assert.equal((await readingDownload).suggestedFilename(),"品牌资料.md");
+
   await page.getByRole("button", { name: "关闭资料" }).click();
-  await page.getByRole("button", { name: "技能库", exact: false }).click();
+  await page.getByTitle("查看技能", { exact: true }).click();
   await page.getByText("web-design", { exact: true }).waitFor();
   await page.getByRole("button", { name: "关闭弹窗" }).click();
+  assert.equal(await page.locator(".sidebar").getByRole("button",{name:"技能库",exact:false}).count(),0);
+  await page.getByRole("button",{name:/^事实列表/}).click();
+  await page.getByText("分析完成后，相关事实将在这里展示。",{exact:true}).waitFor();
+  const factsSourceId=restored.sources[0].id;
+  const factImageId=crypto.randomUUID(),factImageUrl=`/assets/${p.id}/${factImageId}.png`;
+  const factImageData=await page.evaluate(()=>{
+    const c=document.createElement("canvas");c.width=640;c.height=320;const ctx=c.getContext("2d");
+    ctx.fillStyle="#e8ede2";ctx.fillRect(0,0,640,320);ctx.fillStyle="#355844";ctx.beginPath();ctx.arc(320,160,90,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fffefa";ctx.font="28px sans-serif";ctx.textAlign="center";ctx.fillText("DEMO",320,170);return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.route(`**${factImageUrl}`,route=>route.fulfill({contentType:"image/png",body:Buffer.from(factImageData,"base64")}));
+  await page.route(`**/api/projects/${p.id}`,async route=>{
+    const response=await route.fetch();const project=await response.json();
+    project.sources[0].assets.push({id:factImageId,name:"品牌参考图.png",type:"image",mime:"image/png",url:factImageUrl});
+    project.analysis={summary:"Analyst 测试摘要",limitations:["测试资料存在缺失"],assets:[{sourceId:factsSourceId,url:factImageUrl,purpose:"已关联的品牌参考图片"}],facts:[
+      {text:"品牌使用圆形标识",sourceId:factsSourceId,assetIds:[factImageId],locationVerified:true,evidence:{kind:"text",start:0,end:10,quote:"品牌使用圆形标识"}},
+      {text:"保留单元格原始布尔值",sourceId:factsSourceId,locationVerified:true,evidence:{kind:"cell",tableIndex:0,row:1,column:1,value:false}},
+      {text:"历史事实缺少来源",sourceId:"missing-source"}
+    ]};
+    await route.fulfill({json:project});
+  });
+  await page.reload();
+  await page.getByRole("button",{name:/^事实列表/}).click();
+  const factsView=page.locator(".facts-view");
+  assert.equal(await factsView.locator(".fact-card").count(),3);
+  assert.equal(await page.locator(".modal-backdrop").count(),0,"facts open in the content panel, not a dialog");
+  await factsView.locator(".fact-card").filter({hasText:"品牌使用圆形标识"}).getByText("查看 Markdown 依据",{exact:true}).click();
+  assert.match(await factsView.locator("blockquote").innerText(),/圆形/);
+  await factsView.locator(".fact-card").filter({hasText:"保留单元格原始布尔值"}).getByText("查看 Markdown 依据",{exact:true}).click();
+  assert.equal(await factsView.locator(".fact-detail pre").innerText(),"false");
+  await factsView.locator(".fact-card").filter({hasText:"历史事实缺少来源"}).getByText("查看 Markdown 依据",{exact:true}).click();
+  assert.match(await factsView.locator(".fact-card").last().innerText(),/来源不可用/);
+  const imageCard=factsView.locator(".fact-card").first();
+  assert.equal(await imageCard.getByLabel("关联图片",{exact:true}).count(),1);
+  const factTypography=await imageCard.locator(".fact-text").evaluate(el=>({size:getComputedStyle(el).fontSize,font:getComputedStyle(el).fontFamily,rootFont:getComputedStyle(document.documentElement).fontFamily}));
+  assert.equal(factTypography.size,"13px");assert.equal(factTypography.font,factTypography.rootFont);
+  assert.equal(await factsView.locator(".fact-card").nth(1).locator(".fact-media").count(),0);
+  await imageCard.getByRole("button",{name:/在卡片中查看图片/}).click();
+  assert.equal(await imageCard.locator(".fact-image-preview").isVisible(),true);
+  assert.equal(await page.locator(".modal-backdrop").count(),0);
+  await imageCard.getByRole("button",{name:"收起图片",exact:true}).click();
+  await factsView.evaluate(el=>{el.scrollTop=0;});
+  await page.screenshot({path:"/tmp/dreamatic-fact-cards.png",fullPage:true});
+  await factsView.getByLabel("搜索事实",{exact:true}).fill("圆形");
+  assert.equal(await factsView.locator(".fact-card").count(),1);
+  await factsView.getByLabel("搜索事实",{exact:true}).fill("不存在的事实");
+  await factsView.getByText("没有匹配的事实，请调整搜索或来源筛选。",{exact:true}).waitFor();
+  await factsView.getByLabel("搜索事实",{exact:true}).fill("");
+  await factsView.getByLabel("按来源筛选事实").selectOption(factsSourceId);
+  assert.equal(await factsView.locator(".fact-card").count(),2);
+  await factsView.getByLabel("按来源筛选事实").selectOption("");
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=390));
+  await page.setViewportSize({width:1512,height:982});
+  await page.unroute(`**/api/projects/${p.id}`);
+  await page.unroute(`**${factImageUrl}`);
+  await page.getByRole("button",{name:"网页工作台",exact:false}).click();
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.screenshot({
     path: "docs/screenshots/compact.png",
@@ -323,7 +383,7 @@ try {
     const id = crypto.randomUUID(), questionId = crypto.randomUUID();
     const question = { id: questionId, title: "你希望突出哪些内容？", mode, options: mode === "text" ? [] : [{ id: "products", label: "产品介绍" }, { id: "company", label: "公司故事" }], createdAt: new Date().toISOString() };
     await mkdir(path.join(data, "projects", id), { recursive: true });
-    await writeFile(path.join(data, "projects", id, "project.json"), JSON.stringify({ id, title: "交互提问测试", status: "needs_input", messages: [{ role: "assistant", text: question.title, time: question.createdAt }], questions: [question], sources: [], versions: [], events: Array.from({ length: 24 }, (_, index) => ({ id: crypto.randomUUID(), role: ["orchestrator", "analyst", "designer"][index % 3], kind: "status", text: `演示历史操作 ${index + 1}`, time: question.createdAt })) }));
+    await writeFile(path.join(data, "projects", id, "project.json"), JSON.stringify({ id, title: "交互提问测试", status: "needs_input", messages: [{ role: "assistant", text: question.title, time: question.createdAt }], questions: [question], sources: [], versions: [], events: Array.from({ length: 24 }, (_, index) => ({ id: crypto.randomUUID(), role: ["orchestrator", "analyst", "designer"][index % 3], kind: "status", text: `演示历史操作 ${index + 1}`, time: question.createdAt, details:index===0?{businessOutput:'{"summary":"示例结果","note":"<script>window.__outputExecuted=true</script>"}',outputCharacters:150,outputTruncated:true,outputState:"rejected",elapsedMs:25000,textCharacters:20,toolArgumentCharacters:88}:index===1?{validation:"EvidenceValidationError",reason:"facts[2]: quote_not_found"}:undefined })) }));
     await page.evaluate(id => localStorage.setItem("dreamatic-project", id), id);
     await page.reload();
     const card = page.getByRole("form", { name: "回答智能体问题" });
@@ -332,6 +392,13 @@ try {
       await page.getByRole("button", { name: "展开运行记录" }).click();
       const activity = page.locator(".run-log-list");
       assert.equal(await activity.locator(".log-line").count(), 24, "older records remain accessible");
+      await activity.getByText("查看业务输出", {exact:true}).click();
+      assert.match(await activity.locator(".run-output pre").first().innerText(), /示例结果/);
+      assert.equal(await page.evaluate(()=>window.__outputExecuted),undefined,"output HTML must remain escaped text");
+      await activity.getByText("查看校验详情",{exact:true}).click();
+      assert.match(await activity.locator(".run-output pre").last().innerText(),/quote_not_found/);
+      await activity.getByText("查看业务输出", {exact:true}).click();
+
       const scrollable = await activity.evaluate((element) => element.scrollHeight > element.clientHeight && element.clientHeight <= 240);
       assert.equal(scrollable, true);
       await activity.evaluate((element) => { element.scrollTop = 0; element.dispatchEvent(new Event("scroll")); });

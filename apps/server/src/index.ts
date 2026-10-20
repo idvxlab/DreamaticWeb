@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { registerBrowserPreview } from "./browser-preview.js";
+import { readSourceMarkdown } from "./source-content.js";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
@@ -241,6 +242,16 @@ app.post("/api/projects/:id/url", async (req, res) => {
   } finally {
     sourceJobs.delete(p.id);
   }
+});
+app.get("/api/projects/:id/sources/:source/reading", async (req, res) => {
+  const p = await get(req.params.id);
+  const source = p.sources.find((s) => s.id === req.params.source);
+  if (!source || !source.content?.readingFormat) {
+    res.status(404).json({ error: "此资料尚无 Markdown 文档，请重新导入" });
+    return;
+  }
+  const { markdown } = await readSourceMarkdown(p.id, source, 0, 8000000);
+  res.attachment("reading.md").type("text/markdown").send(markdown);
 });
 app.delete("/api/projects/:id/sources/:source", async (req, res) => {
   const p = await get(req.params.id);

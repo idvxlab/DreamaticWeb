@@ -28,13 +28,27 @@ export function timeoutSetting(
 export function watchAgent(
   limits: { total: number; first: number; idle: number; tool: number },
   abort: () => void,
-  report: (text: string) => void,
+  report: (
+    text: string,
+    details?: Record<string, string | number | boolean>,
+  ) => void,
 ) {
   let error: Error | undefined;
   let phaseTimer: ReturnType<typeof setTimeout>;
   let first = true;
   let turnStarted = Date.now();
   let lastProgress = 0;
+  let textCharacters = 0,
+    toolArgumentCharacters = 0,
+    firstResponseMs = 0;
+  let responseStarted = Date.now();
+  const phases = new Set<string>();
+  const metrics = () => ({
+    elapsedMs: Date.now() - responseStarted,
+    firstResponseMs,
+    textCharacters,
+    toolArgumentCharacters,
+  });
   const tools = new Map<
     string,
     { name: string; started: number; timer: ReturnType<typeof setTimeout> }
@@ -67,7 +81,18 @@ export function watchAgent(
     },
     event(event: AgentEvent) {
       if (error) return;
-      if (event.type === "turn_start") wait();
+      if (event.type === "turn_start") {
+        wait();
+        responseStarted = turnStarted;
+        textCharacters = 0;
+        toolArgumentCharacters = 0;
+        firstResponseMs = 0;
+        lastProgress = 0;
+        phases.clear();
+        report("正在等待模型响应", { phase: "waiting" });
+      }
+      if (event.type === "turn_end")
+        report("本轮模型响应完成", { phase: "complete", ...metrics() });
       if (event.type === "message_update") {
         const update = event.assistantMessageEvent;
         if (
@@ -78,13 +103,35 @@ export function watchAgent(
         ) {
           if (first) {
             first = false;
-            report(`模型开始响应（等待 ${Date.now() - turnStarted} ms）`);
+            firstResponseMs = Date.now() - turnStarted;
+            report(`模型开始响应（等待 ${firstResponseMs} ms）`, {
+              phase: "responding",
+              firstResponseMs,
+            });
           }
           if (!tools.size)
             arm(limits.idle, "模型输出停滞超时，请检查模型服务或稍后重试");
-          if (Date.now() - lastProgress > 15000) {
+          if (update.type === "text_delta")
+            textCharacters += update.delta.length;
+          if (update.type === "toolcall_delta")
+            toolArgumentCharacters += update.delta.length;
+          const phase =
+            update.type === "text_delta"
+              ? "text"
+              : update.type === "toolcall_delta"
+                ? "tool_arguments"
+                : "processing";
+          if (!phases.has(phase) || Date.now() - lastProgress > 15000) {
             lastProgress = Date.now();
-            report("模型正在输出，任务继续执行");
+            phases.add(phase);
+            report(
+              phase === "text"
+                ? "正在生成业务回复"
+                : phase === "tool_arguments"
+                  ? "正在生成工具参数"
+                  : "模型处理中，尚未返回业务结果",
+              { phase, ...metrics() },
+            );
           }
         }
       }

@@ -12,8 +12,10 @@ import {
   visualEvidenceSchema,
 } from "./visual.js";
 import { roles, checkRoleTools } from "./roles.js";
+import { readSourceMarkdown } from "../../../apps/server/src/source-content.js";
 import { boundedInput } from "./input.js";
 import { taskFingerprint, stageFingerprint } from "./checkpoints.js";
+import { businessOutput } from "./observations.js";
 import { toolFailureSummary } from "./tool-errors.js";
 import { pageChecks } from "./page-checks.js";
 import { resolveModel } from "./models.js";
@@ -35,7 +37,7 @@ import {
   validateFactEvidence,
 } from "./evidence.js";
 import { sanitizeHtml } from "../../../apps/server/src/html.js";
-import { submissionBriefSchema, budgetCell } from "./brief.js";
+import { submissionBriefSchema } from "./brief.js";
 const briefSchema = z.object({
   needsInput: z.boolean(),
   question: z
@@ -53,6 +55,7 @@ const analysisSchema = z.object({
       text: z.string(),
       sourceId: z.string(),
       evidence: evidenceSchema.optional(),
+      assetIds: z.array(z.string().uuid()).max(3).optional(),
     }),
   ),
   sections: z.array(z.object({ title: z.string(), content: z.string() })),
@@ -201,14 +204,19 @@ export async function runProject(
           if (pendingQuestion || submitted !== undefined || submitting)
             throw new Error("当前阶段已经提交、正在校验或正在等待用户回答");
           submitting = true;
+          let payload: string | undefined;
           try {
-            const payload = JSON.stringify(schema.parse(input));
+            payload = JSON.stringify(schema.parse(input));
             if (payload.length > 2500000) throw new Error("提交结果过长");
             await options.validate!(payload);
             controller.signal.throwIfAborted();
             signal?.throwIfAborted();
             if (submitted !== undefined) throw new Error("当前阶段已经提交");
             submitted = payload;
+            add(role, "结构化业务输出（校验通过）", "status", {
+              ...businessOutput(p.events, payload),
+              outputState: "accepted",
+            });
             return {
               content: [
                 {
@@ -219,6 +227,11 @@ export async function runProject(
               details: { accepted: true },
             };
           } catch (error) {
+            if (payload)
+              add(role, "结构化业务输出（校验未通过）", "status", {
+                ...businessOutput(p.events, payload),
+                outputState: "rejected",
+              });
             add(role, "结构化提交未通过校验", "status", {
               validation: error instanceof Error ? error.name : "unknown",
               reason: validationReason(error),
@@ -280,15 +293,26 @@ export async function runProject(
         tool: timeoutSetting("DREAMATIC_AGENT_TOOL_TIMEOUT_MS", 120000),
       },
       () => agent.abort(),
-      (text) => {
-        add(role, text);
-        // Save only bounded progress events, never token content or tool arguments.
+      (text, details) => {
+        add(role, text, "status", details);
+        // Persist throttled metrics; no streamed text, thinking content or raw tool arguments.
         void save(p).catch(() => {});
       },
     );
     controller.signal.addEventListener("abort", abort, { once: true });
     const unsubscribe = agent.subscribe((event) => {
       watchdog.event(event);
+      if (event.type === "message_end" && event.message.role === "assistant") {
+        const text = event.message.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text)
+          .join("\n");
+        if (text.trim())
+          add(role, "业务回复（未作为最终结果校验）", "status", {
+            ...businessOutput(p.events, text),
+            outputState: "unvalidated",
+          });
+      }
       if (event.type === "tool_execution_end" && event.isError) {
         const summary = toolFailureSummary(event.result);
         add(role, `工具错误：${event.toolName} · ${summary.reason}`, "status", {
@@ -546,42 +570,33 @@ export async function runProject(
     } else {
       const sourceBudget = 100000;
       let remaining = sourceBudget;
-      const sources = p.sources.map((s) => {
-        const text = s.text.slice(0, Math.min(remaining, 25000));
-        remaining -= text.length;
-        return {
-          ...s,
-          text,
-          textCoverage: {
+      const sources = [];
+      for (const s of p.sources) {
+        const reading = await readSourceMarkdown(
+          p.id,
+          s,
+          0,
+          Math.min(remaining, 25000),
+        );
+        remaining -= reading.markdown.length;
+        sources.push({
+          id: s.id,
+          name: s.name,
+          format: s.format,
+          provenance: s.provenance,
+          assets: s.assets,
+          warnings: s.warnings,
+          markdown: reading.markdown,
+          markdownCoverage: {
             start: 0,
-            end: text.length,
-            storedLength: s.content?.textLength ?? s.text.length,
-            complete: text.length === (s.content?.textLength ?? s.text.length),
+            end: reading.nextOffset,
+            total: reading.total,
+            complete: reading.nextOffset === reading.total,
           },
-          tables: s.tables.slice(0, 20).map((t) => ({
-            ...t,
-            rows: t.rows.slice(0, 100).map((row) =>
-              row.slice(0, 60).map((value) => {
-                const cell = budgetCell(value, remaining);
-                remaining = Math.max(0, remaining - cell.size);
-                return cell.value;
-              }),
-            ),
-          })),
-          warnings: [
-            ...s.warnings,
-            ...(s.tables.some((t) => t.rows.length > 100) ||
-            s.tables.length > 20
-              ? [
-                  "模型表格上下文仅包含前 20 表、每表前 100 行，单元格也有预算限制",
-                ]
-              : []),
-            ...(text.length < s.text.length
-              ? ["模型上下文预算限制：此来源文本仅部分发送"]
-              : []),
-          ],
-        };
-      });
+          readingInstruction: reading.instruction,
+          tables: s.content!.tables,
+        });
+      }
       const existing = p.versions.at(-1)?.html;
       const conversation = p.messages.slice(-16);
       const brief = await validated(
@@ -593,8 +608,12 @@ export async function runProject(
           sources: sources.map((s) => ({
             id: s.id,
             name: s.name,
-            excerpt: s.text.slice(0, 6000),
-            characters: s.text.length,
+            markdown: s.markdown.slice(0, 6000),
+            markdownCoverage: {
+              ...s.markdownCoverage,
+              end: Math.min(s.markdown.length, 6000),
+              complete: s.markdownCoverage.total <= 6000,
+            },
             warnings: s.warnings,
           })),
           existingHtml: existing?.slice(0, 60000),
@@ -670,6 +689,20 @@ export async function runProject(
             result.facts,
             controller.signal,
           );
+          for (const fact of result.facts) {
+            const source = p.sources.find((s) => s.id === fact.sourceId);
+            if (
+              fact.assetIds?.some(
+                (id) =>
+                  !source?.assets.some(
+                    (a) => a.id === id && a.type === "image",
+                  ),
+              )
+            )
+              throw new Error(
+                "facts.assetIds must reference images in the fact's own source; omit uncertain image associations",
+              );
+          }
           for (const asset of result.assets) {
             if (
               !p.sources.some(

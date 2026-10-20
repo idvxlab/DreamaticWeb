@@ -27,7 +27,7 @@ test("CSV preserves quoted commas, Unicode, headers and values", async () => {
     ["春天,系列", "32"],
     ["夏季", "48"],
   ]);
-  assert.match(s.text, /春天,系列/);
+  assert.match(s.markdown!, /春天,系列/);
 });
 test("Excel extracts multiple sheets and cached formula values", async () => {
   const wb = new ExcelJS.Workbook();
@@ -41,8 +41,8 @@ test("Excel extracts multiple sheets and cached formula values", async () => {
     "data.xlsx",
   );
   assert.equal(s.tables.length, 2);
-  assert.match(s.text, /SUM/);
-  assert.match(s.text, /50/);
+  assert.match(s.markdown!, /SUM/);
+  assert.match(s.markdown!, /50/);
 });
 test("Office document extracts text and embedded image with provenance", async () => {
   const z = new AdmZip();
@@ -66,7 +66,7 @@ test("Office document extracts text and embedded image with provenance", async (
     ),
   );
   const s = await extract(z.toBuffer(), "brand.docx");
-  assert.match(s.text, /品牌故事/);
+  assert.match(s.markdown!, /品牌故事/);
   assert.equal(s.assets[0].type, "image");
   assert.equal(s.assets[0].width, 1);
   assert.equal(s.assets[0].height, 1);
@@ -184,7 +184,7 @@ test("PPTX extracts slide text", async () => {
     ),
   );
   const s = await extract(z.toBuffer(), "launch.pptx");
-  assert.match(s.text, /Launch plan 2026/);
+  assert.match(s.markdown!, /Launch plan 2026/);
 });
 
 test("PDF extracts text layer with explicit OCR limitation", async () => {
@@ -211,7 +211,7 @@ test("PDF extracts text layer with explicit OCR limitation", async () => {
       .join("") +
     `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   const s = await extract(Buffer.from(content), "evidence.pdf");
-  assert.match(s.text, /Dreamatic PDF evidence/);
+  assert.match(s.markdown!, /Dreamatic PDF evidence/);
   assert.ok(s.warnings.some((w) => w.includes("OCR")));
 });
 
@@ -260,7 +260,7 @@ test("PDF embedded raster images are extracted alongside text for page reuse", a
     ),
   );
   const source = await extract(Buffer.concat(parts), "products.pdf");
-  assert.match(source.text, /Product brochure/);
+  assert.match(source.markdown!, /Product brochure/);
   const images = source.assets.filter((a) => a.type === "image");
   assert.ok(images.length > 0, JSON.stringify(source.warnings));
   assert.equal(images[0].width, 2);
