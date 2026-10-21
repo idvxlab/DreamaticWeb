@@ -7,8 +7,14 @@ import FactCard from "./FactCard";
 
 export default function FactsView({
   project,
+  selectedIds = [],
+  onSelectionChange,
+  onUseSelected,
 }: {
   project: ProjectResponse | null;
+  selectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
+  onUseSelected?: () => void;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState(""),
@@ -37,9 +43,7 @@ export default function FactsView({
       <div className="sources-intro">
         <h3>{t("从资料中发现事实。")}</h3>
         <p>
-          {t(
-            "查看 Analyst 已保存的事实与来源。引用位置核对不代表事实解读已被独立证实。",
-          )}
+          {t("查看从 Markdown 提取的信息事实，选择需要用于页面调整的内容。")}
         </p>
       </div>
       {analysis && (
@@ -60,6 +64,16 @@ export default function FactsView({
         )}
       {facts.length > 0 && (
         <>
+          {onUseSelected && (
+            <div className="source-actions">
+              <button
+                disabled={!selectedIds.length || project?.status === "running"}
+                onClick={onUseSelected}
+              >
+                {t("使用选定事实调整页面")} ({selectedIds.length})
+              </button>
+            </div>
+          )}
           <div className="facts-filters">
             <label className="facts-search">
               <Search size={14} />
@@ -78,7 +92,9 @@ export default function FactsView({
               <option value="">{t("全部来源")}</option>
               {[...new Set(facts.map((f) => f.sourceId))].map((id) => (
                 <option key={id} value={id}>
-                  {sources.find((s) => s.id === id)?.name || t("来源不可用")}
+                  {id === "user"
+                    ? t("用户输入")
+                    : sources.find((s) => s.id === id)?.name || t("来源不可用")}
                 </option>
               ))}
             </select>
@@ -94,6 +110,19 @@ export default function FactsView({
           fact={fact}
           index={index}
           project={project!}
+          selected={selectedIds.includes(fact.id || String(index))}
+          onSelect={
+            onSelectionChange && fact.id
+              ? () => {
+                  const id = fact.id || String(index);
+                  onSelectionChange(
+                    selectedIds.includes(id)
+                      ? selectedIds.filter((value) => value !== id)
+                      : [...selectedIds, id],
+                  );
+                }
+              : undefined
+          }
         />
       ))}
       {filtered.length === 0 && (

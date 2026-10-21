@@ -125,3 +125,8 @@ export async function writeConfig(input: unknown) {
     configUpdating = false;
   }
 }
+
+/** Request-local snapshot. Never expose this through an HTTP response. */
+export function runtimeConfig(): RuntimeConfig {
+  return structuredClone(current || initial());
+}

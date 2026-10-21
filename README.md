@@ -1,14 +1,10 @@
 # Dreamatic · Web
 
-系统重构准备版本。保留现有 React 工作台、GrapesJS 画布和全部前端视觉设计；原智能体运行时、三角色工作流、模型调用适配、工具、Skill、提示词及相关设计文档已删除。
+基于 Pi 1.3.0 公共 Agent 和 provider API 的三角色网页创作系统。保留现有工作台和 GrapesJS 视觉设计，后端以减少端到端重复处理为目标。
 
-当前可用：项目创建、重命名和删除，文件及公开网站导入，Markdown 文档下载，已有页面的可视化编辑、版本保存和恢复、响应式预览、浏览器打开及 HTML 导出。项目资料和页面保存在独立的 workspace 目录中。
+## 启动
 
-生成、继续任务和回答后继续执行的接口暂时返回 HTTP 503 与 `GENERATION_UNAVAILABLE`，不会调用模型或创建示例页面。技能列表返回空数组。设置界面及其配置字段保留以维持现有设计，目前仅保存配置，不执行模型调用。历史记录所需的数据类型只用于界面显示。
-
-## 开发与运行
-
-需要 Node.js 22.19+。
+Node.js ≥22.19.0。
 
 ```sh
 npm ci --ignore-scripts
@@ -16,43 +12,62 @@ cp .env.example .env
 npm run dev
 ```
 
-开发前端：[http://127.0.0.1:5173](http://127.0.0.1:5173)。API 默认监听本机 4310 端口。
+打开 [开发工作台](http://127.0.0.1:5173)，在「模型与设置」填写模型 URL、名称和密钥，选择实时模式。OpenAI 使用 Responses；OpenAI 兼容型使用 Chat Completions。Analyst、Designer 可单独配置，默认继承推理模型。需要支持工具调用的模型。
+
+演示模式不调用模型，并明确提示切换实时模式；不会将本地示例冒充生成结果。测试中的示例均明确标注，使用本机模拟端点。
 
 ```sh
 npm run check
 npm test
 npm run build
 npm start
+npm run test:ui
 ```
 
-生产构建由 [http://127.0.0.1:4310](http://127.0.0.1:4310) 同源提供。
-`npm run test:ui` 使用本机 Chrome 检查保留的界面与编辑流程，使用明确标注的测试页面，不依赖生成服务。可通过 `CHROME_PATH` 指定 Chrome 路径。
+生产服务：[本机 4310 端口](http://127.0.0.1:4310)。浏览器测试使用本机 Chrome，可设置 `CHROME_PATH`。
 
-## 目录
+## 核心流程
 
-- `apps/web`：现有界面、样式和画布。
-- `apps/server`：API、资料解析、存储、HTML 校验与预览。
-- `packages/shared`：界面数据类型、设置结构与 HTML 策略。
-- `tests`：资料解析、页面安全、存储、API 与界面数据处理测试。
-- `docs/screenshots`：保留的界面参考截图。
-- `workspace`：忽略提交的运行数据。
+1. 文档和网页导入后保存原始文件、唯一规范 Markdown 和关联媒体。相同输入指纹和解析配置复用已有结果；URL 再导入会检查主页面及已记录媒体依赖的内容变化。
+2. 首次生成依次运行 Orchestrator、Analyst、Designer。简报和事实以结构化 Markdown 交接，内存中直接复用已加载内容。
+3. 局部编辑复用有效简报和事实，只调用 Designer，按选择器提交最小页面补丁。事实列表可勾选内容并带入调整请求。
+4. 新增资料使事实缓存失效；目标或受众变化时重做意图。明确要求整体重设计时允许整页生成。普通编辑不开放整页提交工具。
+5. 每个阶段提交结果后直接终止，不追加确认调用或逐条事实核验。文件完整性、资源归属、页面结构和 HTML 安全策略仍保留。
+
+角色定义在 `config/agents/*.md`，每次任务重新加载；修改对应文件后会使相关缓存失效，无需修改业务代码。任务结果在项目内 `results/intent.md` 和 `results/facts.md`，与角色定义分开管理。
+
+## 文件与复用
 
 ```text
-<workspace>/projects/<project-id>/
-  project.json       # 项目及历史界面数据
-  uploads/           # 上传原件
-  sources/           # 标准 Markdown 文档和清单
-  assets/            # 项目图片与其他素材
-  pages/             # 保存版本的 HTML
-  previews/          # 浏览器预览产物
+<workspace>/projects/<id>/
+  project.json       # 元数据、对话、UI 投影和结果指纹；不重复内嵌 HTML
+  uploads/           # 上传原件或下载的主网页内容
+  sources/<id>/      # reading.md 和完整性清单
+  assets/            # 可直接使用的原始媒体及文档提取媒体
+  results/           # intent.md、facts.md
+  pages/             # 不可变的页面版本 HTML
+  previews/          # 手动打开的浏览器快照
 ```
 
-已有用户资料不随代码清理删除。启动时，历史运行中或待回答的任务会标记为中断，避免界面一直等待已移除的执行服务。旧版扁平项目存储仍支持迁移。
+素材按内容寻址，避免相同媒体重复写入；独立图片/视频的原件与素材通过硬链接共享物理文件。Markdown 直接包含可解析的项目素材 URL。前端按原始文件、Markdown 解析文档和媒体分类展示，并支持原件与 Markdown 下载。
 
-## 设置与安全
+PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；图片、视频不解码、不转录、不调用模型。旧 DOC/XLS 需转换为 DOCX/XLSX。扫描 PDF 的 OCR 和需要登录或执行脚本的网页不在当前实现范围。
 
-配置保存在初始 workspace 的 `settings.json`，文件权限为 0600；读取 API 不返回密钥。系统设置中的 Workspace 路径支持切换数据目录，原目录保留，不自动搬运文件。资料解析期间禁止切换。
+网页只抓取指定页面和最多 12 项相关媒体，不递归爬站。重导入需要检查远程依赖，因此仍有网络请求。按需在 Designer 中查看图片只在启用视觉能力时开放，不会在导入阶段自动发给模型。
 
-默认只监听本机回环地址。对外监听必须配置 `DREAMATIC_ACCESS_TOKEN`。网页导入保留 SSRF 防护；编辑和预览使用 HTML 白名单、CSP 和 iframe sandbox。删除项目会永久删除其独立目录。
+## API 与运行
 
-资料解析由本地解析器完成，不调用模型。可选 PDF 增强依赖 `requirements-documents.txt` 中的 Python 库，由 `DREAMATIC_PDF_ENHANCE` 和 `DREAMATIC_DOCUMENT_PYTHON` 配置；默认关闭，不执行 OCR。
+- `POST /api/projects/:id/run`：`text`，可选 `mode: auto|edit|redesign|intent`、`selectedFactIds`、`refreshFacts`。
+- `POST /api/projects/:id/resume`：复用已持久化的有效阶段继续中断任务。
+- `POST /api/projects/:id/cancel`：中止 Pi 执行，保留已有版本与阶段结果。
+- `GET /api/projects/:id/results/intent|facts`：下载阶段 Markdown。
+- `GET /api/projects/:id/metrics`：请求级耗时、Pi provider 请求数、额外来源读取、结果写入及补丁范围。
+- `GET /api/projects/:id/sources/:source/original|reading`：下载原件或规范 Markdown。
+
+每次任务的输出结果通常各一次调用即可完成；需要分段读取大型文档或修正实质错误时允许工具后续轮次，最多六轮、每阶段五分钟。没有批量事实审查、自动浏览器视觉审查或隐式重试整个流程。
+
+现有项目 JSON 支持读取内嵌 HTML 的旧存储格式；后续保存采用独立 HTML 文件。设置文件仍在初始 workspace 的 `settings.json`，密钥权限 0600，API 不回传密钥。不要将 workspace 或凭据提交。
+
+默认只监听回环地址，对外监听须设置 `DREAMATIC_ACCESS_TOKEN`。保留同源限制、SSRF 防护、HTML 白名单、CSP 和 iframe sandbox。页面局部补丁绑定版本 ID，不能覆盖并发更新。项目删除会永久删除该独立目录。
+
+详细架构、Pi 核实记录和验证边界见 [架构与验证](docs/architecture.md)。

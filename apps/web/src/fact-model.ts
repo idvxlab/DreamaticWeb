@@ -1,9 +1,7 @@
-import type {
-  Asset,
-  ProjectResponse,
-} from "../../../packages/shared/project";
+import type { Asset, ProjectResponse } from "../../../packages/shared/project";
 
 export type Fact = {
+  id?: string;
   text: string;
   sourceId: string;
   locationVerified?: boolean;
@@ -28,7 +26,7 @@ export function factsFor(project: ProjectResponse | null) {
     : [];
 }
 
-export function factImages(project: ProjectResponse, fact: Fact) {
+export function factMedia(project: ProjectResponse, fact: Fact) {
   const source = project.sources.find((s) => s.id === fact.sourceId);
   if (!source) return [];
   const recommendations =
@@ -39,9 +37,9 @@ export function factImages(project: ProjectResponse, fact: Fact) {
     )?.assets || [];
   const eligible = source.assets.filter(
     (a) =>
-      a.type === "image" &&
+      ["image", "video"].includes(a.type) &&
       a.url.startsWith(`/assets/${project.id}/`) &&
-      /^image\/(png|jpeg|webp|gif)$/.test(a.mime),
+      /^(?:image\/(?:png|jpeg|webp|gif)|video\/(?:mp4|webm))$/.test(a.mime),
   );
   const purpose = (asset: Asset) =>
     recommendations.find((r) => r.sourceId === source.id && r.url === asset.url)
@@ -55,4 +53,8 @@ export function factImages(project: ProjectResponse, fact: Fact) {
       return asset ? [{ asset, purpose: purpose(asset) }] : [];
     })
     .slice(0, 3);
+}
+
+export function factImages(project: ProjectResponse, fact: Fact) {
+  return factMedia(project, fact).filter((item) => item.asset.type === "image");
 }

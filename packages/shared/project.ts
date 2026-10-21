@@ -1,4 +1,4 @@
-/** View data for the preserved interface and historical projects; no runtime behavior. */
+/** Shared project data for the workspace, generation API and historical records. */
 export interface Clarification {
   id: string;
   title: string;
@@ -42,6 +42,9 @@ export interface Source {
   warnings: string[];
   provenance: string;
   originalFile?: string;
+  fingerprint?: string;
+  parserVersion?: string;
+  dependencies?: { url: string; hash: string }[];
   content?: {
     readingFormat?: "markdown-v1" | "markdown-v2";
     readingHash?: string;
@@ -84,6 +87,7 @@ export interface Project {
   questions?: Clarification[];
   brief?: unknown;
   analysis?: unknown;
+  generation?: import("./generation.js").GenerationState;
   error?: string;
   pagePreviews?: {
     hash: string;
@@ -102,4 +106,4 @@ export interface Project {
 }
 
 /** Public project view excludes local preview diagnostics. */
-export type ProjectResponse = Omit<Project, "pagePreviews">;
+export type ProjectResponse = Omit<Project, "pagePreviews" | "generation">;

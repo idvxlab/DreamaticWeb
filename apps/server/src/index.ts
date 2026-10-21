@@ -4,7 +4,7 @@ import { readSourceMarkdown } from "./source-content.js";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   create,
@@ -17,6 +17,9 @@ import {
   publicProject,
 } from "./store.js";
 import { extractUrl, FORMATS } from "./extract.js";
+import { activeRuns, runProject } from "./generation/runtime.js";
+import { requestSchema } from "../../../packages/shared/generation.js";
+import type { RunEvent } from "../../../packages/shared/project.js";
 import { ingest } from "./ingest.js";
 import {
   initConfig,
@@ -29,13 +32,13 @@ import { validatePage } from "./page-validation.js";
 import { APP_VERSION } from "../../../packages/shared/app-info.js";
 await initStore();
 await initConfig();
-// Historical unfinished tasks cannot execute while generation is unavailable.
+// Interrupted runs retain persisted artifacts and the pending request for explicit resume.
 for (const name of await projectIds()) {
   try {
     const p = await get(name);
-    if (p.status === "running" || p.status === "needs_input") {
+    if (p.status === "running") {
       p.status = "error";
-      p.error = "生成功能正在重构，现有智能体执行已移除。";
+      p.error = "服务重启中断了任务，可继续未完成任务。";
       await save(p);
     }
   } catch {}
@@ -88,7 +91,8 @@ app.get("/api/health", (_req, res) =>
     version: APP_VERSION,
     language: readConfig().language,
     mode: readConfig().mode,
-    generationAvailable: false,
+    generationAvailable: true,
+    harness: "pi-agent-core@1.3.0",
     provider: readConfig().models.reasoning.mode,
     model: readConfig().models.reasoning.model,
     formats: FORMATS,
@@ -96,7 +100,7 @@ app.get("/api/health", (_req, res) =>
 );
 app.get("/api/config", (_req, res) => res.json(readConfig()));
 app.put("/api/config", async (req, res) => {
-  if (sourceJobs.size)
+  if (activeRuns.size || sourceJobs.size)
     return res.status(409).json({ error: "请等待资料解析结束后再修改配置" });
   res.json(await writeConfig(req.body));
 });
@@ -132,6 +136,8 @@ app.get("/api/projects/:id", async (req, res) =>
 const sourceJobs = new Set<string>();
 function mutable(id: string) {
   if (sourceJobs.has(id)) throw new Error("资料正在解析，请完成后再继续");
+  if (activeRuns.has(id))
+    throw new Error("生成进行中，请先停止再编辑资料或页面");
 }
 app.patch("/api/projects/:id", async (req, res) => {
   const p = await get(req.params.id);
@@ -169,15 +175,9 @@ app.post(
       for (const f of (req.files as Express.Multer.File[]) || []) {
         try {
           const name = Buffer.from(f.originalname, "latin1").toString("utf8");
-          const s = await ingest(f.buffer, name, p.id);
-          const uploadDir = path.join(projectDir(p.id), "uploads");
-          await mkdir(uploadDir, { recursive: true });
-          const originalFile = s.id + path.extname(name).toLowerCase();
-          await writeFile(path.join(uploadDir, originalFile), f.buffer, {
-            mode: 0o600,
-          });
-          s.originalFile = "uploads/" + originalFile;
-          p.sources.push(s);
+          const s = await ingest(f.buffer, name, p.id, p.sources);
+          if (!p.sources.some((source) => source.id === s.id))
+            p.sources.push(s);
           results.push(s);
         } catch (e) {
           errors.push({
@@ -199,8 +199,8 @@ app.post("/api/projects/:id/url", async (req, res) => {
   const { url } = z.object({ url: z.url().max(2048) }).parse(req.body);
   sourceJobs.add(p.id);
   try {
-    const s = await extractUrl(url, p.id);
-    p.sources.push(s);
+    const s = await extractUrl(url, p.id, p.sources);
+    if (!p.sources.some((source) => source.id === s.id)) p.sources.push(s);
     await save(p);
     res.json(s);
   } finally {
@@ -224,24 +224,127 @@ app.delete("/api/projects/:id/sources/:source", async (req, res) => {
   await save(p);
   res.json({ ok: true });
 });
-// Preserve UI request paths while the replacement system is being designed.
-for (const route of [
-  "/api/projects/:id/run",
-  "/api/projects/:id/resume",
-  "/api/projects/:id/questions/:question/answer",
-]) {
-  app.post(route, async (req, res) => {
-    await get(String(req.params.id));
-    res.status(503).json({
-      code: "GENERATION_UNAVAILABLE",
-      error:
-        "生成功能正在重构，现有智能体执行已移除。资料导入、手动编辑与导出仍可使用。",
-    });
-  });
+function emit(id: string, event: RunEvent) {
+  for (const res of listeners.get(id) || [])
+    res.write("data: " + JSON.stringify(event) + "\n\n");
 }
+function start(
+  p: Awaited<ReturnType<typeof get>>,
+  input: unknown,
+  resume = false,
+) {
+  const request = requestSchema.parse(input);
+  void runProject(p, request, save, (event) => emit(p.id, event), {
+    resume,
+  }).catch((error) =>
+    console.error(
+      "任务保存失败：",
+      error instanceof Error ? error.message : String(error),
+    ),
+  );
+}
+app.post("/api/projects/:id/run", async (req, res) => {
+  const p = await get(req.params.id);
+  mutable(p.id);
+  const request = requestSchema.parse(req.body);
+  if (p.status === "needs_input")
+    return res.status(409).json({ error: "请先回答待确认的问题" });
+  p.messages.push({
+    role: "user",
+    text: request.text,
+    time: new Date().toISOString(),
+  });
+  if (!p.titleEdited && p.title === "未命名网页")
+    p.title = request.text.slice(0, 28);
+  start(p, request);
+  res.status(202).json({ ok: true });
+});
+app.post("/api/projects/:id/resume", async (req, res) => {
+  const p = await get(req.params.id);
+  if (activeRuns.has(p.id))
+    return res.status(202).json({ ok: true, alreadyRunning: true });
+  mutable(p.id);
+  if (!p.generation?.pending || !["error", "cancelled"].includes(p.status))
+    return res.status(409).json({ error: "没有可继续的任务" });
+  start(p, p.generation.pending, true);
+  res.status(202).json({ ok: true });
+});
+app.post("/api/projects/:id/questions/:question/answer", async (req, res) => {
+  const p = await get(req.params.id);
+  mutable(p.id);
+  const question = p.questions?.find((q) => q.id === req.params.question);
+  if (
+    !question ||
+    question.answeredAt ||
+    p.status !== "needs_input" ||
+    !p.generation?.pending
+  )
+    return res.status(409).json({ error: "此问题已失效，请刷新项目" });
+  const answer = z
+    .object({
+      selected: z.array(z.string()).max(12).default([]),
+      text: z.string().trim().max(20000).default(""),
+    })
+    .parse(req.body);
+  if (
+    (!answer.text && !answer.selected.length) ||
+    new Set(answer.selected).size !== answer.selected.length ||
+    answer.selected.some((id) => !question.options.some((o) => o.id === id)) ||
+    (question.mode === "single" && answer.selected.length > 1) ||
+    (question.mode === "text" && answer.selected.length)
+  )
+    throw new Error("请填写有效答案");
+  question.answer = answer;
+  question.answeredAt = new Date().toISOString();
+  p.messages.push({
+    role: "user",
+    text: [
+      ...question.options
+        .filter((o) => answer.selected.includes(o.id))
+        .map((o) => o.label),
+      answer.text,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    time: question.answeredAt,
+  });
+  start(p, p.generation.pending, true);
+  res.status(202).json({ ok: true });
+});
 app.post("/api/projects/:id/cancel", async (req, res) => {
   await get(req.params.id);
+  activeRuns.get(req.params.id)?.abort();
   res.json({ ok: true });
+});
+app.get("/api/projects/:id/sources/:source/original", async (req, res) => {
+  const p = await get(req.params.id);
+  const source = p.sources.find((s) => s.id === req.params.source);
+  if (
+    !source?.originalFile ||
+    !/^uploads\/[a-f\d-]{36}\.[a-z\d]+$/i.test(source.originalFile)
+  )
+    return res.status(404).json({ error: "原始文件不可用" });
+  res
+    .attachment(
+      source.format === "website" ? source.name + ".html" : source.name,
+    )
+    .sendFile(path.join(projectDir(p.id), source.originalFile));
+});
+app.get("/api/projects/:id/metrics", async (req, res) =>
+  res.json((await get(req.params.id)).generation?.metrics || null),
+);
+app.get("/api/projects/:id/results/:kind", async (req, res) => {
+  const p = await get(req.params.id);
+  if (!["intent", "facts"].includes(req.params.kind))
+    return res.status(404).end();
+  const { loadArtifact } = await import("./generation/artifacts.js");
+  const kind = req.params.kind as "intent" | "facts";
+  const artifact = await loadArtifact(p.id, kind, p.generation?.[kind]);
+  if (!artifact) return res.status(404).json({ error: "结果尚未生成" });
+  res
+    .attachment(kind + ".md")
+    .type("text/markdown")
+    .send(artifact.markdown);
 });
 app.get("/api/projects/:id/events", async (req, res) => {
   const p = await get(req.params.id);
@@ -355,6 +458,6 @@ if (
   throw new Error("对外监听必须设置 DREAMATIC_ACCESS_TOKEN");
 const server = app.listen(Number(process.env.PORT || 4310), host, () =>
   console.log(
-    `Dreamatic · Web http://${host}:${(server.address() as { port: number }).port} (generation unavailable)`,
+    `Dreamatic · Web http://${host}:${(server.address() as { port: number }).port} (Pi 1.3.0)`,
   ),
 );

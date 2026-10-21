@@ -82,6 +82,8 @@ function App() {
     [version, setVersion] = useState(""),
     [history, setHistory] = useState(false);
   const drafts = useRef(new Map<string, string>());
+  const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
+  useEffect(() => setSelectedFactIds([]), [project?.id]);
   const file = useRef<HTMLInputElement>(null);
   const composerInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -246,10 +248,14 @@ function App() {
       const p = await ensure();
       await api("/projects/" + p.id + "/run", {
         method: "POST",
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          ...(selectedFactIds.length ? { selectedFactIds } : {}),
+        }),
       });
       setProject(await api("/projects/" + p.id));
       setText("");
+      setSelectedFactIds([]);
       setVersion("");
       setView("chat");
       await refresh();
@@ -303,7 +309,14 @@ function App() {
   const lastRole = project?.events
     .filter((e) => e.kind === "status")
     .at(-1)?.role;
-  const assets = project?.sources.flatMap((s) => s.assets) || [];
+  const assets = [
+    ...new Map(
+      (project?.sources.flatMap((s) => s.assets) || []).map((asset) => [
+        asset.id,
+        asset,
+      ]),
+    ).values(),
+  ];
   const evidence = project?.analysis as
     | {
         summary?: string;
@@ -678,7 +691,16 @@ function App() {
                 )}
               </>
             ) : view === "facts" ? (
-              <FactsView key={project?.id || "no-project"} project={project} />
+              <FactsView
+                key={project?.id || "no-project"}
+                project={project}
+                selectedIds={selectedFactIds}
+                onSelectionChange={setSelectedFactIds}
+                onUseSelected={() => {
+                  setView("chat");
+                  setText(t("根据选定事实调整相关章节，保留其他设计和内容。"));
+                }}
+              />
             ) : (
               <div className="sources-view">
                 <div className="sources-intro">
@@ -705,6 +727,37 @@ function App() {
                     {t("网站链接")}
                   </button>
                 </div>
+                {!!project?.sources.length && (
+                  <>
+                    <p className="section-kicker">
+                      {t("原始文件 /")}{" "}
+                      {project.sources.filter((s) => s.originalFile).length}
+                    </p>
+                    <div className="attached-files">
+                      {project.sources
+                        .filter((s) => s.originalFile)
+                        .map((s) => (
+                          <button
+                            className="secondary"
+                            key={s.id}
+                            onClick={() =>
+                              void download(
+                                `/projects/${project.id}/sources/${s.id}/original`,
+                                s.format === "website"
+                                  ? s.name + ".html"
+                                  : s.name,
+                              ).catch(handleError)
+                            }
+                          >
+                            <Download size={12} /> {s.name}
+                          </button>
+                        ))}
+                    </div>
+                    <p className="section-kicker">
+                      {t("Markdown 解析文档 /")} {project.sources.length}
+                    </p>
+                  </>
+                )}
                 {project?.sources.map((s) => (
                   <button
                     className="source-card"
@@ -764,6 +817,19 @@ function App() {
               </div>
             )}
             <div className="composer-area">
+              {selectedFactIds.length > 0 && (
+                <div className="attached-files">
+                  <span>
+                    {t("已选事实")} {selectedFactIds.length}
+                    <button
+                      aria-label={t("清除事实选择")}
+                      onClick={() => setSelectedFactIds([])}
+                    >
+                      <X size={10} />
+                    </button>
+                  </span>
+                </div>
+              )}
               {project?.sources.length ? (
                 <div className="attached-files">
                   {project.sources.map((s) => (

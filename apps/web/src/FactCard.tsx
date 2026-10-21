@@ -8,15 +8,19 @@ import {
   Maximize2,
 } from "lucide-react";
 import type { ProjectResponse } from "../../../packages/shared/project";
-import { factImages, type Fact } from "./fact-model";
+import { factMedia, type Fact } from "./fact-model";
 import { useI18n } from "./i18n";
 
 export default function FactCard({
   fact,
   index,
   project,
+  selected: isSelected,
+  onSelect,
 }: {
   fact: Fact;
+  selected?: boolean;
+  onSelect?: () => void;
   index: number;
   project: ProjectResponse;
 }) {
@@ -24,20 +28,31 @@ export default function FactCard({
   const [expanded, setExpanded] = useState<string | null>(null),
     [failed, setFailed] = useState<string[]>([]);
   const source = project.sources.find((s) => s.id === fact.sourceId);
-  const images = factImages(project, fact).filter(
+  const images = factMedia(project, fact).filter(
     (i) => !failed.includes(i.asset.id),
   );
   const selected = images.find((i) => i.asset.id === expanded);
-  const status = !source
-    ? "来源不可用"
-    : !fact.evidence
-      ? "未提供引用定位"
-      : fact.locationVerified
-        ? "引用位置已核对"
-        : "引用位置未核对";
+  const sourceName =
+    fact.sourceId === "user" ? t("用户输入") : source?.name || t("来源不可用");
+  const status =
+    !source && fact.sourceId !== "user"
+      ? "来源不可用"
+      : !fact.evidence
+        ? "已提取"
+        : fact.locationVerified
+          ? "引用位置已核对"
+          : "引用位置未核对";
   return (
     <article className="fact-card">
       <div className="fact-card-top">
+        {onSelect && (
+          <input
+            type="checkbox"
+            aria-label={t("选择事实") + " " + (index + 1)}
+            checked={Boolean(isSelected)}
+            onChange={onSelect}
+          />
+        )}
         <span className="fact-number">
           {String(index + 1).padStart(2, "0")}
         </span>
@@ -73,13 +88,22 @@ export default function FactCard({
                   setExpanded(expanded === asset.id ? null : asset.id)
                 }
               >
-                <img
-                  src={asset.url}
-                  alt={purpose}
-                  loading="lazy"
-                  decoding="async"
-                  onError={() => setFailed((old) => [...old, asset.id])}
-                />
+                {asset.type === "video" ? (
+                  <video
+                    src={asset.url}
+                    preload="metadata"
+                    muted
+                    aria-label={purpose}
+                  />
+                ) : (
+                  <img
+                    src={asset.url}
+                    alt={purpose}
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => setFailed((old) => [...old, asset.id])}
+                  />
+                )}
                 <span>
                   <Maximize2 size={12} />
                 </span>
@@ -96,7 +120,15 @@ export default function FactCard({
               >
                 <X size={13} />
               </button>
-              <img src={selected.asset.url} alt={selected.purpose} />
+              {selected.asset.type === "video" ? (
+                <video
+                  src={selected.asset.url}
+                  controls
+                  aria-label={selected.purpose}
+                />
+              ) : (
+                <img src={selected.asset.url} alt={selected.purpose} />
+              )}
               <figcaption>{selected.purpose}</figcaption>
             </figure>
           )}
@@ -104,40 +136,42 @@ export default function FactCard({
       )}
       <div className="fact-source-line">
         <FileText size={12} />
-        <span title={source?.name}>{source?.name || t("来源不可用")}</span>
+        <span title={sourceName}>{sourceName}</span>
       </div>
-      <details className="fact-citation">
-        <summary>
-          <span>{t("查看 Markdown 依据")}</span>
-          <ChevronDown size={13} />
-        </summary>
-        <div className="fact-detail">
-          {fact.evidence?.kind === "text" ? (
-            <>
-              <div className="fact-citation-label">
-                {t("Markdown 引用")}
+      {(fact.evidence || !fact.id) && (
+        <details className="fact-citation">
+          <summary>
+            <span>{t("查看 Markdown 依据")}</span>
+            <ChevronDown size={13} />
+          </summary>
+          <div className="fact-detail">
+            {fact.evidence?.kind === "text" ? (
+              <>
+                <div className="fact-citation-label">
+                  {t("Markdown 引用")}
+                  <small>
+                    {t("文本范围")} [{fact.evidence.start}, {fact.evidence.end})
+                  </small>
+                </div>
+                <blockquote>{fact.evidence.quote}</blockquote>
+              </>
+            ) : fact.evidence?.kind === "cell" ? (
+              <>
+                <div className="fact-citation-label">{t("单元格原值")}</div>
+                <pre>{JSON.stringify(fact.evidence.value, null, 2)}</pre>
                 <small>
-                  {t("文本范围")} [{fact.evidence.start}, {fact.evidence.end})
+                  {t("表格索引")} {fact.evidence.tableIndex} · {t("行索引")}{" "}
+                  {fact.evidence.row} · {t("列索引")} {fact.evidence.column}
+                  <br />
+                  {t("索引从 0 开始，行索引包含表头。")}
                 </small>
-              </div>
-              <blockquote>{fact.evidence.quote}</blockquote>
-            </>
-          ) : fact.evidence?.kind === "cell" ? (
-            <>
-              <div className="fact-citation-label">{t("单元格原值")}</div>
-              <pre>{JSON.stringify(fact.evidence.value, null, 2)}</pre>
-              <small>
-                {t("表格索引")} {fact.evidence.tableIndex} · {t("行索引")}{" "}
-                {fact.evidence.row} · {t("列索引")} {fact.evidence.column}
-                <br />
-                {t("索引从 0 开始，行索引包含表头。")}
-              </small>
-            </>
-          ) : (
-            <p>{t("此事实未保存可展示的Markdown 引用。")}</p>
-          )}
-        </div>
-      </details>
+              </>
+            ) : (
+              <p>{t("此事实未保存可展示的Markdown 引用。")}</p>
+            )}
+          </div>
+        </details>
+      )}
     </article>
   );
 }

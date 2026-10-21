@@ -63,6 +63,18 @@ export async function persistExtraction(
     structured?.blocks || [],
     tables,
   );
+  if (source.assets.length) {
+    // Canonical Markdown directly names every usable original/extracted media URL.
+    reading.markdown +=
+      "\n\n## Media assets\n\n" +
+      source.assets
+        .map(
+          (a) =>
+            `- [${a.name.replace(/[\[\]\n\r]/g, " ")}](${a.url}) · ${a.type} · ${a.mime} · id:${a.id}`,
+        )
+        .join("\n") +
+      "\n";
+  }
   if (
     reading.truncated ||
     reading.markdown.length > MAX ||
@@ -189,7 +201,7 @@ export async function readSourceMarkdown(
     total: markdown.length,
     nextOffset: Math.min(markdown.length, offset + limit),
     instruction:
-      "All offsets and sourceHash refer to this canonical Markdown (zero-based UTF-16, end exclusive). Copy tool-returned evidence unchanged. Table tools decode typed cells from this same Markdown.",
+      "All offsets and sourceHash refer to this canonical Markdown (zero-based UTF-16, end exclusive). Read only needed remaining ranges. Media links resolve to the project asset catalog. Tables retain typed cells in this same Markdown.",
   };
 }
 export async function readSourceTable(

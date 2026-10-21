@@ -6,17 +6,23 @@ import {
 import { enhancePdf } from "./pdf-structure.js";
 import { imageSize } from "image-size";
 import path from "node:path";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, link, access } from "node:fs/promises";
 import { parseOffice } from "officeparser";
 import ExcelJS from "exceljs";
 import { parse } from "csv-parse/sync";
 import AdmZip from "adm-zip";
 import * as cheerio from "cheerio";
 import { fileTypeFromBuffer } from "file-type";
-import { persistExtraction } from "./source-content.js";
+import { createHash } from "node:crypto";
+import { persistExtraction, readCanonicalSource } from "./source-content.js";
 import { DATA, projectDir } from "./store.js";
 import { fetchPublic } from "./network.js";
 import type { Source, Asset } from "../../../packages/shared/project.js";
+export const PARSER_VERSION = "markdown-media-v3";
+export const sourceFingerprint = (buffer: Buffer) =>
+  createHash("sha256").update(buffer).digest("hex");
+export const parserVersion = () =>
+  `${PARSER_VERSION}:${process.env.DREAMATIC_PDF_ENHANCE || "false"}:${process.env.DREAMATIC_DOCUMENT_PYTHON || "default"}`;
 export const FORMATS = [
   "pdf",
   "docx",
@@ -68,13 +74,18 @@ async function asset(
 ): Promise<Asset> {
   const type = await fileTypeFromBuffer(buffer);
   if (!type) throw new Error("无法识别素材格式");
-  const id = crypto.randomUUID();
+  const digest = sourceFingerprint(buffer);
+  const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
   const file = id + "." + type.ext;
   const dir = projectId
     ? path.join(projectDir(projectId), "assets")
     : path.join(DATA, "test-assets");
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, file), buffer);
+  try {
+    await writeFile(path.join(dir, file), buffer, { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
   let dimensions: { width?: number; height?: number } = {};
   if (type.mime.startsWith("image/")) {
     try {
@@ -110,6 +121,8 @@ export async function extract(
     );
   const s: Source = {
     id: crypto.randomUUID(),
+    fingerprint: sourceFingerprint(buffer),
+    parserVersion: parserVersion(),
     name,
     format: ext,
     text: "",
@@ -263,12 +276,71 @@ export async function extract(
         );
     }
   }
+  s.assets = [...new Map(s.assets.map((a) => [a.id, a])).values()];
+  if (projectId) {
+    const dir = path.join(projectDir(projectId), "uploads");
+    await mkdir(dir, { recursive: true });
+    s.originalFile = "uploads/" + s.id + "." + ext;
+    const target = path.join(projectDir(projectId), s.originalFile);
+    // A standalone medium has two logical locations backed by one physical file.
+    if (s.assets.length === 1 && s.text?.startsWith("用户提供的"))
+      await link(
+        path.join(
+          projectDir(projectId),
+          "assets",
+          path.basename(s.assets[0].url),
+        ),
+        target,
+      );
+    else await writeFile(target, buffer, { mode: 0o600 });
+  }
   return persistExtraction(s, projectId, structured);
 }
-export async function extractUrl(url: string, projectId?: string) {
+export async function extractUrl(
+  url: string,
+  projectId?: string,
+  previous: Source[] = [],
+) {
   const r = await fetchPublic(url);
   if (!/text\/html|text\/plain|application\/json/.test(r.type))
     throw new Error("此 URL 不是 HTML/文本网页，请下载后上传文档");
+  const fingerprint = sourceFingerprint(r.body);
+  const cached = previous.find(
+    (s) =>
+      s.format === "website" &&
+      s.provenance === r.url &&
+      s.fingerprint === fingerprint &&
+      s.parserVersion === parserVersion(),
+  );
+  const downloads = new Map<string, Awaited<ReturnType<typeof fetchPublic>>>();
+  if (cached && projectId) {
+    let reusable = true;
+    await Promise.all(
+      (cached.dependencies || []).map(async (dep) => {
+        try {
+          const response = await fetchPublic(dep.url);
+          downloads.set(dep.url, response);
+          if (sourceFingerprint(response.body) !== dep.hash) reusable = false;
+        } catch {
+          reusable = false;
+        }
+      }),
+    );
+    try {
+      await readCanonicalSource(projectId, cached);
+      await Promise.all(
+        [
+          cached.originalFile,
+          ...cached.assets.map((a) => "assets/" + path.basename(a.url)),
+        ]
+          .filter(Boolean)
+          .map((file) => access(path.join(projectDir(projectId), file!))),
+      );
+      if (reusable) return cached;
+    } catch {
+      /* Repair missing artifacts by reparsing only this source. */
+    }
+  }
   const $ = cheerio.load(r.body.toString("utf8"));
 
   const html = /text\/html/.test(r.type) ? structureHtml($, true) : undefined;
@@ -276,6 +348,9 @@ export async function extractUrl(url: string, projectId?: string) {
   const s: Source = {
     id: crypto.randomUUID(),
     name: title,
+    fingerprint,
+    parserVersion: parserVersion(),
+    dependencies: [],
     format: "website",
     text: "",
     tables: [],
@@ -297,7 +372,8 @@ export async function extractUrl(url: string, projectId?: string) {
     });
   for (const u of urls) {
     try {
-      const media = await fetchPublic(u);
+      const media = downloads.get(u) || (await fetchPublic(u));
+      s.dependencies!.push({ url: u, hash: sourceFingerprint(media.body) });
       s.assets.push(
         await asset(
           media.body,
@@ -308,6 +384,15 @@ export async function extractUrl(url: string, projectId?: string) {
     } catch {
       s.warnings.push("无法导入网站素材：" + u);
     }
+  }
+  s.assets = [...new Map(s.assets.map((a) => [a.id, a])).values()];
+  if (projectId) {
+    const dir = path.join(projectDir(projectId), "uploads");
+    await mkdir(dir, { recursive: true });
+    s.originalFile = `uploads/${s.id}.${html ? "html" : "txt"}`;
+    await writeFile(path.join(projectDir(projectId), s.originalFile), r.body, {
+      mode: 0o600,
+    });
   }
   return persistExtraction(s, projectId, html?.structured);
 }

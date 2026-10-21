@@ -11,8 +11,60 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { modelServer } from "./model-server.js";
 
 test("HTTP ingestion, model configuration persistence, authorization, conflict and safe export", async () => {
+  const upstream = await modelServer((tools, payload) => {
+    if (tools.includes("submit_intent"))
+      return {
+        name: "submit_intent",
+        args: {
+          goal: "Website",
+          audience: "Visitors",
+          content: ["Source facts"],
+          features: [],
+          design: [],
+          constraints: [],
+        },
+      };
+    const content = JSON.stringify(payload.messages || []);
+    if (tools.includes("submit_facts")) {
+      const sourceId = content.match(/Source inventory/)
+        ? "user"
+        : content.match(/## ([a-f\d-]{36}):/)?.[1] || "user";
+      return {
+        name: "submit_facts",
+        args: {
+          summary: "CSV and image",
+          facts: [{ id: "brand", text: "测试 42", sourceId, assetIds: [] }],
+          limitations: [],
+        },
+      };
+    }
+    if (tools.includes("page_patch")) {
+      const baseVersionId = content.match(
+        /Current baseVersionId\\n([a-f\d-]{36})/,
+      )?.[1];
+      return {
+        name: "page_patch",
+        args: {
+          baseVersionId,
+          operations: [
+            { selector: "#heading", action: "set_text", value: "Edited" },
+          ],
+        },
+      };
+    }
+    const imageUrl = content.match(
+      /\/assets\/[a-f\d-]{36}\/[a-f\d-]{36}\.png/,
+    )?.[0];
+    return {
+      name: "submit_page",
+      args: {
+        html: `<html><body><h1 id="heading">Generated</h1>${imageUrl ? `<img alt="test" src="${imageUrl}">` : ""}</body></html>`,
+      },
+    };
+  });
   const workspace = await mkdtemp(path.join(os.tmpdir(), "dreamatic-api-"));
   const interrupted = crypto.randomUUID();
   await mkdir(path.join(workspace, "projects"));
@@ -98,10 +150,16 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       method: "PUT",
       body: JSON.stringify({
         ...cfg,
-        mode: "demo",
+        mode: "live",
         models: {
           ...cfg.models,
-          reasoning: { ...cfg.models.reasoning, apiKey: secret },
+          reasoning: {
+            ...cfg.models.reasoning,
+            mode: "openai-compatible",
+            baseUrl: upstream.baseUrl,
+            model: "test-model",
+            apiKey: secret,
+          },
         },
       }),
     });
@@ -192,35 +250,76 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       /测试,42/,
     );
 
-    for (const endpoint of ["run", "resume", "questions/legacy/answer"]) {
-      const response = await request(`/projects/${p.id}/${endpoint}`, {
-        method: "POST",
-        body: JSON.stringify({ text: "用资料创建数据网页" }),
-      });
-      assert.equal(response.status, 503);
-      assert.equal((await response.json()).code, "GENERATION_UNAVAILABLE");
+    assert.equal(
+      (await request(`/projects/${p.id}/resume`, { method: "POST" })).status,
+      409,
+    );
+    assert.equal(
+      (
+        await request(`/projects/${p.id}/questions/legacy/answer`, {
+          method: "POST",
+          body: JSON.stringify({ text: "test" }),
+        })
+      ).status,
+      409,
+    );
+    const generation = await request(`/projects/${p.id}/run`, {
+      method: "POST",
+      body: JSON.stringify({ text: "根据资料创建网页" }),
+    });
+    assert.equal(generation.status, 202);
+    let generated: any;
+    for (let i = 0; i < 100; i++) {
+      generated = await (await request(`/projects/${p.id}`)).json();
+      if (generated.status !== "running") break;
+      await new Promise((r) => setTimeout(r, 20));
     }
-    const unchanged = await (await request(`/projects/${p.id}`)).json();
-    assert.equal(unchanged.status, "idle");
-    assert.deepEqual(unchanged.messages, []);
-    assert.deepEqual(unchanged.versions, []);
-    assert.deepEqual(unchanged.events, []);
+    assert.equal(generated.status, "complete", generated.error);
+    assert.equal(upstream.requests.length, 3);
+    assert.equal(
+      generated.generation,
+      undefined,
+      "private generation keys are not returned",
+    );
+    assert.equal(generated.pagePreviews, undefined);
+    const intent = await request(`/projects/${p.id}/results/intent`);
+    assert.equal(intent.status, 200);
+    assert.match(await intent.text(), /# User Intent Brief/);
+    assert.match(
+      await (await request(`/projects/${p.id}/results/facts`)).text(),
+      /Information Facts/,
+    );
+    assert.equal(
+      (
+        await request(
+          `/projects/${p.id}/sources/${result.sources[0].id}/original`,
+        )
+      ).status,
+      200,
+    );
+    // Same original bytes reuse the persisted extraction and source identity.
+    const again = new FormData();
+    again.append(
+      "files",
+      new Blob(["标题,值\n测试,42"], { type: "text/csv" }),
+      "source.csv",
+    );
+    const reused = await (
+      await request(`/projects/${p.id}/sources`, {
+        method: "POST",
+        body: again,
+      })
+    ).json();
+    assert.equal(reused.sources[0].id, result.sources[0].id);
+    assert.equal(
+      (await (await request(`/projects/${p.id}`)).json()).sources.length,
+      2,
+    );
     assert.deepEqual(await (await request("/skills")).json(), []);
-    assert.deepEqual(await (await request("/skills/diagnostics")).json(), []);
     assert.equal(
       (await (await request("/health")).json()).generationAvailable,
-      false,
+      true,
     );
-    const initialVersion = await request(`/projects/${p.id}/versions`, {
-      method: "POST",
-      body: JSON.stringify({
-        html: `<html><body><h1>手动测试页面</h1><img alt="测试素材" src="${imageUrl}"></body></html>`,
-        baseVersionId: "",
-      }),
-    });
-    assert.equal(initialVersion.status, 200);
-    const generated = await (await request(`/projects/${p.id}`)).json();
-    assert.equal(generated.pagePreviews, undefined);
     assert.ok(
       await stat(
         path.join(
@@ -331,6 +430,7 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
     const exit = new Promise((r) => server.once("exit", r));
     server.kill();
     if (server.exitCode === null) await exit;
+    await upstream.close();
     await rm(workspace, { recursive: true, force: true });
   }
 });

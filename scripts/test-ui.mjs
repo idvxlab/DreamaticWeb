@@ -124,7 +124,7 @@ try {
   await composer.evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true })));
   assert.notEqual(await composer.inputValue(), "");
   await composer.press("Enter");
-  await page.getByRole("alert").filter({ hasText: "生成功能正在重构" }).waitFor();
+  await page.getByText("演示模式不调用模型。请切换实时模式并配置模型后生成页面。", { exact:true }).waitFor();
   // Seed a clearly labeled manual test page; no generation runtime is used.
   const fixtureProjectId = await page.evaluate(() => localStorage.getItem("dreamatic-project"));
   await fetch(base + "/api/projects/" + fixtureProjectId, {
@@ -294,8 +294,8 @@ try {
     const response=await route.fetch();const project=await response.json();
     project.sources[0].assets.push({id:factImageId,name:"品牌参考图.png",type:"image",mime:"image/png",url:factImageUrl});
     project.analysis={summary:"Analyst 测试摘要",limitations:["测试资料存在缺失"],assets:[{sourceId:factsSourceId,url:factImageUrl,purpose:"已关联的品牌参考图片"}],facts:[
-      {text:"品牌使用圆形标识",sourceId:factsSourceId,assetIds:[factImageId],locationVerified:true,evidence:{kind:"text",start:0,end:10,quote:"品牌使用圆形标识"}},
-      {text:"保留单元格原始布尔值",sourceId:factsSourceId,locationVerified:true,evidence:{kind:"cell",tableIndex:0,row:1,column:1,value:false}},
+      {id:"brand-logo",text:"品牌使用圆形标识",sourceId:factsSourceId,assetIds:[factImageId],locationVerified:true,evidence:{kind:"text",start:0,end:10,quote:"品牌使用圆形标识"}},
+      {id:"typed-cell",text:"保留单元格原始布尔值",sourceId:factsSourceId,locationVerified:true,evidence:{kind:"cell",tableIndex:0,row:1,column:1,value:false}},
       {text:"历史事实缺少来源",sourceId:"missing-source"}
     ]};
     await route.fulfill({json:project});
@@ -322,6 +322,11 @@ try {
   await imageCard.getByRole("button",{name:"收起图片",exact:true}).click();
   await factsView.evaluate(el=>{el.scrollTop=0;});
   await page.screenshot({path:"/tmp/dreamatic-fact-cards.png",fullPage:true});
+  await factsView.getByLabel("选择事实 1",{exact:true}).check();
+  await factsView.getByRole("button",{name:"使用选定事实调整页面 (1)",exact:true}).click();
+  assert.match(await page.getByRole("textbox",{name:"网页需求"}).inputValue(),/选定事实/);
+  await page.getByLabel("清除事实选择",{exact:true}).click();
+  await page.getByRole("button",{name:/^事实列表/}).click();
   await factsView.getByLabel("搜索事实",{exact:true}).fill("圆形");
   assert.equal(await factsView.locator(".fact-card").count(),1);
   await factsView.getByLabel("搜索事实",{exact:true}).fill("不存在的事实");
@@ -373,6 +378,9 @@ try {
       data.status = "error";
       data.error = "模型输出停滞超时";
       data.run ||= { id: "recovery-test", checkpoints: {} };
+    } else {
+      data.status = "complete";
+      delete data.error;
     }
     await route.fulfill({ json: data });
   });
@@ -444,7 +452,7 @@ try {
     await card.getByRole("textbox", { name: "回答" }).fill("请使用 PDF 全部信息，自行分析重点");
     if (mode === "multiple") await page.screenshot({ path: path.join(data, "screenshots", "question-card.png"), fullPage: true });
     await card.getByRole("button", { name: "提交并继续" }).click();
-    await card.getByText("生成功能正在重构", { exact: false }).waitFor();
+    await card.getByText("此问题已失效，请刷新项目", { exact: false }).waitFor();
     const result = await (await fetch(base + "/api/projects/" + id)).json();
     assert.equal(result.status, "needs_input");
     assert.equal(result.questions[0].answeredAt, undefined);
@@ -453,7 +461,7 @@ try {
   }
   assert.deepEqual(errors, [], "Browser errors");
   console.log(
-    "PASS: server-side model dropdown settings → iframe sandbox/CSP → upload → generation unavailable → manual test fixture → canvas text edit → saved version → responsive preview → blocks → restore → HTML export → source table → empty Skill catalog; no browser errors.",
+    "PASS: server-side model dropdown settings → iframe sandbox/CSP → upload → explicit demo-mode notice → manual test fixture → canvas text edit → saved version → responsive preview → blocks → restore → HTML export → source table → empty Skill catalog; no browser errors.",
   );
 } finally {
   await browser?.close();

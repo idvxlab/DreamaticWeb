@@ -10,6 +10,18 @@ export function setLanguage(next: Language) {
   for (const listener of listeners) listener();
 }
 const english: Record<string, string> = {
+  "原始文件 /": "Original files /",
+  "Markdown 解析文档 /": "Parsed Markdown /",
+  已选事实: "Selected facts",
+  清除事实选择: "Clear fact selection",
+  使用选定事实调整页面: "Update page with selected facts",
+  选择事实: "Select fact",
+  用户输入: "User input",
+  已提取: "Extracted",
+  "查看从 Markdown 提取的信息事实，选择需要用于页面调整的内容。":
+    "Review facts extracted from Markdown and select content for page updates.",
+  "根据选定事实调整相关章节，保留其他设计和内容。":
+    "Update the relevant sections using the selected facts, preserving the remaining design and content.",
   "下载 Markdown 文档": "Download Markdown document",
   事实: "Fact",
   关联图片: "Linked images",
