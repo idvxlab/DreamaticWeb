@@ -5,7 +5,7 @@ import type {
   ProjectResponse,
   Source,
   Asset,
-} from "../packages/agents/src/contracts.js";
+} from "../packages/shared/project.js";
 
 test("fact cards require explicit image associations and never fall back to source-level images", () => {
   const image = (id: string): Asset => ({

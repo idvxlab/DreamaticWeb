@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import * as cheerio from "cheerio";
 import { projectDir } from "./store.js";
-import type { Source } from "../../../packages/agents/src/contracts.js";
+import type { Source } from "../../../packages/shared/project.js";
 import {
   readingMarkdown,
   type StructuredExtraction,

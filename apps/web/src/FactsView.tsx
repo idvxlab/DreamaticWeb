@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ScanText, Search } from "lucide-react";
-import type { ProjectResponse } from "../../../packages/agents/src/contracts";
+import type { ProjectResponse } from "../../../packages/shared/project";
 import { useI18n } from "./i18n";
 import { factsFor } from "./fact-model";
 import FactCard from "./FactCard";

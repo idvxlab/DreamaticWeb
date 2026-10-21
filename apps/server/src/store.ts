@@ -9,7 +9,7 @@ import {
   access,
 } from "node:fs/promises";
 import path from "node:path";
-import type { Project } from "../../../packages/agents/src/contracts.js";
+import type { Project } from "../../../packages/shared/project.js";
 export const ROOT = process.cwd();
 export const SETTINGS_ROOT = path.resolve(
   process.env.DREAMATIC_WORKSPACE || path.join(ROOT, "workspace"),
@@ -115,16 +115,18 @@ export async function get(id: string) {
   }
   return p;
 }
-/** Polling clients need checkpoint status, not duplicate full model artifacts. */
+/** Expose only historical display metadata, never stored execution artifacts. */
 export function publicProject(
   p: Project,
-): import("../../../packages/agents/src/contracts.js").ProjectResponse {
+): import("../../../packages/shared/project.js").ProjectResponse {
   const { pagePreviews: _, ...view } = p;
   return {
     ...view,
     run: p.run
       ? {
-          ...p.run,
+          id: p.run.id,
+          activeRole: p.run.activeRole,
+          completedVersionId: p.run.completedVersionId,
           checkpoints: Object.fromEntries(
             Object.entries(p.run.checkpoints).map(([role, checkpoint]) => [
               role,

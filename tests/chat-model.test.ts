@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { conversationTurns, latestPhase } from "../apps/web/src/chat-model.js";
-import type { Message, RunEvent } from "../packages/agents/src/contracts.js";
+import type { Message, RunEvent } from "../packages/shared/project.js";
 
 test("conversation details stay with their turn, including initial clarification records", () => {
   const messages: Message[] = [

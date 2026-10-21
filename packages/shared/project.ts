@@ -1,4 +1,25 @@
-import type { Clarification } from "./questions.js";
+/** View data for the preserved interface and historical projects; no runtime behavior. */
+export interface Clarification {
+  id: string;
+  title: string;
+  mode: "single" | "multiple" | "text";
+  options: { id: string; label: string }[];
+  createdAt: string;
+  answeredAt?: string;
+  answer?: { selected: string[]; text: string };
+}
+export interface PageIssue {
+  severity: "error" | "warning";
+  code: string;
+  selector?: string;
+  message: string;
+}
+export interface PageCheck {
+  hash: string;
+  status: "not-previewed" | "previewed" | "warnings";
+  viewports: { width: number; height: number }[];
+  issues: PageIssue[];
+}
 export type Role = "orchestrator" | "analyst" | "designer";
 export interface Asset {
   id: string;
@@ -48,7 +69,7 @@ export interface Version {
   label: string;
   createdAt: string;
   runId?: string;
-  checks?: import("./page-checks.js").PageCheck;
+  checks?: PageCheck;
 }
 export interface Project {
   id: string;
@@ -74,19 +95,11 @@ export interface Project {
   }[];
   run?: {
     id: string;
-    inputHash: string;
     activeRole?: Role;
     completedVersionId?: string;
-    completedInputHash?: string;
-    checkpoints: Partial<
-      Record<Role, { key: string; result: unknown; completedAt: string }>
-    >;
+    checkpoints: Partial<Record<Role, { completedAt: string }>>;
   };
 }
 
-/** Browser responses expose progress, while full checkpoint artifacts stay local. */
-export type ProjectResponse = Omit<Project, "run" | "pagePreviews"> & {
-  run?: Omit<NonNullable<Project["run"]>, "checkpoints"> & {
-    checkpoints: Partial<Record<Role, { completedAt: string }>>;
-  };
-};
+/** Public project view excludes local preview diagnostics. */
+export type ProjectResponse = Omit<Project, "pagePreviews">;

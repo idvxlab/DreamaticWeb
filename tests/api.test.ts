@@ -192,49 +192,35 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       /测试,42/,
     );
 
-    assert.equal(
-      (
-        await request(`/projects/${p.id}/run`, {
-          method: "POST",
-          body: JSON.stringify({ text: "用资料创建数据网页" }),
-        })
-      ).status,
-      202,
-    );
-    let generated: any;
-    for (let i = 0; i < 60; i++) {
-      generated = await (await request(`/projects/${p.id}`)).json();
-      if (generated.status !== "running") break;
-      await new Promise((r) => setTimeout(r, 50));
+    for (const endpoint of ["run", "resume", "questions/legacy/answer"]) {
+      const response = await request(`/projects/${p.id}/${endpoint}`, {
+        method: "POST",
+        body: JSON.stringify({ text: "用资料创建数据网页" }),
+      });
+      assert.equal(response.status, 503);
+      assert.equal((await response.json()).code, "GENERATION_UNAVAILABLE");
     }
-    assert.equal(generated.status, "complete", generated.error);
+    const unchanged = await (await request(`/projects/${p.id}`)).json();
+    assert.equal(unchanged.status, "idle");
+    assert.deepEqual(unchanged.messages, []);
+    assert.deepEqual(unchanged.versions, []);
+    assert.deepEqual(unchanged.events, []);
+    assert.deepEqual(await (await request("/skills")).json(), []);
+    assert.deepEqual(await (await request("/skills/diagnostics")).json(), []);
+    assert.equal(
+      (await (await request("/health")).json()).generationAvailable,
+      false,
+    );
+    const initialVersion = await request(`/projects/${p.id}/versions`, {
+      method: "POST",
+      body: JSON.stringify({
+        html: `<html><body><h1>手动测试页面</h1><img alt="测试素材" src="${imageUrl}"></body></html>`,
+        baseVersionId: "",
+      }),
+    });
+    assert.equal(initialVersion.status, 200);
+    const generated = await (await request(`/projects/${p.id}`)).json();
     assert.equal(generated.pagePreviews, undefined);
-    assert.ok(generated.run?.id);
-    for (const checkpoint of Object.values(generated.run.checkpoints) as any[])
-      assert.equal(
-        checkpoint.result,
-        undefined,
-        "polling responses omit duplicate stage artifacts",
-      );
-    assert.equal(
-      (await request(`/projects/${interrupted}/resume`, { method: "POST" }))
-        .status,
-      409,
-      "legacy tasks must not invent checkpoints",
-    );
-    const messageCount = generated.messages.length;
-    assert.equal(
-      (await request(`/projects/${p.id}/resume`, { method: "POST" })).status,
-      202,
-    );
-    await new Promise((r) => setTimeout(r, 50));
-    const resumed = await (await request(`/projects/${p.id}`)).json();
-    assert.equal(resumed.versions.length, generated.versions.length);
-    assert.equal(
-      resumed.messages.length,
-      messageCount,
-      "resume does not append duplicate requests",
-    );
     assert.ok(
       await stat(
         path.join(

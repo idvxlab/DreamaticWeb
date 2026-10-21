@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDown } from "lucide-react";
-import type { ProjectResponse } from "../../../packages/agents/src/contracts";
-import type { Clarification } from "../../../packages/agents/src/questions";
+import type { ProjectResponse } from "../../../packages/shared/project";
+import type { Clarification } from "../../../packages/shared/project";
 import MessageBubble from "./MessageBubble";
 import QuestionCard from "./QuestionCard";
 import TaskStatus from "./TaskStatus";

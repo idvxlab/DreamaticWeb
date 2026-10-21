@@ -1,5 +1,5 @@
 import { AlertCircle, Loader2, Pause, ArrowRight } from "lucide-react";
-import type { ProjectResponse } from "../../../packages/agents/src/contracts";
+import type { ProjectResponse } from "../../../packages/shared/project";
 import { latestPhase } from "./chat-model";
 import { useI18n } from "./i18n";
 export default function TaskStatus({

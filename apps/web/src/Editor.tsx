@@ -7,7 +7,7 @@ import { api } from "./api";
 import { parseEditorCss } from "./editor-css";
 import { blockCard } from "./block-cards";
 import { PREVIEW_CSP } from "../../../packages/shared/html-policy";
-import type { Asset } from "../../../packages/agents/src/contracts";
+import type { Asset } from "../../../packages/shared/project";
 import {
   MousePointer2,
   Layers,

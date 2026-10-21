@@ -4,52 +4,38 @@ import { readSourceMarkdown } from "./source-content.js";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   create,
   get,
   save,
   initStore,
-  DATA,
   removeProject,
   projectDir,
   projectIds,
   publicProject,
 } from "./store.js";
 import { extractUrl, FORMATS } from "./extract.js";
-import {
-  activeRuns,
-  runProject,
-  mode,
-} from "../../../packages/agents/src/runtime.js";
-import {
-  discoverSkills,
-  discoverSkillCatalog,
-} from "../../../packages/agents/src/skills.js";
 import { ingest } from "./ingest.js";
-import type { RunEvent } from "../../../packages/agents/src/contracts.js";
 import {
   initConfig,
   readConfig,
   writeConfig,
   configUpdating,
 } from "./config.js";
-import { acceptAnswer } from "../../../packages/agents/src/questions.js";
-import { pageChecks } from "../../../packages/agents/src/page-checks.js";
-import { validatePage } from "../../../packages/agents/src/pages.js";
+import { pageChecks } from "./page-checks.js";
+import { validatePage } from "./page-validation.js";
 import { APP_VERSION } from "../../../packages/shared/app-info.js";
 await initStore();
 await initConfig();
-// Interrupted runs remain inspectable and can be resumed after restart.
+// Historical unfinished tasks cannot execute while generation is unavailable.
 for (const name of await projectIds()) {
   try {
     const p = await get(name);
-    if (p.status === "running") {
+    if (p.status === "running" || p.status === "needs_input") {
       p.status = "error";
-      p.error = p.run
-        ? "服务重启中断了生成，可点击继续未完成任务。"
-        : "服务重启中断了生成，历史任务无断点，请重新发送需求。";
+      p.error = "生成功能正在重构，现有智能体执行已移除。";
       await save(p);
     }
   } catch {}
@@ -96,16 +82,13 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 30 * 1024 * 1024, files: 12, fields: 2 },
 });
-const emit = (id: string, e: RunEvent) => {
-  for (const res of listeners.get(id) || [])
-    res.write("data: " + JSON.stringify(e) + "\n\n");
-};
 app.get("/api/health", (_req, res) =>
   res.json({
     ok: true,
     version: APP_VERSION,
     language: readConfig().language,
-    mode: mode(),
+    mode: readConfig().mode,
+    generationAvailable: false,
     provider: readConfig().models.reasoning.mode,
     model: readConfig().models.reasoning.model,
     formats: FORMATS,
@@ -113,29 +96,12 @@ app.get("/api/health", (_req, res) =>
 );
 app.get("/api/config", (_req, res) => res.json(readConfig()));
 app.put("/api/config", async (req, res) => {
-  if (activeRuns.size || sourceJobs.size)
-    return res
-      .status(409)
-      .json({ error: "请等待所有生成任务结束后再修改模型配置" });
+  if (sourceJobs.size)
+    return res.status(409).json({ error: "请等待资料解析结束后再修改配置" });
   res.json(await writeConfig(req.body));
 });
-app.get("/api/skills/diagnostics", async (_req, res) =>
-  res.json((await discoverSkillCatalog()).diagnostics),
-);
-app.get("/api/skills", async (_req, res) =>
-  res.json(
-    (await discoverSkills()).map(
-      ({ name, description, roles, formats, tasks, permissions }) => ({
-        name,
-        description,
-        roles,
-        formats,
-        tasks,
-        permissions,
-      }),
-    ),
-  ),
-);
+app.get("/api/skills/diagnostics", (_req, res) => res.json([]));
+app.get("/api/skills", (_req, res) => res.json([]));
 app.use("/api/projects", (_req, res, next) => {
   if (configUpdating)
     return res.status(409).json({ error: "工作目录正在切换，请稍后重试" });
@@ -166,8 +132,6 @@ app.get("/api/projects/:id", async (req, res) =>
 const sourceJobs = new Set<string>();
 function mutable(id: string) {
   if (sourceJobs.has(id)) throw new Error("资料正在解析，请完成后再继续");
-  if (activeRuns.has(id))
-    throw new Error("生成进行中，请先停止再编辑或添加资料");
 }
 app.patch("/api/projects/:id", async (req, res) => {
   const p = await get(req.params.id);
@@ -260,57 +224,23 @@ app.delete("/api/projects/:id/sources/:source", async (req, res) => {
   await save(p);
   res.json({ ok: true });
 });
-app.post("/api/projects/:id/questions/:question/answer", async (req, res) => {
-  const p = await get(req.params.id);
-  mutable(p.id);
-  const question = p.questions?.find((q) => q.id === req.params.question);
-  if (!question || p.status !== "needs_input")
-    return res.status(409).json({ error: "此问题已失效，请刷新项目" });
-  const text = acceptAnswer(question, req.body);
-  p.messages.push({ role: "user", text, time: new Date().toISOString() });
-  void runProject(p, save, (e) => emit(p.id, e)).catch(() =>
-    console.error("项目保存失败"),
-  );
-  res.status(202).json({ ok: true });
-});
-app.post("/api/projects/:id/run", async (req, res) => {
-  const p = await get(req.params.id);
-  mutable(p.id);
-  if (configUpdating)
-    return res.status(409).json({ error: "模型配置正在保存，请稍后重试" });
-  const { text } = z
-    .object({ text: z.string().trim().min(1).max(20000) })
-    .parse(req.body);
-  const pending = p.questions?.find((q) => !q.answeredAt);
-  if (pending && p.status === "needs_input")
-    acceptAnswer(pending, { text, selected: [] });
-  p.messages.push({ role: "user", text, time: new Date().toISOString() });
-  if (!p.titleEdited && p.title === "未命名网页") p.title = text.slice(0, 28);
-  void runProject(p, save, (e) => emit(p.id, e)).catch(() =>
-    console.error("项目写入失败，请检查 workspace 的可用空间和权限"),
-  );
-  res.status(202).json({ ok: true });
-});
-app.post("/api/projects/:id/resume", async (req, res) => {
-  const p = await get(req.params.id);
-  if (activeRuns.has(p.id))
-    return res.status(202).json({ ok: true, alreadyRunning: true });
-  mutable(p.id);
-  if (!["error", "cancelled", "complete"].includes(p.status))
-    return res
-      .status(409)
-      .json({ error: "当前任务不能继续，请先完成待回答的问题" });
-  if (!p.run)
-    return res
-      .status(409)
-      .json({ error: "历史任务没有可验证断点，请重新发送需求" });
-  void runProject(p, save, (e) => emit(p.id, e), { resume: true }).catch(() =>
-    console.error("恢复任务保存失败"),
-  );
-  res.status(202).json({ ok: true });
-});
+// Preserve UI request paths while the replacement system is being designed.
+for (const route of [
+  "/api/projects/:id/run",
+  "/api/projects/:id/resume",
+  "/api/projects/:id/questions/:question/answer",
+]) {
+  app.post(route, async (req, res) => {
+    await get(String(req.params.id));
+    res.status(503).json({
+      code: "GENERATION_UNAVAILABLE",
+      error:
+        "生成功能正在重构，现有智能体执行已移除。资料导入、手动编辑与导出仍可使用。",
+    });
+  });
+}
 app.post("/api/projects/:id/cancel", async (req, res) => {
-  activeRuns.get(req.params.id)?.abort();
+  await get(req.params.id);
   res.json({ ok: true });
 });
 app.get("/api/projects/:id/events", async (req, res) => {
@@ -425,6 +355,6 @@ if (
   throw new Error("对外监听必须设置 DREAMATIC_ACCESS_TOKEN");
 const server = app.listen(Number(process.env.PORT || 4310), host, () =>
   console.log(
-    `Dreamatic · Web http://${host}:${(server.address() as { port: number }).port} (${mode()})`,
+    `Dreamatic · Web http://${host}:${(server.address() as { port: number }).port} (generation unavailable)`,
   ),
 );

@@ -1,6 +1,6 @@
 import { DATA } from "./store.js";
 import { Worker } from "node:worker_threads";
-import type { Source } from "../../../packages/agents/src/contracts.js";
+import type { Source } from "../../../packages/shared/project.js";
 // Untrusted document parsers run outside the HTTP event loop, with a hard deadline.
 export function ingest(
   buffer: Buffer,

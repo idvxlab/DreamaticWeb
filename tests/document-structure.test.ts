@@ -12,8 +12,6 @@ import {
 } from "../apps/server/src/source-content.js";
 import { create, projectDir, removeProject } from "../apps/server/src/store.js";
 import type { OfficeContentNode } from "officeparser";
-import { validateFactEvidence } from "../packages/agents/src/evidence.js";
-import { projectTools } from "../packages/agents/src/tools.js";
 
 test("structure keeps paragraph and list boundaries, table placeholders, page geometry", () => {
   const nodes: OfficeContentNode[] = [
@@ -77,7 +75,7 @@ test("structure keeps paragraph and list boundaries, table placeholders, page ge
   assert.match(md.markdown, /block:heading/);
 });
 
-test("Only Markdown is persisted; its coordinates are used by evidence tools", async () => {
+test("Only Markdown is persisted and ranges read the canonical document", async () => {
   const p = await create();
   try {
     const structured = structureDocument([
@@ -117,36 +115,6 @@ test("Only Markdown is persisted; its coordinates are used by evidence tools", a
       para.end - para.start,
     );
     assert.equal(raw.markdown, "Exact supported source claim.");
-    const checked = await validateFactEvidence(p, [
-      {
-        text: "Claim",
-        sourceId: source.id,
-        evidence: {
-          kind: "text",
-          start: para.start,
-          end: para.end,
-          quote: raw.markdown,
-        },
-      },
-    ]);
-    assert.equal(checked.facts[0].locationVerified, true);
-    const tool = projectTools(p, "analyst", { vision: false }).find(
-      (t) => t.name === "source_read",
-    )!;
-    const result = await tool.execute("md", {
-      sourceId: source.id,
-      kind: "markdown",
-      offset: 0,
-      limit: 30,
-    } as never);
-    const data = JSON.parse(
-      result.content
-        .filter((c) => c.type === "text")
-        .map((c) => c.text)
-        .join(""),
-    );
-    assert.equal(data.markdown.length, 30);
-    assert.equal(data.nextOffset, 30);
     await assert.rejects(
       () => readSourceMarkdown(p.id, { ...source, content: undefined }, 0, 100),
       /older source/,
@@ -201,15 +169,8 @@ test("Markdown rejects invalid mappings and damaged or incomplete artifacts, and
       p.id,
     );
     p.sources.push(source);
-    const tool = projectTools(p, "analyst", { vision: false }).find(
-      (t) => t.name === "source_read",
-    )!;
-    const result = await tool.execute("default", {
-      sourceId: source.id,
-    } as never);
-    const data = JSON.parse((result.content[0] as any).text);
-    assert.equal(data.markdown.match(/unique-cell/g).length, 1);
-    assert.equal(data.text, undefined);
+    const data = await readSourceMarkdown(p.id, source, 0, 16000);
+    assert.equal(data.markdown.match(/unique-cell/g)?.length, 1);
     await writeFile(
       path.join(projectDir(p.id), "sources", source.id, "reading.md"),
       "tampered",
@@ -257,11 +218,6 @@ test("Markdown is the sole authority for typed cells and citations; UI caches an
     const { readSourceTable } =
       await import("../apps/server/src/source-content.js");
     const { markdown } = await readSourceMarkdown(p.id, source, 0, 8000000);
-    const { sourceSnapshots, textEvidence } =
-      await import("../packages/agents/src/evidence.js");
-    const at = markdown.indexOf("SUM(A1:A2)");
-    const snapshotFor = sourceSnapshots(p.id);
-    const proof = textEvidence(await snapshotFor(source), at, at + 10);
     source.text = "conflicting legacy text";
     source.markdown = "corrupt display preview";
     source.tables = [{ name: "wrong", rows: [[999]] }];
@@ -269,18 +225,6 @@ test("Markdown is the sole authority for typed cells and citations; UI caches an
       values,
       [],
     ]);
-    const checked = await validateFactEvidence(p, [
-      { text: "formula", sourceId: source.id, evidence: proof },
-      {
-        text: "typed zero",
-        sourceId: source.id,
-        evidence: { kind: "cell", tableIndex: 0, row: 0, column: 1, value: 0 },
-      },
-    ]);
-    assert.deepEqual(
-      checked.facts.map((f) => f.locationVerified),
-      [true, true],
-    );
     await assert.rejects(
       () =>
         readSourceMarkdown(
@@ -299,7 +243,6 @@ test("Markdown is the sole authority for typed cells and citations; UI caches an
       markdown.replace("SUM", "BAD"),
     );
     await assert.rejects(() => readSourceTable(p.id, source, 0), /integrity/);
-    await assert.rejects(() => snapshotFor(source), /integrity/);
   } finally {
     await removeProject(p.id);
   }

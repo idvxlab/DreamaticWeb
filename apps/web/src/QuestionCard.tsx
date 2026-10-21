@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MessageCircleQuestion, ArrowRight, Loader2 } from "lucide-react";
-import type { Clarification } from "../../../packages/agents/src/questions";
+import type { Clarification } from "../../../packages/shared/project";
 import { useI18n } from "./i18n";
 export default function QuestionCard({
   question,

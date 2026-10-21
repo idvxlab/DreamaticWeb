@@ -1,21 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, mkdir, rm } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import ExcelJS from "exceljs";
 import AdmZip from "adm-zip";
 import { extract } from "../apps/server/src/extract.js";
 import { initStore } from "../apps/server/src/store.js";
 import { publicAddress, fetchPublic } from "../apps/server/src/network.js";
 import { sanitizeHtml } from "../apps/server/src/html.js";
-import { discoverSkills, skillTools } from "../packages/agents/src/skills.js";
-import {
-  runProject,
-  activeRuns,
-  parseJSON,
-} from "../packages/agents/src/runtime.js";
-import type { Project } from "../packages/agents/src/contracts.js";
 await initStore();
 test("CSV preserves quoted commas, Unicode, headers and values", async () => {
   const s = await extract(
@@ -96,73 +88,6 @@ test("Crawler blocks loopback, private, metadata and IPv4-mapped IPv6 addresses"
   await assert.rejects(() => fetchPublic("file:///etc/passwd"));
   await assert.rejects(() => fetchPublic("http://127.0.0.1"));
 });
-test("Skills discover dynamically and enforce per-agent allowlists", async () => {
-  const skills = await discoverSkills();
-  assert.ok(skills.some((s) => s.name === "web-design"));
-  const events: string[] = [];
-  const tool = skillTools(skills, "analyst", (s) => events.push(s))[1];
-  await assert.rejects(() => tool.execute("1", { name: "web-design" }));
-  const result = await tool.execute("2", { name: "evidence-analysis" });
-  assert.equal(events[0], "evidence-analysis");
-  assert.match(JSON.stringify(result), /source IDs/);
-  const root = path.join(
-    os.tmpdir(),
-    "dreamatic-skills-" + crypto.randomUUID(),
-  );
-  await mkdir(path.join(root, "custom"), { recursive: true });
-  await writeFile(
-    path.join(root, "custom/SKILL.md"),
-    "---\nname: custom\ndescription: Runtime addition\nroles: [designer]\n---\nCustom instruction",
-  );
-  process.env.DREAMATIC_SKILL_PATHS = root;
-  assert.ok((await discoverSkills()).some((s) => s.name === "custom"));
-  delete process.env.DREAMATIC_SKILL_PATHS;
-  await rm(root, { recursive: true });
-});
-test("Three-stage demo produces durable artifact and releases lock without claiming AI", async () => {
-  const old = process.env.DREAMATIC_MODE;
-  process.env.DREAMATIC_MODE = "demo";
-  const p: Project = {
-    id: crypto.randomUUID(),
-    title: "测试",
-    messages: [
-      {
-        role: "user",
-        text: "设计一个品牌网页",
-        time: new Date().toISOString(),
-      },
-    ],
-    sources: [],
-    versions: [],
-    events: [],
-    status: "idle",
-  };
-  const writes: string[] = [];
-  await runProject(
-    p,
-    async (p) => {
-      writes.push(p.status);
-    },
-    () => {},
-  );
-  assert.equal(p.status, "complete");
-  assert.equal(activeRuns.has(p.id), false);
-  assert.equal(p.versions.length, 1);
-  assert.match(p.versions[0].html, /未调用 AI/);
-  assert.ok(
-    ["orchestrator", "analyst", "designer"].every((role) =>
-      p.events.some((e) => e.role === role),
-    ),
-  );
-  assert.ok(writes.includes("running"));
-  if (old === undefined) delete process.env.DREAMATIC_MODE;
-  else process.env.DREAMATIC_MODE = old;
-});
-test("JSON outputs tolerate fenced JSON but reject invalid objects", () => {
-  assert.deepEqual(parseJSON('```json\n{"ok":true}\n```'), { ok: true });
-  assert.throws(() => parseJSON("not JSON"));
-});
-
 test("PPTX extracts slide text", async () => {
   const z = new AdmZip();
   z.addFile(
@@ -279,50 +204,6 @@ test("HTML policy restricts network, custom elements, navigation, event handlers
     /custom-widget|onclick|formaction|<svg|@import|http:\/\/127/,
   );
   assert.match(html, /type="button"/);
-});
-
-test("Pi skill discovery handles nested skills, missing descriptions and execution permission denial", async () => {
-  const root = path.join(
-    os.tmpdir(),
-    "dreamatic-nested-" + crypto.randomUUID(),
-  );
-  const before = process.env.DREAMATIC_SKILL_PATHS;
-  try {
-    for (const name of ["nested/valid", "bad", "shell"])
-      await mkdir(path.join(root, name), { recursive: true });
-    await writeFile(
-      path.join(root, "nested/valid/SKILL.md"),
-      "---\nname: nested-valid\ndescription: Nested test\nmetadata:\n  roles: [analyst]\n  formats: [csv]\n  tasks: [data-analysis]\n  permissions: [guidance]\n---\nAnalyze safely.",
-    );
-    await writeFile(
-      path.join(root, "bad/SKILL.md"),
-      "---\nname: no-description\n---\nNo description",
-    );
-    await writeFile(
-      path.join(root, "shell/SKILL.md"),
-      "---\nname: shell\ndescription: Needs shell\nmetadata:\n  permissions: [shell]\n---\nRun shell",
-    );
-    process.env.DREAMATIC_SKILL_PATHS = root;
-    const skills = await discoverSkills();
-    assert.ok(skills.some((s) => s.name === "nested-valid"));
-    assert.ok(
-      !skills.some((s) => ["shell", "no-description"].includes(s.name)),
-    );
-    const list = await skillTools(skills, "analyst", () => {})[0].execute("1", {
-      format: "csv",
-      task: "data-analysis",
-    });
-    assert.match(JSON.stringify(list), /nested-valid/);
-    const missing = await skillTools(skills, "analyst", () => {})[0].execute(
-      "2",
-      { format: "pdf" },
-    );
-    assert.doesNotMatch(JSON.stringify(missing), /nested-valid/);
-  } finally {
-    if (before === undefined) delete process.env.DREAMATIC_SKILL_PATHS;
-    else process.env.DREAMATIC_SKILL_PATHS = before;
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test("project directories contain pages and assets and are deleted recursively", async () => {

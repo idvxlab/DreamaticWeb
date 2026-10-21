@@ -12,7 +12,7 @@ import {
 import path from "node:path";
 import { z } from "zod";
 import { get, projectDir } from "./store.js";
-import { validatePage } from "../../../packages/agents/src/pages.js";
+import { validatePage } from "./page-validation.js";
 import { PREVIEW_CSP } from "../../../packages/shared/html-policy.js";
 const execute = promisify(execFile);
 const lifetime = 60 * 60 * 1000;

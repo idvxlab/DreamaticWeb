@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import type { Message } from "../../../packages/agents/src/contracts";
+import type { Message } from "../../../packages/shared/project";
 import { useI18n } from "./i18n";
 
 /** Small safe text formatter: links are protocol-checked, HTML is always text. */

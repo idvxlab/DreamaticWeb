@@ -16,7 +16,7 @@ import { fileTypeFromBuffer } from "file-type";
 import { persistExtraction } from "./source-content.js";
 import { DATA, projectDir } from "./store.js";
 import { fetchPublic } from "./network.js";
-import type { Source, Asset } from "../../../packages/agents/src/contracts.js";
+import type { Source, Asset } from "../../../packages/shared/project.js";
 export const FORMATS = [
   "pdf",
   "docx",

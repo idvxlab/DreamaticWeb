@@ -1,4 +1,4 @@
-import type { Message, RunEvent } from "../../../packages/agents/src/contracts";
+import type { Message, RunEvent } from "../../../packages/shared/project";
 
 /** Attribute details by turn boundaries, not by the latest role or latest run. */
 export function conversationTurns(messages: Message[], events: RunEvent[]) {

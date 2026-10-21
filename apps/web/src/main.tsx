@@ -37,7 +37,7 @@ import type {
   Role,
   Source,
   RunEvent,
-} from "../../../packages/agents/src/contracts";
+} from "../../../packages/shared/project";
 import { api, download, token } from "./api";
 import "./styles.css";
 import Settings from "./Settings";

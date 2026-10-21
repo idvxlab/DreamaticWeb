@@ -1,7 +1,7 @@
 import type {
   Asset,
   ProjectResponse,
-} from "../../../packages/agents/src/contracts";
+} from "../../../packages/shared/project";
 
 export type Fact = {
   text: string;

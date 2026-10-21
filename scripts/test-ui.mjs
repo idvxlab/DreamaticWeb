@@ -39,6 +39,7 @@ try {
       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     headless: true,
   });
+  await mkdir(path.join(data, "screenshots"), { recursive: true });
   const page = await browser.newPage({
     viewport: { width: 1512, height: 982 },
     deviceScaleFactor: 1,
@@ -50,7 +51,7 @@ try {
     .getByRole("heading", { name: "你的资料， 下一个精彩网页。" })
     .waitFor();
   await page.screenshot({
-    path: "docs/screenshots/workspace.png",
+    path: path.join(data, "screenshots", "workspace.png"),
     fullPage: true,
   });
   await page.getByRole("button", { name: "系统菜单" }).click();
@@ -79,7 +80,7 @@ try {
   await page.getByLabel("模型名称", { exact: true }).fill("user-model");
   await page.getByLabel("模型调用 URL", { exact: true }).fill("https://example.com/v1");
   await page.getByLabel("API 密钥", { exact: true }).fill("ui-test-secret");
-  await page.screenshot({ path: "docs/screenshots/settings.png", fullPage: true });
+  await page.screenshot({ path: path.join(data, "screenshots", "settings.png"), fullPage: true });
   await page.getByRole("tab", { name: "文档分析模型", exact: true }).click();
   assert.equal(await page.getByLabel("独立配置").inputValue(), "inherit");
   await page.getByRole("tab", { name: "系统", exact: true }).click();
@@ -97,7 +98,7 @@ try {
   await page.getByRole("button", { name: "System menu" }).click();
   await page.getByRole("menuitem", { name: "Models & settings" }).click();
   await page.getByRole("tab", { name: "System", exact: true }).click();
-  await page.screenshot({ path: "docs/screenshots/settings-en.png", fullPage: true });
+  await page.screenshot({ path: path.join(data, "screenshots", "settings-en.png"), fullPage: true });
   await page.getByLabel("Interface language").selectOption("zh");
   await page.getByRole("button", { name: "Save and close", exact: true }).click();
   await page.locator(".config-backdrop").waitFor({ state: "hidden" });
@@ -123,7 +124,26 @@ try {
   await composer.evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true })));
   assert.notEqual(await composer.inputValue(), "");
   await composer.press("Enter");
-  await page.getByText("演示设计完成", { exact: false }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "生成功能正在重构" }).waitFor();
+  // Seed a clearly labeled manual test page; no generation runtime is used.
+  const fixtureProjectId = await page.evaluate(() => localStorage.getItem("dreamatic-project"));
+  await fetch(base + "/api/projects/" + fixtureProjectId, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: "森屿生活 · UI 测试" }),
+  });
+  const fixture = await fetch(base + `/api/projects/${fixtureProjectId}/versions`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ baseVersionId: "", label: "UI 测试页面（未调用 AI）", html: `<!doctype html><html><head><title>素材与灵感</title><style>body{margin:0;background:#f5f3ed;color:#25392d;font-family:sans-serif}nav{padding:24px}main{padding:48px}h1{font-size:48px}p{line-height:1.8}</style></head><body><nav>森屿生活</nav><main><h1>森屿生活</h1><p>UI 测试页面 · 手动创建 · 未调用 AI</p><p>自然与可持续设计</p></main></body></html>` }),
+  });
+  assert.equal(fixture.status, 200);
+  await page.route(`**/api/projects/${fixtureProjectId}`, async route => {
+    const response = await route.fetch();
+    const project = await response.json();
+    project.messages = [{ role: "assistant", text: "UI 测试页面 · 未调用 AI", time: new Date().toISOString() }];
+    project.events = [{ id: "manual-ui-fixture", role: "system", kind: "status", text: "手动测试页面已载入", time: new Date().toISOString() }];
+    await route.fulfill({ json: project });
+  });
+  await page.reload();
   await page.getByRole("button", { name: "保存", exact: true }).waitFor();
   const frame = page.frameLocator(".gjs-frame");
   await frame.locator("h1").waitFor();
@@ -163,7 +183,7 @@ try {
   assert.equal(await page.locator(".run-log-list").isVisible(), false, "details default to collapsed");
   await page.getByRole("button", { name: "展开运行记录" }).click();
   const logLines = await page.locator(".run-log .log-line").allTextContents();
-  assert.ok(logLines.some((line) => /Orchestrator ·/.test(line)));
+  assert.ok(logLines.some((line) => /系统 ·/.test(line)));
   assert.ok(logLines.every((line) => /^\d{2}:\d{2}:\d{2} · (?:Orchestrator|Analyst|Designer|系统) ·/.test(line.trim())));
   await page.getByRole("button", { name: "收起运行记录" }).click();
   assert.equal(await page.getByRole("button", { name: "展开运行记录" }).getAttribute("aria-expanded"), "false");
@@ -227,12 +247,12 @@ try {
   const columnCard = page.locator('[data-block-kind="columns"]');
   assert.match(await columnCard.getAttribute("aria-label"), /并排展示两组内容/);
   await columnCard.focus();
-  await page.screenshot({ path: "docs/screenshots/components.png", fullPage: true });
+  await page.screenshot({ path: path.join(data, "screenshots", "components.png"), fullPage: true });
 
   await page.getByRole("button", { name: "样式", exact: true }).click();
   assert.equal(await page.locator("#selectors > .gjs-clm-tags").count(), 1);
   await page.screenshot({
-    path: "docs/screenshots/editor.png",
+    path: path.join(data, "screenshots", "editor.png"),
     fullPage: true,
   });
   await page.getByRole("button", { name: "版本", exact: true }).click();
@@ -258,7 +278,7 @@ try {
 
   await page.getByRole("button", { name: "关闭资料" }).click();
   await page.getByTitle("查看技能", { exact: true }).click();
-  await page.getByText("web-design", { exact: true }).waitFor();
+  assert.equal(await page.locator(".skills-list > *").count(), 0);
   await page.getByRole("button", { name: "关闭弹窗" }).click();
   assert.equal(await page.locator(".sidebar").getByRole("button",{name:"技能库",exact:false}).count(),0);
   await page.getByRole("button",{name:/^事实列表/}).click();
@@ -318,7 +338,7 @@ try {
   await page.getByRole("button",{name:"网页工作台",exact:false}).click();
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.screenshot({
-    path: "docs/screenshots/compact.png",
+    path: path.join(data, "screenshots", "compact.png"),
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -332,7 +352,7 @@ try {
   await page.getByRole("button", { name: "切换样式面板" }).click();
   assert.equal(await page.locator(".inspector").isVisible(), true);
   await page.getByRole("button", { name: "切换样式面板" }).click();
-  await page.screenshot({ path: "docs/screenshots/mobile.png", fullPage: true });
+  await page.screenshot({ path: path.join(data, "screenshots", "mobile.png"), fullPage: true });
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.reload();
   await page.getByRole("button", { name: "保存", exact: true }).waitFor();
@@ -349,6 +369,7 @@ try {
     const response = await route.fetch();
     const data = await response.json();
     if (interruptedView) {
+      data.messages = [{ role: "assistant", text: "历史界面测试数据 · 未调用 AI", time: new Date().toISOString() }];
       data.status = "error";
       data.error = "模型输出停滞超时";
       data.run ||= { id: "recovery-test", checkpoints: {} };
@@ -421,24 +442,23 @@ try {
       await card.getByRole("checkbox", { name: "公司故事" }).check();
     }
     await card.getByRole("textbox", { name: "回答" }).fill("请使用 PDF 全部信息，自行分析重点");
-    if (mode === "multiple") await page.screenshot({ path: "docs/screenshots/question-card.png", fullPage: true });
+    if (mode === "multiple") await page.screenshot({ path: path.join(data, "screenshots", "question-card.png"), fullPage: true });
     await card.getByRole("button", { name: "提交并继续" }).click();
-    await page.getByText("演示设计完成", { exact: false }).waitFor();
+    await card.getByText("生成功能正在重构", { exact: false }).waitFor();
     const result = await (await fetch(base + "/api/projects/" + id)).json();
-    assert.equal(result.status, "complete");
-    assert.ok(result.questions[0].answeredAt);
-    assert.equal(result.questions[0].answer.selected.length, mode === "multiple" ? 2 : mode === "single" ? 1 : 0);
-    assert.match(result.messages.find(m => m.role === "user").text, /PDF 全部信息/);
-    assert.equal((await fetch(base + `/api/projects/${id}/questions/${questionId}/answer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "duplicate" }) })).status, 409);
+    assert.equal(result.status, "needs_input");
+    assert.equal(result.questions[0].answeredAt, undefined);
+    assert.equal(result.versions.length, 0);
     await fetch(base + "/api/projects/" + id, { method: "DELETE" });
   }
   assert.deepEqual(errors, [], "Browser errors");
   console.log(
-    "PASS: server-side model dropdown settings → iframe sandbox/CSP → upload → demo generation → canvas text edit → saved version → responsive preview → blocks → restore → HTML export → source table → Skill catalog; no browser errors.",
+    "PASS: server-side model dropdown settings → iframe sandbox/CSP → upload → generation unavailable → manual test fixture → canvas text edit → saved version → responsive preview → blocks → restore → HTML export → source table → empty Skill catalog; no browser errors.",
   );
 } finally {
   await browser?.close();
+  const exited = new Promise((resolve) => server.once("exit", resolve));
   server.kill("SIGTERM");
-  await new Promise((r) => server.once("exit", r));
+  if (server.exitCode === null && server.signalCode === null) await exited;
   await rm(data, { recursive: true, force: true });
 }

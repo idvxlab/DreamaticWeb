@@ -7,7 +7,7 @@ import {
   X,
   Maximize2,
 } from "lucide-react";
-import type { ProjectResponse } from "../../../packages/agents/src/contracts";
+import type { ProjectResponse } from "../../../packages/shared/project";
 import { factImages, type Fact } from "./fact-model";
 import { useI18n } from "./i18n";
 

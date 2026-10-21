@@ -1,7 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { BookOpen, ListTree, ChevronDown, Loader2 } from "lucide-react";
-import type { RunEvent } from "../../../packages/agents/src/contracts";
-import { roles } from "../../../packages/agents/src/roles";
+import type { RunEvent } from "../../../packages/shared/project";
+// Labels for displaying historical activity; no role configuration or tools.
+const roles = {
+  orchestrator: { name: "Orchestrator" },
+  analyst: { name: "Analyst" },
+  designer: { name: "Designer" },
+};
 import { useI18n } from "./i18n";
 
 export default function RunLog({

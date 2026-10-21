@@ -14,30 +14,11 @@ import {
   readSourceTable,
   readCanonicalSource,
 } from "../apps/server/src/source-content.js";
-import { boundedInput } from "../packages/agents/src/input.js";
 
 const table = (text: string): OfficeContentNode => ({
   type: "table",
   children: [{ type: "row", children: [{ type: "cell", text }] }],
 });
-test("budget trimming handles actual table catalogs without iterating row counts", () => {
-  const input = {
-    sources: [
-      {
-        markdown: "x".repeat(10000),
-        markdownCoverage: { end: 10000, complete: true },
-        tables: [{ index: 0, name: "Sheet", rows: 10 }],
-      },
-    ],
-    conversation: [{ text: "old".repeat(10000) }, { text: "Latest request" }],
-  };
-  const parsed = JSON.parse(boundedInput(input, 3000));
-  assert.deepEqual(parsed.sources[0].tables, input.sources[0].tables);
-  assert.equal(parsed.conversation.at(-1).text, "Latest request");
-  assert.equal(parsed.sources[0].markdownCoverage.complete, false);
-  assert.equal(input.sources[0].markdownCoverage.complete, true);
-});
-
 test("one traversal retains list/inline annotations and indexes all annotation/body tables consistently", async () => {
   const structured = structureDocument([
     {

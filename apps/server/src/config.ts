@@ -15,11 +15,6 @@ export {
 const ROOT_PATH = process.cwd();
 const file = path.join(SETTINGS_ROOT, "settings.json");
 let current: RuntimeConfig | undefined;
-const names = {
-  reasoning: "DREAMATIC",
-  analyst: "DREAMATIC_ANALYST",
-  designer: "DREAMATIC_DESIGNER",
-} as const;
 function envProfile(prefix: string): ModelProfile {
   return {
     mode:
@@ -73,60 +68,15 @@ export function readConfig(): PublicConfig {
     },
   };
 }
-function apply(c: RuntimeConfig) {
-  process.env.DREAMATIC_MODE = c.mode;
-  process.env.DREAMATIC_LANGUAGE = c.language;
-  for (const key of ["reasoning", "analyst", "designer"] as const) {
-    const profile = c.models[key];
-    const prefix = names[key];
-    for (const [field, value] of Object.entries({
-      MODEL_MODE: profile?.mode || "",
-      BASE_URL: profile?.baseUrl || "",
-      MODEL: profile?.model || "",
-      API_KEY: profile?.apiKey || "",
-      VISION: profile ? String(profile.vision) : "",
-    }))
-      process.env[prefix + "_" + field] = value;
-  }
-}
-// Preserve previous saved endpoints and keys when upgrading the old flat configuration.
-export function migrateConfig(raw: any): RuntimeConfig {
-  if (raw?.models) return configSchema.parse(raw);
-  const profile: ModelProfile = {
-    mode: raw.baseUrl ? "openai-compatible" : "openai",
-    baseUrl:
-      raw.baseUrl ||
-      (raw.model && (!raw.provider || raw.provider === "openai")
-        ? "https://api.openai.com/v1"
-        : ""),
-    model: raw.roles?.orchestrator?.model || raw.model || "",
-    apiKey: raw.apiKey || "",
-    vision: raw.vision !== false,
-  };
-  const override = (role: string) =>
-    raw.roles?.[role]?.model
-      ? { ...profile, model: raw.roles[role].model }
-      : null;
-  return configSchema.parse({
-    mode: raw.mode || "live",
-    language: raw.language || "zh",
-    models: {
-      reasoning: profile,
-      analyst: override("analyst"),
-      designer: override("designer"),
-    },
-  });
-}
 export async function initConfig() {
   try {
-    current = migrateConfig(JSON.parse(await readFile(file, "utf8")));
+    current = configSchema.parse(JSON.parse(await readFile(file, "utf8")));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     current = initial();
   }
   if (current.workspace) await switchWorkspace(current.workspace);
   current.workspace = DATA;
-  apply(current);
 }
 export let configUpdating = false;
 export async function writeConfig(input: unknown) {
@@ -170,7 +120,6 @@ export async function writeConfig(input: unknown) {
       throw error;
     }
     current = c;
-    apply(c);
     return readConfig();
   } finally {
     configUpdating = false;
