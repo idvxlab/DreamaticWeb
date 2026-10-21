@@ -1,0 +1,144 @@
+{
+  "note": "Synthetic single-sample exploratory comparison, not a production performance benchmark. Includes all failed attempts and explicit manual retries. Provider token counts are reported as received.",
+  "runs": [
+    {
+      "note": "Single synthetic sample per role/condition; not a production benchmark. No original user material used.",
+      "reports": [
+        {
+          "role": "analyst",
+          "skillsEnabled": false,
+          "skills": [],
+          "elapsedMs": 2384,
+          "modelCalls": 1,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "cacheTokens": 0,
+          "skillCharacters": 0,
+          "error": "server_error: The service is busy. Please retry later."
+        },
+        {
+          "role": "analyst",
+          "skillsEnabled": true,
+          "skills": [
+            "analyst-information-extraction"
+          ],
+          "elapsedMs": 82252,
+          "modelCalls": 1,
+          "inputTokens": 1121,
+          "outputTokens": 826,
+          "cacheTokens": 228,
+          "skillCharacters": 2619,
+          "score": {
+            "required": 12,
+            "covered": 12,
+            "missing": [],
+            "facts": 12,
+            "exactDuplicateFacts": 0,
+            "mediaLinks": 1,
+            "mediaAccurate": true,
+            "contractValid": true
+          }
+        },
+        {
+          "role": "designer",
+          "skillsEnabled": false,
+          "skills": [],
+          "elapsedMs": 109248,
+          "modelCalls": 1,
+          "inputTokens": 4770,
+          "outputTokens": 5960,
+          "cacheTokens": 0,
+          "skillCharacters": 0,
+          "score": {
+            "sections": 9,
+            "landmarks": true,
+            "hasExactTable": true,
+            "preservesUnits": true,
+            "hasWorkingAnchors": true,
+            "nativeDisclosure": true,
+            "responsiveCSS": true,
+            "scripts": 0,
+            "placeholderLinks": 0,
+            "htmlCharacters": 11191
+          }
+        },
+        {
+          "role": "designer",
+          "skillsEnabled": true,
+          "skills": [
+            "designer-dashboard",
+            "designer-visual-design",
+            "designer-interaction-design"
+          ],
+          "elapsedMs": 41835,
+          "modelCalls": 1,
+          "inputTokens": 4309,
+          "outputTokens": 8521,
+          "cacheTokens": 0,
+          "skillCharacters": 5393,
+          "error": "No final tool submission"
+        }
+      ]
+    },
+    {
+      "note": "Single synthetic sample per role/condition; not a production benchmark. No original user material used.",
+      "reports": [
+        {
+          "role": "analyst",
+          "skillsEnabled": false,
+          "skills": [],
+          "elapsedMs": 20857,
+          "modelCalls": 1,
+          "inputTokens": 27689,
+          "outputTokens": 805,
+          "cacheTokens": 0,
+          "skillCharacters": 0,
+          "score": {
+            "required": 12,
+            "covered": 12,
+            "missing": [],
+            "facts": 13,
+            "exactDuplicateFacts": 0,
+            "mediaLinks": 1,
+            "mediaAccurate": true,
+            "contractValid": true
+          }
+        }
+      ]
+    },
+    {
+      "note": "Single synthetic sample per role/condition; not a production benchmark. No original user material used.",
+      "reports": [
+        {
+          "role": "designer",
+          "skillsEnabled": true,
+          "skills": [
+            "designer-dashboard",
+            "designer-visual-design"
+          ],
+          "elapsedMs": 36802,
+          "modelCalls": 1,
+          "inputTokens": 3807,
+          "outputTokens": 6571,
+          "cacheTokens": 0,
+          "skillCharacters": 3877,
+          "stopReasons": [
+            "toolUse"
+          ],
+          "score": {
+            "sections": 4,
+            "landmarks": true,
+            "hasExactTable": true,
+            "preservesUnits": true,
+            "hasWorkingAnchors": true,
+            "nativeDisclosure": true,
+            "responsiveCSS": true,
+            "scripts": 0,
+            "placeholderLinks": 0,
+            "htmlCharacters": 11413
+          }
+        }
+      ]
+    }
+  ]
+}

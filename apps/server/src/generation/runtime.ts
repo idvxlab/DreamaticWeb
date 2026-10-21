@@ -34,6 +34,7 @@ import {
   factsMarkdown,
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
+import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 
 class ModelRequestError extends Error {
@@ -136,6 +137,8 @@ export interface RunOptions {
   streamFn?: StreamFn;
   promptDir?: string;
   resume?: boolean;
+  /** Offline comparison seam; production always enables the project Skills. */
+  skills?: SkillLibrary | false;
 }
 export function runProject(
   project: Project,
@@ -171,6 +174,11 @@ async function execute(
     artifactWrites: 0,
     patchOperations: 0,
     fullPageWrites: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    skillCharacters: 0,
+    skillLoads: 0,
+    skillReads: 0,
     stages: [] as NonNullable<
       NonNullable<Project["generation"]>["metrics"]
     >["stages"],
@@ -226,8 +234,55 @@ async function execute(
       role === "orchestrator"
         ? cfg.models.reasoning
         : cfg.models[role] || cfg.models.reasoning;
+    const library =
+      options.skills === false ? undefined : options.skills || skillLibrary;
+    const skillCatalog = library ? (await library.catalog()).skills : [];
+    for (const match of request.text.matchAll(/\/skill:([a-z0-9-]+)/g))
+      if (!skillCatalog.some((s) => s.name === match[1]))
+        throw new Error("Skill 不存在：" + match[1]);
+    const analystSkills = library
+      ? selectSkills(
+          "analyst",
+          { text: request.text, editing: false },
+          skillCatalog,
+        )
+      : [];
+    const analystSignature = library
+      ? await library.signature("analyst", analystSkills)
+      : "";
+    const existingPage = p.versions.at(-1);
+    const redesign =
+      request.mode === "redesign" ||
+      /(?:整体重设计|整体重新设计|推倒重做|重新设计整个|full redesign|redesign (?:the whole|entire))/i.test(
+        request.text,
+      );
+    const editing = Boolean(existingPage) && !redesign;
+    const immediateDuplicate =
+      state.completed?.requestHash === requestHash &&
+      state.completed.versionId === existingPage?.id;
+    let designerSkills =
+      immediateDuplicate && state.completed?.skills
+        ? state.completed.skills.designer
+        : library
+          ? selectSkills(
+              "designer",
+              { text: request.text, brief: p.brief, editing },
+              skillCatalog,
+            )
+          : [];
+    let designerSignature = library
+      ? await library.signature("designer", designerSkills)
+      : "";
     const policy = (role: Role) =>
-      hash(prompts[role] + JSON.stringify(profile(role)));
+      hash(
+        prompts[role] +
+          JSON.stringify(profile(role)) +
+          (role === "analyst"
+            ? analystSignature
+            : role === "designer"
+              ? designerSignature
+              : ""),
+      );
     const documents = await Promise.all(
       p.sources.map(async (source) => ({
         source,
@@ -240,7 +295,7 @@ async function execute(
         .map(({ source, document }) => `${source.id}:${document.hash}`)
         .join("|"),
     );
-    const dependenciesKey = hash(
+    let dependenciesKey = hash(
       sourceKey +
         (["orchestrator", "analyst", "designer"] as const)
           .map(policy)
@@ -279,6 +334,32 @@ async function execute(
       p.run!.activeRole = role;
       event(role, roleNames[role]);
       await save(p);
+      const names =
+        role === "analyst"
+          ? analystSkills
+          : role === "designer"
+            ? designerSkills
+            : [];
+      const skillStart = performance.now();
+      const prepared =
+        library && names.length
+          ? await library.prepare(role, names)
+          : { prompt: "", names: [], characters: 0 };
+      const skillMs = Math.round(performance.now() - skillStart);
+      metrics.skillCharacters += prepared.characters;
+      metrics.skillLoads += prepared.names.length;
+      if (prepared.names.length)
+        event(role, "已加载 " + prepared.names.join(", "), "skill", {
+          skillCharacters: prepared.characters,
+        });
+      // Expose Pi's native scoped reader only when this stage can benefit from Skills.
+      if (library && role !== "orchestrator" && names.length)
+        tools = [
+          ...tools,
+          library.reader(role, () => {
+            metrics.skillReads++;
+          }),
+        ];
       const runtime = modelRuntime(profile(role));
       const stageStart = performance.now(),
         callStart = metrics.modelCalls;
@@ -288,7 +369,8 @@ async function execute(
         responseStatus = 0;
       const agent = new Agent({
         initialState: {
-          systemPrompt: prompts[role],
+          systemPrompt:
+            prompts[role] + (prepared.prompt ? "\n\n" + prepared.prompt : ""),
           model: runtime.model,
           thinkingLevel: runtime.thinkingLevel,
           tools,
@@ -318,6 +400,13 @@ async function execute(
         },
       });
       agent.subscribe((event) => {
+        if (
+          event.type === "message_end" &&
+          event.message.role === "assistant"
+        ) {
+          metrics.inputTokens += event.message.usage.input;
+          metrics.outputTokens += event.message.usage.output;
+        }
         if (event.type === "tool_execution_end") lastTool = event.toolName;
       });
       const abort = () => agent.abort();
@@ -347,6 +436,9 @@ async function execute(
         controller.signal.removeEventListener("abort", abort);
         metrics.stages.push({
           role,
+          skills: prepared.names,
+          skillCharacters: prepared.characters,
+          skillMs,
           reused: false,
           elapsedMs: Math.round(performance.now() - stageStart),
           modelCalls: metrics.modelCalls - callStart,
@@ -358,7 +450,6 @@ async function execute(
       event(role, "复用已保存的 Markdown 结果");
     }
     let intent = await loadArtifact(p.id, "intent", state.intent);
-    const existingPage = p.versions.at(-1);
     const intentChanged =
       request.mode === "intent" ||
       (request.mode === "auto" &&
@@ -546,12 +637,22 @@ async function execute(
           facts: analysis.facts.filter((f) => selected.includes(f.id)),
         }
       : analysis;
-    const redesign =
-      request.mode === "redesign" ||
-      /(?:整体重设计|整体重新设计|推倒重做|重新设计整个|full redesign|redesign (?:the whole|entire))/i.test(
-        request.text,
-      );
-    const editing = Boolean(existingPage) && !redesign;
+    designerSkills = library
+      ? selectSkills(
+          "designer",
+          { text: request.text, brief, editing },
+          skillCatalog,
+        )
+      : [];
+    designerSignature = library
+      ? await library.signature("designer", designerSkills)
+      : "";
+    dependenciesKey = hash(
+      sourceKey +
+        (["orchestrator", "analyst", "designer"] as const)
+          .map(policy)
+          .join("|"),
+    );
     let accepted:
       | {
           html: string;
@@ -707,7 +808,12 @@ async function execute(
     p.run!.checkpoints.designer = { completedAt: new Date().toISOString() };
     p.run!.completedVersionId = versionId;
     delete p.run!.activeRole;
-    state.completed = { requestHash, versionId, dependenciesKey };
+    state.completed = {
+      requestHash,
+      versionId,
+      dependenciesKey,
+      skills: { analyst: analystSkills, designer: designerSkills },
+    };
     delete state.pending;
     p.status = "complete";
     event(

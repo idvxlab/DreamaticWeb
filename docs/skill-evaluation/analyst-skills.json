@@ -1,0 +1,86 @@
+{
+  "summary": "Complete-source extraction for a synthetic S2 indoor-logistics sensor product and pricing website, covering launch, conditional temperature accuracy and battery life, sampling, qualified pilot results, Basic and Team first-year pricing, deployment order, and the caption-supported assembly video.",
+  "facts": [
+    {
+      "id": "source-status",
+      "text": "The supplied source is a synthetic evaluation example, not a real company.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "product-launch",
+      "text": "Lumen Labs launched the S2 sensor in March 2025 for indoor logistics.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "temperature-specifications",
+      "text": "The S2 sensor's temperature range is 0–50 °C. Its stated accuracy is ±0.3 °C only at 10–35 °C.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "sampling-interval",
+      "text": "The S2 sensor samples every 30 seconds.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "battery-life",
+      "text": "The replaceable battery lasts up to 18 months at 20 °C; this battery-life claim does not apply at all temperatures.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "outdoor-certification",
+      "text": "No outdoor certification is provided for the S2 sensor.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "pilot-results",
+      "text": "A non-randomized May 2025 pilot at 24 sites reported median processing time 18% lower, excluding installation/setup time. This result applies to the pilot and is not a guaranteed customer outcome.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "maintenance-claim",
+      "text": "The vendor claims simpler maintenance; no independent maintenance study is supplied.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "pricing-basic",
+      "text": "Basic costs USD 240 annually for the first year only, supports up to 10 seats, and includes CSV export. Tax and setup are excluded.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "pricing-team",
+      "text": "Team costs USD 480 annually for the first year only, supports up to 30 seats, and includes CSV and JSON export. Tax and setup are excluded.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    },
+    {
+      "id": "deployment-sequence",
+      "text": "Deployment sequence: calibrate before attaching the sensor; pair over Bluetooth; then confirm a timestamped sample. The supplied assembly demonstration video's caption explicitly shows calibration and pairing.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": [
+        "22222222-2222-4222-8222-222222222222"
+      ]
+    },
+    {
+      "id": "replacement-batteries",
+      "text": "Replacement batteries are sold separately.",
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "assetIds": []
+    }
+  ],
+  "limitations": [
+    "The source is explicitly synthetic and must not be represented as evidence about a real company.",
+    "Pricing is specified for the first year only; subsequent-year prices are not supplied.",
+    "The pilot is non-randomized, excludes installation/setup time, and does not establish a guaranteed customer outcome.",
+    "No independent maintenance study or outdoor certification is supplied.",
+    "No product photograph is supplied. The assembly video's association is based on the supplied caption; its visual contents were not independently inspected."
+  ]
+}

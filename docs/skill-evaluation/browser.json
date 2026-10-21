@@ -1,0 +1,26 @@
+[
+  {
+    "condition": "baseline",
+    "width": 1440,
+    "noHorizontalOverflow": true,
+    "disclosureWorks": true
+  },
+  {
+    "condition": "baseline",
+    "width": 390,
+    "noHorizontalOverflow": true,
+    "disclosureWorks": true
+  },
+  {
+    "condition": "skills",
+    "width": 1440,
+    "noHorizontalOverflow": true,
+    "disclosureWorks": true
+  },
+  {
+    "condition": "skills",
+    "width": 390,
+    "noHorizontalOverflow": true,
+    "disclosureWorks": true
+  }
+]

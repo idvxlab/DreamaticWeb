@@ -4,7 +4,7 @@
 
 2026-10-21 查询 npm 官方 registry 的 `dist-tags.latest`：`@earendil-works/pi-agent-core` 与 `@earendil-works/pi-ai` 均为 1.3.0，Node 要求 ≥22.19.0。GitHub latest 同时指向 [v1.3.0](https://github.com/earendil-works/pi/releases/tag/v1.3.0)。依赖及工具 schema 使用的 typebox 1.3.27 均锁定精确版本。
 
-以安装发布包的 README、公开类型声明和该发布版接口为准，未复制运行时内部代码。当前只需要公共 Agent、provider collection 和自定义工具，不安装 coding-agent CLI 或开放任意 shell/文件系统工具。
+以安装发布包的 README、公开类型声明和该发布版接口为准，未复制运行时内部代码。业务运行继续使用公共 Agent 和 provider collection。专业 Skills 接入增加同版本 pi-coding-agent 依赖，只从其公共入口使用原生 Skill 发现、提示格式化和 read 工具；不启动 coding-agent CLI、不开放任意 shell 或文件系统。
 
 重要接口：Agent 构造必须提供 streamFn；使用 createModels/createProvider 绑定官方 openAIResponsesApi 或 openAICompletionsApi；上下文的系统提示和工具位于 transcript system message；自定义工具以 TypeBox schema 声明参数，execute 返回 Pi AgentToolResult。结果提交工具返回 terminate:true，避免多一次自动确认请求。finishTurn 控制上限与已提交结果的退出，取消调用 Agent.abort。
 

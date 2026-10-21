@@ -17,6 +17,7 @@ import {
   publicProject,
 } from "./store.js";
 import { extractUrl, FORMATS } from "./extract.js";
+import { skillLibrary } from "./generation/skills.js";
 import { activeRuns, runProject } from "./generation/runtime.js";
 import { requestSchema } from "../../../packages/shared/generation.js";
 import type { RunEvent } from "../../../packages/shared/project.js";
@@ -32,6 +33,7 @@ import { validatePage } from "./page-validation.js";
 import { APP_VERSION } from "../../../packages/shared/app-info.js";
 await initStore();
 await initConfig();
+await skillLibrary.catalog();
 // Interrupted runs retain persisted artifacts and the pending request for explicit resume.
 for (const name of await projectIds()) {
   try {
@@ -104,8 +106,12 @@ app.put("/api/config", async (req, res) => {
     return res.status(409).json({ error: "请等待资料解析结束后再修改配置" });
   res.json(await writeConfig(req.body));
 });
-app.get("/api/skills/diagnostics", (_req, res) => res.json([]));
-app.get("/api/skills", (_req, res) => res.json([]));
+app.get("/api/skills/diagnostics", async (_req, res) =>
+  res.json((await skillLibrary.catalog()).diagnostics),
+);
+app.get("/api/skills", async (_req, res) =>
+  res.json(await skillLibrary.list()),
+);
 app.use("/api/projects", (_req, res, next) => {
   if (configUpdating)
     return res.status(409).json({ error: "工作目录正在切换，请稍后重试" });

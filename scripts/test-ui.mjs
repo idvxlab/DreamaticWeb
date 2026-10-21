@@ -278,7 +278,7 @@ try {
 
   await page.getByRole("button", { name: "关闭资料" }).click();
   await page.getByTitle("查看技能", { exact: true }).click();
-  assert.equal(await page.locator(".skills-list > *").count(), 0);
+  assert.equal(await page.locator(".skills-list > *").count(), 10);
   await page.getByRole("button", { name: "关闭弹窗" }).click();
   assert.equal(await page.locator(".sidebar").getByRole("button",{name:"技能库",exact:false}).count(),0);
   await page.getByRole("button",{name:/^事实列表/}).click();
@@ -461,7 +461,7 @@ try {
   }
   assert.deepEqual(errors, [], "Browser errors");
   console.log(
-    "PASS: server-side model dropdown settings → iframe sandbox/CSP → upload → explicit demo-mode notice → manual test fixture → canvas text edit → saved version → responsive preview → blocks → restore → HTML export → source table → empty Skill catalog; no browser errors.",
+    "PASS: server-side model dropdown settings → iframe sandbox/CSP → upload → explicit demo-mode notice → manual test fixture → canvas text edit → saved version → responsive preview → blocks → restore → HTML export → source table → native Pi Skill catalog; no browser errors.",
   );
 } finally {
   await browser?.close();

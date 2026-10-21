@@ -66,8 +66,14 @@ export interface GenerationState {
     requestHash: string;
     versionId: string;
     dependenciesKey: string;
+    skills?: { analyst: string[]; designer: string[] };
   };
   metrics?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    skillCharacters?: number;
+    skillLoads?: number;
+    skillReads?: number;
     elapsedMs: number;
     modelCalls: number;
     sourceReads: number;
@@ -76,6 +82,9 @@ export interface GenerationState {
     fullPageWrites: number;
     stages: {
       role: string;
+      skills?: string[];
+      skillCharacters?: number;
+      skillMs?: number;
       reused: boolean;
       elapsedMs: number;
       modelCalls: number;

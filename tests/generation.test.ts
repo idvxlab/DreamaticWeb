@@ -166,6 +166,20 @@ test("real Pi stages: first generation 3 calls, selected-fact edit 1, duplicate 
       "terminal tool causes no extra confirmation request",
     );
     assert.equal(p.generation!.metrics!.artifactWrites, 2);
+    assert.ok(
+      p
+        .generation!.metrics!.stages.find((s) => s.role === "analyst")!
+        .skills!.includes("analyst-information-extraction"),
+    );
+    assert.ok(p.generation!.metrics!.skillCharacters! > 0);
+    assert.equal(p.generation!.metrics!.inputTokens, 30);
+    await run("创建品牌网页");
+    assert.equal(
+      seen.length,
+      3,
+      "repeating the initial request reuses the generated version despite create→edit state transition",
+    );
+    assert.equal(p.generation!.metrics!.modelCalls, 0);
     assert.match(
       await readFile(path.join(projectDir(p.id), "results/intent.md"), "utf8"),
       /# User Intent Brief/,
@@ -610,5 +624,114 @@ test("additional source ranges and optional image inspection use Pi tools and ca
     assert.ok(p.versions[0].html.includes(media.assets[0].url));
   } finally {
     await removeProject(p.id);
+  }
+});
+
+test("Skill upgrades invalidate only affected stages, preserve patch mode and keep warm loads free of extra reads", async () => {
+  const { SkillLibrary, SKILLS_ROOT } =
+    await import("../apps/server/src/generation/skills.js");
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "dreamatic-skill-runtime-"),
+  );
+  await cp(SKILLS_ROOT, path.join(root, "skills"), { recursive: true });
+  const library = new SkillLibrary(path.join(root, "skills"));
+  const p = await create();
+  const seen: string[] = [];
+  const streamFn: StreamFn = (model, context) => {
+    const sys = getCurrentSystemMessage(context.messages)!;
+    const prompt =
+      typeof sys.content === "string"
+        ? sys.content
+        : sys.content.map((c) => c.text).join("\n");
+    if (prompt.includes("# Orchestrator")) {
+      seen.push("orchestrator");
+      assert.ok(!prompt.includes("<available_skills>"));
+      return answer(model, "submit_intent", brief);
+    }
+    if (prompt.includes("# Analyst")) {
+      seen.push("analyst");
+      assert.ok(prompt.includes("# Extract useful facts in one pass"));
+      return answer(model, "submit_facts", {
+        summary: "Synthetic test",
+        facts: [],
+        limitations: [],
+      });
+    }
+    seen.push("designer");
+    if (p.versions.length)
+      return answer(model, "page_patch", {
+        baseVersionId: p.versions.at(-1)!.id,
+        operations: [
+          {
+            selector: "#title",
+            action: "set_style",
+            name: "color",
+            value: "#223322",
+          },
+        ],
+      });
+    return answer(model, "submit_page", { html });
+  };
+  const run = (text: string) =>
+    runProject(p, requestSchema.parse({ text }), save, () => {}, {
+      config,
+      streamFn,
+      skills: library,
+    });
+  try {
+    await run("创建品牌网站");
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(seen.length, 3);
+    const initialReads = library.io.reads;
+    await run("修改标题颜色");
+    assert.equal(p.generation!.metrics!.modelCalls, 1);
+    assert.equal(library.io.reads, initialReads);
+    assert.deepEqual(
+      p.generation!.metrics!.stages.find((s) => s.role === "designer")!.skills,
+      ["designer-visual-design"],
+    );
+    const factsFile = path.join(
+      root,
+      "skills/analyst-information-extraction/SKILL.md",
+    );
+    await writeFile(
+      factsFile,
+      (await readFile(factsFile, "utf8")) +
+        "\nPreserve supplied legal scope.\n",
+    );
+    library.invalidate();
+    const count = seen.length;
+    await run("修改标题颜色");
+    assert.deepEqual(seen.slice(count), ["analyst", "designer"]);
+    assert.equal(p.generation!.metrics!.modelCalls, 2);
+    assert.equal(p.generation!.metrics!.fullPageWrites, 0);
+    // Unrelated website-type guidance must not cause the same local edit to regenerate.
+    const editorial = path.join(root, "skills/designer-editorial/SKILL.md");
+    await writeFile(
+      editorial,
+      (await readFile(editorial, "utf8")) + "\nKeep article timestamps.\n",
+    );
+    library.invalidate();
+    await run("修改标题颜色");
+    assert.equal(p.generation!.metrics!.modelCalls, 0);
+    const designFile = path.join(
+      root,
+      "skills/designer-visual-design/SKILL.md",
+    );
+    await writeFile(
+      designFile,
+      (await readFile(designFile, "utf8")) + "\nRetain baseline alignment.\n",
+    );
+    library.invalidate();
+    const before = seen.length;
+    await run("修改标题颜色");
+    assert.deepEqual(seen.slice(before), ["designer"]);
+    assert.equal(p.generation!.metrics!.modelCalls, 1);
+    assert.equal(p.generation!.metrics!.fullPageWrites, 0);
+    assert.equal(p.generation!.metrics!.sourceReads, 0);
+  } finally {
+    library.close();
+    await removeProject(p.id);
+    await rm(root, { recursive: true, force: true });
   }
 });

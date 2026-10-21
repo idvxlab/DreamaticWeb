@@ -71,3 +71,22 @@ PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；�
 默认只监听回环地址，对外监听须设置 `DREAMATIC_ACCESS_TOKEN`。保留同源限制、SSRF 防护、HTML 白名单、CSP 和 iframe sandbox。页面局部补丁绑定版本 ID，不能覆盖并发更新。项目删除会永久删除该独立目录。
 
 详细架构、Pi 核实记录和验证边界见 [架构与验证](docs/architecture.md)。
+
+
+## 专业 Skills
+
+`.agents/skills` 保存 10 项可移植 Skill。Pi 通过官方 `loadSkillsFromDir` 发现、`formatSkillsForPrompt` 展示目录、`createReadTool` 按需读取；角色权限和文件缓存由应用适配。仅添加锁定版本的 `pi-coding-agent@1.3.0` 原生加载依赖，不启用它的 CLI、shell 或额外 Agent。
+
+Analyst 默认使用 `analyst-information-extraction`。Designer 根据任务选择网站类型并组合必要的架构、视觉或交互指导，最多四项；简单文字编辑不加载设计 Skill。选定正文在现有模型请求前注入，不额外调用模型选择 Skill。可用 `/skill:designer-editorial` 明确选择已安装技能。参考资料通过受限原生 `read` 工具按需加载，不预读全部参考内容。
+
+`GET /api/skills` 展示真实目录，`/api/skills/diagnostics` 返回原生发现诊断。新增或修改目录被 watcher 发现；相关 Skill/参考文件变化影响对应缓存指纹，不因修改无关技能而重跑分析。指标增加 Skills、加载字符数、预加载耗时和实际 provider token 用量。
+
+同一目录由 Codex 原生 `.agents/skills` 发现；`.claude/skills` 是指向它的符号链接。格式与资源访问已检查，Claude 客户端是否执行通过须以当前环境的实际测试为准。完整职责、兼容性与质量/性能报告见 [Skills 实施记录](docs/skills.md)。
+
+显式离线评估（只发送脚本内合成材料，不重放用户文档）：
+
+```sh
+node --import tsx scripts/evaluate-skills.ts --live --output /private/tmp/dreamatic-skill-evaluation
+```
+
+该命令会使用当前项目配置的模型，最多四次请求。生产运行不执行评分或对照提取。支持 `--role analyst|designer` 与 `--condition baseline|skills` 限定单个对照样本。

@@ -5,6 +5,7 @@ Performance first: reuse canonical Markdown, intent briefs, facts and page compo
 - `apps/web`: React workspace and GrapesJS canvas. Preserve the existing warm gray, dark ink, orange and lime design. Add required functionality using existing components and styles.
 - `apps/server`: API, ingestion, public website fetching, storage, HTML policy and generation.
 - `apps/server/src/generation`: exactly three roles through public Pi Agent/provider/tool contracts. Never copy Pi runtime internals. Verify the latest stable Pi version before changing dependencies.
+- `.agents/skills`: portable professional instructions. Use Pi 1.3.0 public Skill discovery and scoped native read; never copy its loader or inject every body. `.claude/skills` links to the same canonical directory.
 - `config/agents`: separate runtime-loaded Markdown role definitions. No duplicate role instructions in business code.
 - `packages/shared`: shared interface and configuration types.
 - `workspace`: ignored runtime data; never commit user material or credentials. Never read credentials from the adjacent Dreamatic project.
