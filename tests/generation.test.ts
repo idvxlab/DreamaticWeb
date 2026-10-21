@@ -146,7 +146,7 @@ test("real Pi stages: first generation 3 calls, selected-fact edit 1, duplicate 
             { selector: "#title", action: "set_text", value: "Updated" },
           ],
         });
-      return answer(model, "submit_page", { html });
+      return answer(model, "submit_page", { html, usedFactIds: ["brand"] });
     };
     const run = async (text: string, extra = {}) =>
       runProject(p, requestSchema.parse({ text, ...extra }), save, () => {}, {
@@ -165,6 +165,7 @@ test("real Pi stages: first generation 3 calls, selected-fact edit 1, duplicate 
       3,
       "terminal tool causes no extra confirmation request",
     );
+    assert.deepEqual(p.versions.at(-1)!.appliedFactIds, ["brand"]);
     assert.equal(p.generation!.metrics!.artifactWrites, 2);
     assert.ok(
       p
@@ -330,7 +331,7 @@ test("critical questions suspend Pi and resume in order; cancellation preserves 
         });
       }
       order.push("designer");
-      return answer(model, "submit_page", { html });
+      return answer(model, "submit_page", { html, usedFactIds: [] });
     };
     const request = requestSchema.parse({ text: "创建网页" });
     await runProject(p, request, save, () => {}, { config, streamFn });
@@ -463,7 +464,7 @@ test("resume after a provider failure reuses saved intent/facts even for mode:in
         facts: [],
         limitations: [],
       });
-    if (!fail) return answer(model, "submit_page", { html });
+    if (!fail) return answer(model, "submit_page", { html, usedFactIds: [] });
     fail = false;
     const stream = createAssistantMessageEventStream();
     const message: AssistantMessage = {
@@ -595,6 +596,7 @@ test("additional source ranges and optional image inspection use Pi tools and ca
         ),
       );
       return answer(model, "submit_page", {
+        usedFactIds: [],
         html: `<html><body><h1>Brand</h1><img alt="Logo" src="${media.assets[0].url}"></body></html>`,
       });
     };
@@ -670,7 +672,7 @@ test("Skill upgrades invalidate only affected stages, preserve patch mode and ke
           },
         ],
       });
-    return answer(model, "submit_page", { html });
+    return answer(model, "submit_page", { html, usedFactIds: [] });
   };
   const run = (text: string) =>
     runProject(p, requestSchema.parse({ text }), save, () => {}, {
@@ -733,5 +735,109 @@ test("Skill upgrades invalidate only affected stages, preserve patch mode and ke
     library.close();
     await removeProject(p.id);
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("explicit fact selection updates publish associations atomically, support none, and reject stale versions", async () => {
+  const p = await create();
+  let selection: string[] = ["a", "b"];
+  let reject = false;
+  const streamFn: StreamFn = (model, context) => {
+    const sys = getCurrentSystemMessage(context.messages)!;
+    const names = (sys.toolsAdded || []).map((t) => t.name);
+    if (names.includes("submit_intent"))
+      return answer(model, "submit_intent", brief);
+    if (names.includes("submit_facts"))
+      return answer(model, "submit_facts", {
+        summary: "Synthetic facts",
+        limitations: [],
+        facts: ["a", "b"].map((id) => ({
+          id,
+          text: `Fact ${id}`,
+          sourceId: "user",
+          assetIds: [],
+        })),
+      });
+    if (reject)
+      return answer(model, "page_patch", {
+        baseVersionId: p.versions.at(-1)!.id,
+        usedFactIds: ["missing"],
+        operations: [
+          { selector: "#details", action: "set_text", value: "Rejected" },
+        ],
+      });
+    if (names.includes("page_patch"))
+      return answer(model, "page_patch", {
+        baseVersionId: p.versions.at(-1)!.id,
+        usedFactIds: selection,
+        operations: [
+          {
+            selector: "#details",
+            action: "set_text",
+            value:
+              selection.map((id) => `Fact ${id}`).join(" ") ||
+              "No selected facts",
+          },
+        ],
+      });
+    return answer(model, "submit_page", { html, usedFactIds: selection });
+  };
+  const run = (extra = {}) =>
+    runProject(
+      p,
+      requestSchema.parse({ text: "Apply exact selected facts", ...extra }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+  try {
+    await run();
+    assert.equal(p.status, "complete", p.error);
+    const original = p.versions.at(-1)!;
+    assert.deepEqual(original.appliedFactIds, ["a", "b"]);
+    selection = ["b"];
+    await run({
+      updateFacts: true,
+      selectedFactIds: selection,
+      baseVersionId: original.id,
+    });
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 1);
+    assert.equal(p.generation!.metrics!.fullPageWrites, 0);
+    assert.deepEqual(p.versions.at(-1)!.appliedFactIds, ["b"]);
+    assert.deepEqual(original.appliedFactIds, ["a", "b"]);
+    projects.delete(p.id);
+    assert.deepEqual((await get(p.id)).versions.at(-1)!.appliedFactIds, ["b"]);
+    const before = p.versions.length;
+    await run({
+      updateFacts: true,
+      selectedFactIds: [],
+      baseVersionId: original.id,
+    });
+    assert.equal(p.status, "error");
+    assert.equal(p.generation!.metrics!.modelCalls, 0);
+    assert.equal(p.versions.length, before);
+    reject = true;
+    await run({
+      updateFacts: true,
+      selectedFactIds: [],
+      baseVersionId: p.versions.at(-1)!.id,
+    });
+    assert.equal(p.status, "error");
+    assert.deepEqual(p.versions.at(-1)!.appliedFactIds, ["b"]);
+    assert.equal(p.versions.length, before);
+    reject = false;
+    selection = [];
+    await run({
+      updateFacts: true,
+      selectedFactIds: [],
+      baseVersionId: p.versions.at(-1)!.id,
+    });
+    assert.equal(p.status, "complete", p.error);
+    assert.deepEqual(p.versions.at(-1)!.appliedFactIds, []);
+    assert.match(p.versions.at(-1)!.html, /No selected facts/);
+    assert.equal(p.generation!.metrics!.modelCalls, 1);
+  } finally {
+    await removeProject(p.id);
   }
 });

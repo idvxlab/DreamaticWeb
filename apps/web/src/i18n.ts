@@ -13,6 +13,13 @@ const english: Record<string, string> = {
   "原始文件 /": "Original files /",
   "Markdown 解析文档 /": "Parsed Markdown /",
   已选事实: "Selected facts",
+  更新页面: "Update page",
+  当前勾选: "Current selection",
+  页面已应用: "Applied to page",
+  "选择尚未应用，点击更新页面后生效。":
+    "Selection is pending. Click Update page to apply.",
+  "按当前勾选的事实更新页面，移除未勾选事实对应的内容，保留其他设计与组件。":
+    "Update the page using exactly the selected facts, remove content from deselected facts, and preserve other design and components.",
   清除事实选择: "Clear fact selection",
   使用选定事实调整页面: "Update page with selected facts",
   选择事实: "Select fact",

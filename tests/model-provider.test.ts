@@ -28,6 +28,7 @@ test("published Pi 1.3.0 provider APIs run all three stages over real Chat Compl
           : {
               name: "submit_page",
               args: {
+                usedFactIds: [],
                 html: "<html><body><h1>Provider test page</h1></body></html>",
               },
             },
@@ -117,6 +118,7 @@ test("stateless reasoning tool continuation reproduces legacy 400 and preserves 
         return {
           name: "submit_page",
           args: {
+            usedFactIds: [],
             html: "<html><body><h1>Synthetic regression page</h1></body></html>",
           },
         };

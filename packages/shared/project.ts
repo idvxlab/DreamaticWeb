@@ -67,6 +67,8 @@ export interface RunEvent {
   details?: Record<string, string | number | boolean>;
 }
 export interface Version {
+  /** Facts actually represented by this version; absent on legacy versions. */
+  appliedFactIds?: string[];
   id: string;
   html: string;
   label: string;

@@ -72,7 +72,6 @@ PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；�
 
 详细架构、Pi 核实记录和验证边界见 [架构与验证](docs/architecture.md)。
 
-
 ## 专业 Skills
 
 `.agents/skills` 保存 10 项可移植 Skill。Pi 通过官方 `loadSkillsFromDir` 发现、`formatSkillsForPrompt` 展示目录、`createReadTool` 按需读取；角色权限和文件缓存由应用适配。仅添加锁定版本的 `pi-coding-agent@1.3.0` 原生加载依赖，不启用它的 CLI、shell 或额外 Agent。
@@ -90,3 +89,7 @@ node --import tsx scripts/evaluate-skills.ts --live --output /private/tmp/dreama
 ```
 
 该命令会使用当前项目配置的模型，最多四次请求。生产运行不执行评分或对照提取。支持 `--role analyst|designer` 与 `--condition baseline|skills` 限定单个对照样本。
+
+## 事实勾选与页面更新
+
+页面版本记录 Designer 实际采用的 `appliedFactIds`，事实卡片默认勾选当前页面已采用的事实。勾选变化只修改待应用选择；与已应用状态不同时才显示「更新页面」，支持取消全部。点击后复用已有简报与分析结果，仅通过 Designer 增量修改页面；成功后同步版本关联，失败保留原页面与待应用选择。历史恢复同步恢复对应事实关联，刷新后从版本记录恢复勾选。旧版本缺少关联记录时不推断为全部已采用，可通过显式选择更新建立记录。

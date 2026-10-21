@@ -74,6 +74,7 @@ const factsParams = Type.Object({
   limitations: strings,
 });
 const patchParams = Type.Object({
+  usedFactIds: Type.Optional(Type.Array(Type.String())),
   baseVersionId: Type.String(),
   operations: Type.Array(
     Type.Object({
@@ -257,6 +258,13 @@ async function execute(
         request.text,
       );
     const editing = Boolean(existingPage) && !redesign;
+    if (
+      request.updateFacts &&
+      (!existingPage ||
+        !request.selectedFactIds ||
+        request.baseVersionId !== existingPage.id)
+    )
+      throw new Error("页面版本已变化，请重新加载后更新事实");
     const immediateDuplicate =
       state.completed?.requestHash === requestHash &&
       state.completed.versionId === existingPage?.id;
@@ -658,9 +666,25 @@ async function execute(
           html: string;
           checks: ReturnType<typeof pageChecks>;
           operations: number;
+          appliedFactIds?: string[];
         }
       | undefined;
-    async function accept(html: string, operations: number) {
+    async function accept(
+      html: string,
+      operations: number,
+      usedFactIds?: string[],
+    ) {
+      if (usedFactIds?.some((id) => !analysis.facts.some((f) => f.id === id)))
+        throw new Error("页面引用了无效的事实 ID");
+      if (
+        request.updateFacts &&
+        (!usedFactIds ||
+          new Set(usedFactIds).size !== new Set(selected).size ||
+          usedFactIds.some((id) => !selected!.includes(id)))
+      )
+        throw new Error(
+          "页面采用的事实必须与本次选择完全一致，请补充所选事实并移除取消勾选的事实",
+        );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
       const report = await validatePage(p, html);
@@ -673,6 +697,9 @@ async function execute(
         html: report.html,
         checks: pageChecks(p, report.html, report.issues),
         operations,
+        appliedFactIds: usedFactIds
+          ? [...new Set(usedFactIds)]
+          : existingPage?.appliedFactIds,
       };
       return "Page accepted; no follow-up call needed";
     }
@@ -762,7 +789,7 @@ async function execute(
           patchParams,
           async (args) => {
             const patch = applyPagePatch(p, args);
-            return accept(patch.html, patch.operations);
+            return accept(patch.html, patch.operations, args.usedFactIds);
           },
           true,
         ),
@@ -774,14 +801,15 @@ async function execute(
           "Submit complete responsive inline HTML and finish",
           Type.Object({
             html: Type.String({ minLength: 20, maxLength: 2500000 }),
+            usedFactIds: Type.Array(Type.String()),
           }),
-          async ({ html }) => accept(html, 0),
+          async ({ html, usedFactIds }) => accept(html, 0, usedFactIds),
           true,
         ),
       );
     await roleRun(
       "designer",
-      `# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${selected ? factsMarkdown(chosen) : facts!.markdown}\n\n# Media catalog\n${JSON.stringify(catalog)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,
+      `# Fact application\nReport usedFactIds in the terminal tool: IDs actually represented in the resulting page, including preserved content. ${request.updateFacts ? "EXACT selection update: use every selected fact and remove content relying on deselected facts. Preserve unrelated design and components. Empty selection means remove all fact-derived content, not use all facts." : "Preserve existing fact associations when editing; report changed associations accurately."}\n# Previously applied fact IDs\n${JSON.stringify(existingPage?.appliedFactIds || [])}\n# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${selected ? factsMarkdown(chosen) : facts!.markdown}\n\n# Media catalog\n${JSON.stringify(catalog)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,
       tools,
       () => Boolean(accepted),
     );
@@ -801,10 +829,14 @@ async function execute(
         createdAt: new Date().toISOString(),
         runId: p.run!.id,
         checks: result.checks,
+        appliedFactIds: result.appliedFactIds,
       });
       metrics.patchOperations = result.operations;
       metrics.fullPageWrites = editing ? 0 : 1;
     }
+    const appliedVersion = p.versions.find((v) => v.id === versionId);
+    if (appliedVersion && result.appliedFactIds)
+      appliedVersion.appliedFactIds = result.appliedFactIds;
     p.run!.checkpoints.designer = { completedAt: new Date().toISOString() };
     p.run!.completedVersionId = versionId;
     delete p.run!.activeRole;

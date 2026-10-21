@@ -83,7 +83,7 @@ function App() {
     [history, setHistory] = useState(false);
   const drafts = useRef(new Map<string, string>());
   const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
-  useEffect(() => setSelectedFactIds([]), [project?.id]);
+
   const file = useRef<HTMLInputElement>(null);
   const composerInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -96,6 +96,46 @@ function App() {
   const running = project?.status === "running";
   const current =
     project?.versions.find((v) => v.id === version) || project?.versions.at(-1);
+  const appliedFactIds = current?.appliedFactIds || [];
+  const selectionKey = JSON.stringify([
+    project?.id,
+    current?.id,
+    appliedFactIds,
+  ]);
+  useEffect(() => {
+    const available = new Set(factsFor(project).map((f) => f.id));
+    setSelectedFactIds(appliedFactIds.filter((id) => available.has(id)));
+  }, [selectionKey]);
+  const factsChanged =
+    new Set(selectedFactIds).size !== new Set(appliedFactIds).size ||
+    selectedFactIds.some((id) => !appliedFactIds.includes(id));
+  async function updatePageFacts() {
+    if (!project || !current || !factsChanged || busy || running || !canLeave())
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/projects/" + project.id + "/run", {
+        method: "POST",
+        body: JSON.stringify({
+          text: t(
+            "按当前勾选的事实更新页面，移除未勾选事实对应的内容，保留其他设计与组件。",
+          ),
+          mode: "edit",
+          updateFacts: true,
+          selectedFactIds: [...selectedFactIds],
+          baseVersionId: current.id,
+        }),
+      });
+      setProject(await api("/projects/" + project.id));
+      setVersion("");
+      await refresh();
+    } catch (e) {
+      handleError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
   const handleError = (e: unknown) =>
     setError(e instanceof Error ? e.message : String(e));
   async function refresh() {
@@ -250,12 +290,11 @@ function App() {
         method: "POST",
         body: JSON.stringify({
           text,
-          ...(selectedFactIds.length ? { selectedFactIds } : {}),
         }),
       });
       setProject(await api("/projects/" + p.id));
       setText("");
-      setSelectedFactIds([]);
+
       setVersion("");
       setView("chat");
       await refresh();
@@ -696,10 +735,14 @@ function App() {
                 project={project}
                 selectedIds={selectedFactIds}
                 onSelectionChange={setSelectedFactIds}
-                onUseSelected={() => {
-                  setView("chat");
-                  setText(t("根据选定事实调整相关章节，保留其他设计和内容。"));
-                }}
+                appliedIds={appliedFactIds}
+                selectionChanged={Boolean(current) && factsChanged}
+                updating={
+                  busy ||
+                  running ||
+                  current?.id !== project?.versions.at(-1)?.id
+                }
+                onUseSelected={() => void updatePageFacts()}
               />
             ) : (
               <div className="sources-view">
@@ -986,6 +1029,7 @@ function App() {
                           method: "POST",
                           body: JSON.stringify({
                             html: v.html,
+                            sourceVersionId: v.id,
                             baseVersionId: project!.versions.at(-1)?.id || "",
                             label: t("恢复：") + v.label,
                           }),

@@ -10,11 +10,17 @@ export default function FactsView({
   selectedIds = [],
   onSelectionChange,
   onUseSelected,
+  appliedIds = [],
+  selectionChanged = false,
+  updating = false,
 }: {
   project: ProjectResponse | null;
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
   onUseSelected?: () => void;
+  appliedIds?: string[];
+  selectionChanged?: boolean;
+  updating?: boolean;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState(""),
@@ -64,13 +70,13 @@ export default function FactsView({
         )}
       {facts.length > 0 && (
         <>
-          {onUseSelected && (
+          {onUseSelected && selectionChanged && (
             <div className="source-actions">
               <button
-                disabled={!selectedIds.length || project?.status === "running"}
+                disabled={updating || project?.status === "running"}
                 onClick={onUseSelected}
               >
-                {t("使用选定事实调整页面")} ({selectedIds.length})
+                {t("更新页面")}
               </button>
             </div>
           )}
@@ -99,8 +105,15 @@ export default function FactsView({
               ))}
             </select>
           </div>
-          <p className="facts-count">
+          <p className="facts-count" role="status">
             {t("显示事实")} {filtered.length} / {facts.length}
+            {" · "}
+            {t("当前勾选")} {selectedIds.length}
+            {" · "}
+            {t("页面已应用")} {appliedIds.length}
+            {selectionChanged && (
+              <> · {t("选择尚未应用，点击更新页面后生效。")}</>
+            )}
           </p>
         </>
       )}
@@ -111,6 +124,7 @@ export default function FactsView({
           index={index}
           project={project!}
           selected={selectedIds.includes(fact.id || String(index))}
+          selectionDisabled={updating || project?.status === "running"}
           onSelect={
             onSelectionChange && fact.id
               ? () => {

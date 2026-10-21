@@ -28,6 +28,8 @@ export const requestSchema = z.object({
   mode: z.enum(["auto", "edit", "redesign", "intent"]).default("auto"),
   selectedFactIds: z.array(z.string().max(80)).max(500).optional(),
   refreshFacts: z.boolean().default(false),
+  updateFacts: z.boolean().default(false),
+  baseVersionId: z.string().uuid().optional(),
 });
 export type GenerationRequest = z.infer<typeof requestSchema>;
 export const patchSchema = z.object({

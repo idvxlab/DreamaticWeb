@@ -61,6 +61,7 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
     return {
       name: "submit_page",
       args: {
+        usedFactIds: ["brand"],
         html: `<html><body><h1 id="heading">Generated</h1>${imageUrl ? `<img alt="test" src="${imageUrl}">` : ""}</body></html>`,
       },
     };
@@ -282,6 +283,7 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       "private generation keys are not returned",
     );
     assert.equal(generated.pagePreviews, undefined);
+    assert.deepEqual(generated.versions.at(-1).appliedFactIds, ["brand"]);
     const intent = await request(`/projects/${p.id}/results/intent`);
     assert.equal(intent.status, 200);
     assert.match(await intent.text(), /# User Intent Brief/);
@@ -315,7 +317,7 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       (await (await request(`/projects/${p.id}`)).json()).sources.length,
       2,
     );
-    assert.equal((await (await request("/skills")).json()).length,10);
+    assert.equal((await (await request("/skills")).json()).length, 10);
     assert.equal(
       (await (await request("/health")).json()).generationAvailable,
       true,

@@ -290,8 +290,24 @@ try {
     ctx.fillStyle="#e8ede2";ctx.fillRect(0,0,640,320);ctx.fillStyle="#355844";ctx.beginPath();ctx.arc(320,160,90,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fffefa";ctx.font="28px sans-serif";ctx.textAlign="center";ctx.fillText("DEMO",320,170);return c.toDataURL("image/png").split(",")[1];
   });
   await page.route(`**${factImageUrl}`,route=>route.fulfill({contentType:"image/png",body:Buffer.from(factImageData,"base64")}));
+  let appliedSelection = ["brand-logo"];
+  let factUpdates = 0, failFactUpdate = false;
+  let updatedFactHtml;
+  await page.route(`**/api/projects/${p.id}/run`, async route => {
+    factUpdates++;
+    const request = route.request().postDataJSON();
+    assert.equal(request.updateFacts, true);
+    assert.equal(request.mode, "edit");
+    assert.ok(request.baseVersionId);
+    if (failFactUpdate) return route.fulfill({status: 500,json:{error:"Synthetic update failure"}});
+    appliedSelection = request.selectedFactIds;
+    updatedFactHtml = `<html><body><main><h1>DEMO selected facts: ${appliedSelection.join(",") || "none"}</h1></main></body></html>`;
+    await route.fulfill({json:{ok:true}});
+  });
   await page.route(`**/api/projects/${p.id}`,async route=>{
     const response=await route.fetch();const project=await response.json();
+    project.versions.at(-1).appliedFactIds = appliedSelection;
+    if (updatedFactHtml) project.versions.at(-1).html = updatedFactHtml;
     project.sources[0].assets.push({id:factImageId,name:"品牌参考图.png",type:"image",mime:"image/png",url:factImageUrl});
     project.analysis={summary:"Analyst 测试摘要",limitations:["测试资料存在缺失"],assets:[{sourceId:factsSourceId,url:factImageUrl,purpose:"已关联的品牌参考图片"}],facts:[
       {id:"brand-logo",text:"品牌使用圆形标识",sourceId:factsSourceId,assetIds:[factImageId],locationVerified:true,evidence:{kind:"text",start:0,end:10,quote:"品牌使用圆形标识"}},
@@ -322,11 +338,42 @@ try {
   await imageCard.getByRole("button",{name:"收起图片",exact:true}).click();
   await factsView.evaluate(el=>{el.scrollTop=0;});
   await page.screenshot({path:"/tmp/dreamatic-fact-cards.png",fullPage:true});
-  await factsView.getByLabel("选择事实 1",{exact:true}).check();
-  await factsView.getByRole("button",{name:"使用选定事实调整页面 (1)",exact:true}).click();
-  assert.match(await page.getByRole("textbox",{name:"网页需求"}).inputValue(),/选定事实/);
-  await page.getByLabel("清除事实选择",{exact:true}).click();
+  const factOne = factsView.getByLabel("选择事实 1",{exact:true});
+  const factTwo = factsView.getByLabel("选择事实 2",{exact:true});
+  const updateFacts = factsView.getByRole("button",{name:"更新页面",exact:true});
+  assert.equal(await factOne.isChecked(), true, "applied facts are selected on load");
+  assert.equal(await factTwo.isChecked(), false);
+  assert.equal(await updateFacts.count(), 0);
+  await factTwo.check();
+  assert.equal(await updateFacts.count(), 1);
+  assert.equal(factUpdates, 0, "changing selection never sends a generation request");
+  await factTwo.uncheck();
+  assert.equal(await updateFacts.count(), 0, "reverting selection hides update action");
+  await factOne.uncheck();
+  assert.equal(await updateFacts.isEnabled(), true, "empty selection can be explicitly applied");
+  await updateFacts.click();
+  await page.waitForFunction(() => document.querySelector(".facts-count")?.textContent?.includes("页面已应用 0"));
+  assert.equal(await factOne.isChecked(), false);
+  assert.equal(await updateFacts.count(), 0);
+  assert.equal(factUpdates, 1);
+  await frame.getByRole("heading", {name:"DEMO selected facts: none", exact:true}).waitFor();
+  await factTwo.check();
+  failFactUpdate = true;
+  await updateFacts.click();
+  await page.getByText("Synthetic update failure",{exact:true}).waitFor();
+  assert.equal(await factTwo.isChecked(), true, "failure retains draft selection");
+  assert.deepEqual(appliedSelection, [], "failure leaves applied selection intact");
+  failFactUpdate = false;
+  await updateFacts.click();
+  await page.waitForFunction(() => document.querySelector(".facts-count")?.textContent?.includes("页面已应用 1"));
+  assert.equal(await updateFacts.count(), 0);
+  assert.equal(await factTwo.isChecked(), true);
+  assert.deepEqual(appliedSelection, ["typed-cell"]);
+  await frame.getByRole("heading", {name:"DEMO selected facts: typed-cell", exact:true}).waitFor();
+  await page.reload();
   await page.getByRole("button",{name:/^事实列表/}).click();
+  assert.equal(await factTwo.isChecked(), true, "applied selection survives reload");
+  assert.equal(await factOne.isChecked(), false);
   await factsView.getByLabel("搜索事实",{exact:true}).fill("圆形");
   assert.equal(await factsView.locator(".fact-card").count(),1);
   await factsView.getByLabel("搜索事实",{exact:true}).fill("不存在的事实");
@@ -339,6 +386,7 @@ try {
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=390));
   await page.setViewportSize({width:1512,height:982});
   await page.unroute(`**/api/projects/${p.id}`);
+  await page.unroute(`**/api/projects/${p.id}/run`);
   await page.unroute(`**${factImageUrl}`);
   await page.getByRole("button",{name:"网页工作台",exact:false}).click();
   await page.setViewportSize({ width: 1024, height: 768 });
@@ -396,6 +444,7 @@ try {
   await page.getByRole("button", { name: "继续未完成任务", exact: true }).waitFor({ state: "detached" });
   assert.equal(resumeClicks, 1);
   await page.unroute(`**/api/projects/${p.id}`);
+  await page.unroute(`**/api/projects/${p.id}/run`);
   await page.unroute(`**/api/projects/${p.id}/resume`);
 
   await page.getByRole("button", { name: "项目操作: 我的品牌网站", exact: true }).click();

@@ -375,10 +375,11 @@ app.get("/api/projects/:id/events", async (req, res) => {
 app.post("/api/projects/:id/versions", async (req, res) => {
   const p = await get(req.params.id);
   mutable(p.id);
-  const { html, label, baseVersionId } = z
+  const { html, label, baseVersionId, sourceVersionId } = z
     .object({
       html: z.string().min(20).max(2500000),
       baseVersionId: z.string().optional(),
+      sourceVersionId: z.string().uuid().optional(),
       label: z.string().max(80).default("手动编辑"),
     })
     .parse(req.body);
@@ -389,8 +390,14 @@ app.post("/api/projects/:id/versions", async (req, res) => {
     return res
       .status(409)
       .json({ error: "页面已有新版本，请重新加载后再编辑，当前修改尚未保存" });
+  const sourceVersion = sourceVersionId
+    ? p.versions.find((v) => v.id === sourceVersionId)
+    : p.versions.at(-1);
+  if (sourceVersionId && (!sourceVersion || sourceVersion.html !== html))
+    return res.status(400).json({ error: "恢复版本与页面内容不一致" });
   const report = await validatePage(p, html);
   const v = {
+    appliedFactIds: sourceVersion?.appliedFactIds,
     id: crypto.randomUUID(),
     html: report.html,
     checks: pageChecks(p, report.html, report.issues),

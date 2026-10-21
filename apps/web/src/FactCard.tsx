@@ -17,10 +17,12 @@ export default function FactCard({
   project,
   selected: isSelected,
   onSelect,
+  selectionDisabled = false,
 }: {
   fact: Fact;
   selected?: boolean;
   onSelect?: () => void;
+  selectionDisabled?: boolean;
   index: number;
   project: ProjectResponse;
 }) {
@@ -49,6 +51,7 @@ export default function FactCard({
           <input
             type="checkbox"
             aria-label={t("选择事实") + " " + (index + 1)}
+            disabled={selectionDisabled}
             checked={Boolean(isSelected)}
             onChange={onSelect}
           />
