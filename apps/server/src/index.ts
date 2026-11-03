@@ -79,9 +79,9 @@ app.get("/assets/:project/:file", (req, res) => {
     return res.status(404).end();
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
-  res.sendFile(
-    path.join(projectDir(req.params.project), "assets", req.params.file),
-  );
+  res.sendFile(req.params.file, {
+    root: path.join(projectDir(req.params.project), "assets"),
+  });
 });
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -335,7 +335,7 @@ app.get("/api/projects/:id/sources/:source/original", async (req, res) => {
     .attachment(
       source.format === "website" ? source.name + ".html" : source.name,
     )
-    .sendFile(path.join(projectDir(p.id), source.originalFile));
+    .sendFile(source.originalFile, { root: projectDir(p.id) });
 });
 app.get("/api/projects/:id/metrics", async (req, res) =>
   res.json((await get(req.params.id)).generation?.metrics || null),
@@ -443,7 +443,7 @@ registerBrowserPreview(app);
 app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
 app.use(express.static(path.resolve("dist/web")));
 app.get("/{*path}", (_req, res) =>
-  res.sendFile(path.resolve("dist/web/index.html")),
+  res.sendFile("index.html", { root: path.resolve("dist/web") }),
 );
 app.use(
   (

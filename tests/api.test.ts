@@ -66,7 +66,8 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       },
     };
   });
-  const workspace = await mkdtemp(path.join(os.tmpdir(), "dreamatic-api-"));
+  // A hidden workspace ancestor must not hide otherwise valid project files.
+  const workspace = await mkdtemp(path.join(os.tmpdir(), ".dreamatic-api-"));
   const interrupted = crypto.randomUUID();
   await mkdir(path.join(workspace, "projects"));
   await writeFile(
