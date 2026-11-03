@@ -37,6 +37,8 @@ import { applyPagePatch } from "./page-patch.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import { imagePreview } from "../image-preview.js";
+import { bindMediaLabels } from "./media-labels.js";
+import { resolveMediaAliases, type MediaAliases } from "./media-aliases.js";
 
 class ModelRequestError extends Error {
   constructor(
@@ -134,6 +136,20 @@ function tool(
   };
 }
 export interface RunOptions {
+  /** Local experiment only; never exposed by the production API. */
+  experimentalMediaContext?: string;
+  experimentalNoImages?: boolean;
+  experimentalLayoutFromMarkdown?: boolean;
+  experimentalCompactCatalog?: boolean;
+  experimentalMediaAliases?: MediaAliases;
+  experimentalAliasAudit?: (audit: {
+    converted: number;
+    elapsedMs: number;
+  }) => void;
+  experimentalMediaLabels?: Record<string, string>;
+  experimentalLabelAudit?: (
+    audit: Omit<ReturnType<typeof bindMediaLabels>, "html">,
+  ) => void;
   config?: RuntimeConfig;
   /** Test seam only; production always uses Pi's public provider collection. */
   streamFn?: StreamFn;
@@ -285,6 +301,16 @@ async function execute(
     const policy = (role: Role) =>
       hash(
         prompts[role] +
+          (role === "analyst" ? options.experimentalMediaContext || "" : "") +
+          (role === "analyst" && options.experimentalMediaAliases
+            ? JSON.stringify(options.experimentalMediaAliases)
+            : "") +
+          (role !== "orchestrator" && options.experimentalCompactCatalog
+            ? "\nexperiment-compact-catalog-v1"
+            : "") +
+          (role === "designer" && options.experimentalMediaLabels
+            ? JSON.stringify(options.experimentalMediaLabels)
+            : "") +
           JSON.stringify(profile(role)) +
           (role === "analyst"
             ? analystSignature
@@ -333,6 +359,14 @@ async function execute(
       format: source.format,
       assets: source.assets,
     }));
+    const promptCatalog = options.experimentalCompactCatalog
+      ? catalog.map(({ assets, ...s }) => ({
+          ...s,
+          mediaCount: assets.length,
+          mediaDetails:
+            "See canonical Markdown media associations; IDs and exact URLs are listed there.",
+        }))
+      : catalog;
     async function roleRun(
       role: Role,
       input: string,
@@ -428,7 +462,24 @@ async function execute(
       const abort = () => agent.abort();
       controller.signal.addEventListener("abort", abort, { once: true });
       try {
-        await agent.prompt(input);
+        await agent.prompt(
+          input +
+            (role === "designer" && options.experimentalLayoutFromMarkdown
+              ? documents
+                  .map((d) => {
+                    const i = d.document.markdown.indexOf(
+                      "## Media layout associations (program-extracted)",
+                    );
+                    return i < 0 ? "" : d.document.markdown.slice(i);
+                  })
+                  .join("\n")
+              : "") +
+            (role !== "orchestrator" && options.experimentalMediaContext
+              ? "\n\n# Program-extracted image context\n" +
+                options.experimentalMediaContext +
+                "\nUse only these documented associations; proximity is not proof of image content. There is no image viewing tool. Do not invent missing captions."
+              : ""),
+        );
         controller.signal.throwIfAborted();
         if (agent.state.errorMessage) {
           const requestNumber = metrics.modelCalls - callStart;
@@ -622,7 +673,7 @@ async function execute(
         userStatements.push(request.text);
       await roleRun(
         "analyst",
-        `${intent!.markdown}\n\n# Explicit user statements\n${userStatements.join("\n\n").slice(-60000)}\n\n# Catalog\n${JSON.stringify(catalog)}\n\n# Canonical Markdown\n${excerpts || "No uploaded documents. Do not invent business facts."}`,
+        `${intent!.markdown}\n\n# Explicit user statements\n${userStatements.join("\n\n").slice(-60000)}\n\n# Catalog\n${JSON.stringify(promptCatalog)}\n\n# Canonical Markdown\n${excerpts || "No uploaded documents. Do not invent business facts."}`,
         [
           tool(
             "source_read",
@@ -647,10 +698,20 @@ async function execute(
           ),
           tool(
             "submit_facts",
-            "Submit facts and optional media associations; no independent tracing pass",
+            options.experimentalMediaAliases
+              ? "Submit facts and optional media associations using the exact short media IDs (e.g. S1-I001) listed in canonical Markdown; no independent tracing pass"
+              : "Submit facts and optional media associations; no independent tracing pass",
             factsParams,
             async (args) => {
               if (value) throw new Error("事实已经提交");
+              if (options.experimentalMediaAliases) {
+                const { value: resolved, ...audit } = resolveMediaAliases(
+                  args,
+                  options.experimentalMediaAliases,
+                );
+                args = resolved;
+                options.experimentalAliasAudit?.(audit);
+              }
               const data = analysisSchema.parse(args);
               if (
                 new Set(data.facts.map((f) => f.id)).size !== data.facts.length
@@ -739,6 +800,14 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
+      if (!editing && options.experimentalMediaLabels) {
+        const { html: labeled, ...audit } = bindMediaLabels(
+          html,
+          options.experimentalMediaLabels,
+        );
+        html = labeled;
+        options.experimentalLabelAudit?.(audit);
+      }
       const report = await validatePage(p, html);
       if (!report.valid)
         throw new Error(
@@ -771,6 +840,7 @@ async function execute(
       : current;
     const tools: AgentTool[] = [];
     if (
+      !options.experimentalNoImages &&
       profile("designer").vision &&
       catalog.some((s) => s.assets.some((a) => a.type === "image"))
     ) {
@@ -883,7 +953,7 @@ async function execute(
       );
     await roleRun(
       "designer",
-      `# Fact application\nReport usedFactIds in the terminal tool: IDs actually represented in the resulting page, including preserved content. ${request.updateFacts ? "EXACT selection update: use every selected fact and remove content relying on deselected facts. Preserve unrelated design and components. Empty selection means remove all fact-derived content, not use all facts." : "Preserve existing fact associations when editing; report changed associations accurately."}\n# Previously applied fact IDs\n${JSON.stringify(existingPage?.appliedFactIds || [])}\n# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${selected ? factsMarkdown(chosen) : facts!.markdown}\n\n# Media catalog\n${JSON.stringify(catalog)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,
+      `# Fact application\nReport usedFactIds in the terminal tool: IDs actually represented in the resulting page, including preserved content. ${request.updateFacts ? "EXACT selection update: use every selected fact and remove content relying on deselected facts. Preserve unrelated design and components. Empty selection means remove all fact-derived content, not use all facts." : "Preserve existing fact associations when editing; report changed associations accurately."}\n# Previously applied fact IDs\n${JSON.stringify(existingPage?.appliedFactIds || [])}\n# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${selected ? factsMarkdown(chosen) : facts!.markdown}\n\n# Media catalog\n${JSON.stringify(promptCatalog)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,
       tools,
       () => Boolean(accepted),
     );
