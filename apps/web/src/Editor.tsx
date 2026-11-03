@@ -6,7 +6,7 @@ import { useI18n } from "./i18n";
 import { api } from "./api";
 import { parseEditorCss } from "./editor-css";
 import { blockCard } from "./block-cards";
-import { EDITOR_CSP } from "../../../packages/shared/html-policy";
+import { EDITOR_CSP, PREVIEW_CSP } from "../../../packages/shared/html-policy";
 import type { Asset } from "../../../packages/shared/project";
 import {
   MousePointer2,
@@ -350,6 +350,9 @@ export default function Editor({
     doc.documentElement.lang = metadata.current.lang;
     const charset = doc.createElement("meta");
     charset.setAttribute("charset", "utf-8");
+    const policy = doc.createElement("meta");
+    policy.httpEquiv = "Content-Security-Policy";
+    policy.content = PREVIEW_CSP;
     const viewport = doc.createElement("meta");
     viewport.name = "viewport";
     viewport.content = "width=device-width,initial-scale=1";
@@ -358,7 +361,7 @@ export default function Editor({
     description.content = metadata.current.description;
     const style = doc.createElement("style");
     style.textContent = e.getCss() || "";
-    doc.head.prepend(charset);
+    doc.head.prepend(charset, policy);
     doc.head.append(viewport, description, style);
     const exported = new DOMParser().parseFromString(e.getHtml(), "text/html");
     doc.body.innerHTML = exported.body.innerHTML;
@@ -369,7 +372,9 @@ export default function Editor({
     ))
       if (value !== undefined && value !== null)
         doc.body.setAttribute(name, String(value));
-    doc.body.querySelectorAll("script").forEach((s) => s.remove());
+    doc.body
+      .querySelectorAll("script,meta[http-equiv]")
+      .forEach((s) => s.remove());
     for (const script of scripts.current)
       doc.body.insertAdjacentHTML("beforeend", script);
     return "<!doctype html>" + doc.documentElement.outerHTML;

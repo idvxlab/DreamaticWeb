@@ -171,6 +171,12 @@ try {
   await page.frameLocator(".gjs-frame").locator("#action").waitFor();
   await page.getByRole("button", { name: "预览", exact: true }).click();
   const preview = page.frameLocator('iframe[title="网页交互预览"]');
+  assert.match(
+    await preview
+      .locator('meta[http-equiv="Content-Security-Policy"]')
+      .getAttribute("content"),
+    /connect-src 'none'/,
+  );
   await preview.locator("#action").click();
   assert.equal(
     await preview.locator("#result").innerText(),
