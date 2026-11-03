@@ -57,14 +57,16 @@ PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；�
 
 ## API 与运行
 
-- `POST /api/projects/:id/run`：`text`，可选 `mode: auto|edit|redesign|intent`、`selectedFactIds`、`refreshFacts`。
+- `POST /api/projects/:id/run`：`text`，可选 `mode: auto|edit|redesign|intent|answer`、`selectedFactIds`、`refreshFacts`。`answer` 仅回答，不写页面；自动模式识别“只解释”“先回答”等明确只读要求。
 - `POST /api/projects/:id/resume`：复用已持久化的有效阶段继续中断任务。
 - `POST /api/projects/:id/cancel`：中止 Pi 执行，保留已有版本与阶段结果。
 - `GET /api/projects/:id/results/intent|facts`：下载阶段 Markdown。
 - `GET /api/projects/:id/metrics`：请求级耗时、Pi provider 请求数、额外来源读取、结果写入及补丁范围。
 - `GET /api/projects/:id/sources/:source/original|reading`：下载原件或规范 Markdown。
 
-每次任务的输出结果通常各一次调用即可完成；需要分段读取大型文档或修正实质错误时允许工具后续轮次，最多六轮、每阶段五分钟。没有批量事实审查、自动浏览器视觉审查或隐式重试整个流程。
+每次任务的输出结果通常各一次调用即可完成；需要分段读取大型文档或修正实质错误时允许工具后续轮次，最多六轮。暂时移除每阶段五分钟硬截止，仍可主动停止；provider 自身的超时仍可能报错。没有批量事实审查、自动浏览器视觉审查或隐式重试整个流程。
+
+内联 JavaScript 在保存、编辑和导出中保留，通过“预览”或“打开”执行；设计画布仍用于编辑，不执行脚本。交互预览使用仅 allow-scripts 的隔离环境，无工作台同源权限，CSP 禁止网络请求和外部脚本。使用 script 与 addEventListener，事件属性仍被清理。Designer 看大图时按需生成不超过 1600px、1 MiB 的 JPEG 预览并缓存，网页继续引用原图。
 
 现有项目 JSON 支持读取内嵌 HTML 的旧存储格式；后续保存采用独立 HTML 文件。设置文件仍在初始 workspace 的 `settings.json`，密钥权限 0600，API 不回传密钥。不要将 workspace 或凭据提交。
 

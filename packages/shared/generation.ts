@@ -25,7 +25,9 @@ export const analysisSchema = z.object({
 export type Analysis = z.infer<typeof analysisSchema>;
 export const requestSchema = z.object({
   text: z.string().trim().min(1).max(20000),
-  mode: z.enum(["auto", "edit", "redesign", "intent"]).default("auto"),
+  mode: z
+    .enum(["auto", "edit", "redesign", "intent", "answer"])
+    .default("auto"),
   selectedFactIds: z.array(z.string().max(80)).max(500).optional(),
   refreshFacts: z.boolean().default(false),
   updateFacts: z.boolean().default(false),

@@ -36,12 +36,10 @@ export function registerBrowserPreview(app: Express, open = openSystemBrowser) {
       .parse(req.body);
     const result = await validatePage(project, html);
     if (!result.valid)
-      return res
-        .status(400)
-        .json({
-          error: "页面验证未通过，无法打开",
-          issues: result.issues.filter((i) => i.severity === "error"),
-        });
+      return res.status(400).json({
+        error: "页面验证未通过，无法打开",
+        issues: result.issues.filter((i) => i.severity === "error"),
+      });
     const directory = path.join(projectDir(project.id), "previews", "browser");
     await mkdir(directory, { recursive: true });
     const files = await Promise.all(
@@ -88,7 +86,10 @@ export function registerBrowserPreview(app: Express, open = openSystemBrowser) {
       if (Date.now() - (await stat(file)).mtimeMs > lifetime)
         return res.status(404).end();
       const html = await readFile(file, "utf8");
-      res.setHeader("Content-Security-Policy", PREVIEW_CSP + "; sandbox");
+      res.setHeader(
+        "Content-Security-Policy",
+        PREVIEW_CSP + "; sandbox allow-scripts",
+      );
       res.setHeader("Cache-Control", "no-store");
       res.type("html").send(html);
     } catch {

@@ -6,7 +6,7 @@ import { useI18n } from "./i18n";
 import { api } from "./api";
 import { parseEditorCss } from "./editor-css";
 import { blockCard } from "./block-cards";
-import { PREVIEW_CSP } from "../../../packages/shared/html-policy";
+import { EDITOR_CSP, PREVIEW_CSP } from "../../../packages/shared/html-policy";
 import type { Asset } from "../../../packages/shared/project";
 import {
   MousePointer2,
@@ -48,6 +48,7 @@ export default function Editor({
     editor = useRef<GrapesEditor>(null);
   const baseline = useRef("");
   const resetting = useRef(false);
+  const scripts = useRef<string[]>([]);
   const [modified, setModified] = useState(false);
   const metadata = useRef({
     title: "Dreamatic · Web",
@@ -56,6 +57,10 @@ export default function Editor({
   });
   const rememberMetadata = (value: string) => {
     const doc = new DOMParser().parseFromString(value, "text/html");
+    scripts.current = Array.from(
+      doc.querySelectorAll("script:not([src])"),
+      (s) => s.outerHTML,
+    );
     bodyAttributes.current = Object.fromEntries(
       Array.from(doc.body.attributes)
         .filter((attribute) =>
@@ -78,7 +83,8 @@ export default function Editor({
   const restoreBody = (e: GrapesEditor) => {
     e.getWrapper()?.setAttributes(bodyAttributes.current);
   };
-  const snapshot = (e: GrapesEditor) => e.getHtml() + "\n" + e.getCss();
+  const snapshot = (e: GrapesEditor) =>
+    e.getHtml() + "\n" + e.getCss() + "\n" + scripts.current.join("\n");
   const [tab, setTab] = useState("styles"),
     [device, setDevice] = useState("Desktop"),
     [preview, setPreview] = useState(false),
@@ -121,7 +127,7 @@ export default function Editor({
         scripts: [],
         styles: [],
         allowExternalDrop: false,
-        frameContent: `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"></head><body></body></html>`,
+        frameContent: `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${EDITOR_CSP}"></head><body></body></html>`,
       },
       deviceManager: {
         devices: [
@@ -196,7 +202,7 @@ export default function Editor({
       ) {
         const meta = doc.createElement("meta");
         meta.httpEquiv = "Content-Security-Policy";
-        meta.content = PREVIEW_CSP;
+        meta.content = EDITOR_CSP;
         doc.head.prepend(meta);
       }
     };
@@ -344,6 +350,9 @@ export default function Editor({
     doc.documentElement.lang = metadata.current.lang;
     const charset = doc.createElement("meta");
     charset.setAttribute("charset", "utf-8");
+    const policy = doc.createElement("meta");
+    policy.httpEquiv = "Content-Security-Policy";
+    policy.content = PREVIEW_CSP;
     const viewport = doc.createElement("meta");
     viewport.name = "viewport";
     viewport.content = "width=device-width,initial-scale=1";
@@ -352,7 +361,7 @@ export default function Editor({
     description.content = metadata.current.description;
     const style = doc.createElement("style");
     style.textContent = e.getCss() || "";
-    doc.head.prepend(charset);
+    doc.head.prepend(charset, policy);
     doc.head.append(viewport, description, style);
     const exported = new DOMParser().parseFromString(e.getHtml(), "text/html");
     doc.body.innerHTML = exported.body.innerHTML;
@@ -363,6 +372,11 @@ export default function Editor({
     ))
       if (value !== undefined && value !== null)
         doc.body.setAttribute(name, String(value));
+    doc.body
+      .querySelectorAll("script,meta[http-equiv]")
+      .forEach((s) => s.remove());
+    for (const script of scripts.current)
+      doc.body.insertAdjacentHTML("beforeend", script);
     return "<!doctype html>" + doc.documentElement.outerHTML;
   };
   async function openInBrowser() {
@@ -511,7 +525,25 @@ export default function Editor({
         </button>
       </div>
       <div className="editor-workspace">
-        <div className="canvas-container" ref={host} />
+        <div
+          className="canvas-container"
+          ref={host}
+          style={preview ? { display: "none" } : undefined}
+        />
+        {preview && (
+          <iframe
+            title="网页交互预览"
+            sandbox="allow-scripts"
+            srcDoc={getHtml()}
+            style={{
+              border: 0,
+              height: "100%",
+              width:
+                device === "Mobile" ? 390 : device === "Tablet" ? 768 : "100%",
+              maxWidth: "100%",
+            }}
+          />
+        )}
         <aside
           className={
             "inspector " +
@@ -564,7 +596,7 @@ export default function Editor({
         <div className="modal-backdrop">
           <section className="code-modal">
             <h3>{t("HTML 源码")}</h3>
-            <p>{t("修改后点击应用。活动脚本会在保存时移除。")}</p>
+            <p>{t("修改后点击应用。内联 JavaScript 会保留，在预览中运行。")}</p>
             <textarea
               aria-label={t("HTML 源码编辑")}
               value={source}

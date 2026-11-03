@@ -13,8 +13,18 @@ const attributes = new Set(
 export function sanitizeHtml(html: string) {
   const $ = cheerio.load(html);
   $(
-    "script,iframe,object,embed,base,link,svg,math,template,noscript,meta[http-equiv]",
+    "iframe,object,embed,base,link,svg,math,template,noscript,meta[http-equiv]",
   ).remove();
+  $("script").each((_i, e) => {
+    if ($(e).attr("src")) {
+      $(e).remove();
+      return;
+    }
+    const type = $(e).attr("type");
+    for (const key of Object.keys(e.attribs)) $(e).removeAttr(key);
+    if (type === "module" || type === "application/ld+json")
+      $(e).attr("type", type);
+  });
   $("*").each((_i, e) => {
     if (e.type !== "tag" && e.type !== "style") return;
     if (!tags.has(e.tagName)) {
@@ -22,7 +32,7 @@ export function sanitizeHtml(html: string) {
       return;
     }
     for (const [key, value] of Object.entries(e.attribs)) {
-      if (!attributes.has(key) && !/^aria-[a-z-]+$/.test(key)) {
+      if (!attributes.has(key) && !/^(?:aria|data)-[a-z\d-]+$/.test(key)) {
         $(e).removeAttr(key);
         continue;
       }

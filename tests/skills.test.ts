@@ -106,6 +106,24 @@ test("deterministic routing composes complementary skills and keeps edits narrow
     ["analyst-information-extraction"],
   );
   assert.throws(() => route("/skill:designer-missing", true), /不可用于/);
+  assert.ok(
+    !route("生成公司官网，不做电商支付，不要多页").includes(
+      "designer-ecommerce",
+    ),
+  );
+  assert.ok(
+    !route("生成公司官网，不做电商支付，不要多页").includes(
+      "designer-web-architecture",
+    ),
+  );
+  assert.ok(
+    route("生成公司官网，需要电商支付，需要多页").includes(
+      "designer-ecommerce",
+    ),
+  );
+  assert.ok(
+    route("生成公司官网，需要多页").includes("designer-web-architecture"),
+  );
 });
 
 test("native reader preloads only selected bodies, reuses bytes, denies originals/cross-role/scripts and reads references on demand", async () => {

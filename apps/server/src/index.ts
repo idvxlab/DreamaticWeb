@@ -185,6 +185,7 @@ app.post(
           if (!p.sources.some((source) => source.id === s.id))
             p.sources.push(s);
           results.push(s);
+          delete p.sourceRecoveryWarning;
         } catch (e) {
           errors.push({
             name: f.originalname,

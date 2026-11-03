@@ -64,11 +64,12 @@ test("Office document extracts text and embedded image with provenance", async (
   assert.equal(s.assets[0].height, 1);
   assert.match(s.provenance, /brand.docx/);
 });
-test("HTML removes executable content while preserving inline design", () => {
+test("HTML preserves inline scripts while removing external frames and event attributes", () => {
   const html = sanitizeHtml(
     '<html><head><style>body{color:red}</style><script>parent.alert(1)</script></head><body onload="alert(1)"><iframe src="http://localhost"></iframe><img src="/assets/a.png" onerror="alert(1)"><a href="jav&#97;script:alert(1)">x</a><p>Safe</p></body></html>',
   );
-  assert.doesNotMatch(html, /<script|onload|onerror|<iframe|javascript:/i);
+  assert.doesNotMatch(html, /onload|onerror|<iframe|javascript:/i);
+  assert.match(html, /<script>parent.alert\(1\)<\/script>/);
   assert.match(html, /body\{color:red\}/);
   assert.match(html, /Safe/);
 });

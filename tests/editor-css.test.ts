@@ -9,7 +9,7 @@ test("editor preserves variable shorthands, media rules, important colors and co
   const browser = await chromium.launch({
     executablePath:
       process.env.DREAMATIC_BROWSER_PATH ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      process.env.CHROME_PATH || chromium.executablePath(),
     headless: true,
   });
   try {

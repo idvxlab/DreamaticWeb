@@ -86,6 +86,80 @@ function answer(model: Parameters<StreamFn>[0], name: string, args: unknown) {
   return stream;
 }
 
+test("a responsive phase may exceed five minutes without automatic abort", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const p = await create();
+  try {
+    await runProject(
+      p,
+      requestSchema.parse({ text: "先回答，不要修改页面" }),
+      save,
+      () => {},
+      {
+        config,
+        skills: false,
+        streamFn: async (model, _context, opts) => {
+          const wait = new Promise<void>((resolve) =>
+            setTimeout(resolve, 300001),
+          );
+          queueMicrotask(() => t.mock.timers.tick(300001));
+          await wait;
+          assert.equal(opts?.signal?.aborted, false);
+          return answer(model, "submit_answer", {
+            answer: "阶段超过五分钟仍可完成。",
+          });
+        },
+      },
+    );
+    assert.equal(p.status, "complete");
+  } finally {
+    t.mock.timers.reset();
+    await removeProject(p.id);
+  }
+});
+
+test("read-only answer has no page tools and creates no page versions", async () => {
+  const p = await create();
+  try {
+    p.versions.push({
+      id: crypto.randomUUID(),
+      html,
+      label: "fixture",
+      createdAt: new Date().toISOString(),
+    });
+    const original = JSON.stringify(p.versions);
+    let calls = 0;
+    await runProject(
+      p,
+      requestSchema.parse({ text: "为什么采用这种布局？只解释，不要修改页面" }),
+      save,
+      () => {},
+      {
+        config,
+        skills: false,
+        streamFn: (model, context) => {
+          calls++;
+          assert.deepEqual(
+            getCurrentSystemMessage(context.messages)?.toolsAdded?.map(
+              (t) => t.name,
+            ),
+            ["submit_answer"],
+          );
+          return answer(model, "submit_answer", {
+            answer: "首屏先介绍品牌，随后展示产品，便于访客理解。",
+          });
+        },
+      },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(p.versions), original);
+    assert.match(p.messages.at(-1)!.text, /首屏/);
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
 test("real Pi stages: first generation 3 calls, selected-fact edit 1, duplicate 0; Markdown and old HTML are reused", async (t) => {
   const p = await create();
   const prompts = await mkdtemp(path.join(os.tmpdir(), "dreamatic-prompts-"));

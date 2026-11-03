@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import type { Project } from "../../../packages/shared/project.js";
+import { validSource } from "./source-validation.js";
 export const ROOT = process.cwd();
 export const SETTINGS_ROOT = path.resolve(
   process.env.DREAMATIC_WORKSPACE || path.join(ROOT, "workspace"),
@@ -152,6 +153,12 @@ export async function get(id: string) {
       }),
     );
     projects.set(id, p);
+  }
+  const sources = Array.isArray(p.sources) ? p.sources.filter(validSource) : [];
+  if (!Array.isArray(p.sources) || sources.length !== p.sources.length) {
+    p.sourceRecoveryWarning =
+      "发现无效资料记录，已跳过。请重新上传缺失资料；原始文件仍保留。";
+    p.sources = sources;
   }
   return p;
 }

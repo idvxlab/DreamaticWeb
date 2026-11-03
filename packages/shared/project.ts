@@ -82,6 +82,7 @@ export interface Project {
   titleEdited?: boolean;
   messages: Message[];
   sources: Source[];
+  sourceRecoveryWarning?: string;
   versions: Version[];
   events: RunEvent[];
   status:

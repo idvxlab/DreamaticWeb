@@ -1208,7 +1208,7 @@ a:focus-visible {
 .history-menu button > svg:last-child {
   margin-left: auto;
 }
-.sidebar-off {
+.app.sidebar-off {
   grid-template-columns: minmax(0, 1fr);
 }
 .sidebar-off .sidebar {
