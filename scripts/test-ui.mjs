@@ -36,7 +36,7 @@ try {
   browser = await chromium.launch({
     executablePath:
       process.env.CHROME_PATH ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      process.env.DREAMATIC_BROWSER_PATH || chromium.executablePath(),
     headless: true,
   });
   await mkdir(path.join(data, "screenshots"), { recursive: true });

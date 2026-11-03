@@ -13,7 +13,7 @@ test("manual pages retain inline design and reject invalid structure and foreign
     );
     assert.equal(valid.valid, true);
     assert.match(valid.html, /h1\{color:#fe6b35\}/);
-    assert.match(valid.html, /script-src 'none'/);
+    assert.match(valid.html, /script-src 'unsafe-inline'/);
     const invalid = await validatePage(
       project,
       '<html><body><h1 id="same">One</h1><p id="same">Two</p><a href="#missing">Broken</a><img alt="foreign" src="/assets/00000000-0000-0000-0000-000000000000/image.png"></body></html>',

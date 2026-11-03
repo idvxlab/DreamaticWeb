@@ -579,6 +579,9 @@ function App() {
         </header>
         <div className="workspace">
           <section className="conversation">
+            {project?.sourceRecoveryWarning && (
+              <p role="alert">{project.sourceRecoveryWarning}</p>
+            )}
             <div className="panel-heading">
               <div>
                 <span className="orange-dot" />

@@ -46,6 +46,18 @@ const categories: [string, RegExp][] = [
     /落地页|营销|品牌介绍|产品(?:官网|首页)|\blanding\b|\bcampaign\b|marketing/i,
   ],
 ];
+export function positiveRequirements(text: string) {
+  return text
+    .replace(/(?:但是|但要|但需|but\s+)/gi, "，需要")
+    .split(/[，,。；;\n]/)
+    .map((clause) =>
+      clause.replace(
+        /(?:不(?:需要|要|做|使用|支持|用)|无需|不要|禁止|without\b|do not\b|don't\b|no\s+)[^，,。；;\n]*/gi,
+        "",
+      ),
+    )
+    .join("\n");
+}
 /** Routing is host policy, not another model or a second Skill registry. */
 export function selectSkills(
   role: Role,
@@ -67,8 +79,9 @@ export function selectSkills(
   );
   if (role === "analyst") chosen.add("analyst-information-extraction");
   if (role === "designer") {
-    const local = context.text;
-    const combined = local + "\n" + JSON.stringify(context.brief || {});
+    const local = positiveRequirements(context.text);
+    const combined =
+      local + "\n" + positiveRequirements(JSON.stringify(context.brief || {}));
     if (context.editing) {
       if (
         /布局|排版|颜色|字体|间距|视觉|样式|\b(?:layout|color|font|spacing|visual|style)\b/i.test(

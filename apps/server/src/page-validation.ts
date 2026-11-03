@@ -22,7 +22,7 @@ export async function validatePage(project: Project, raw: string) {
       code: "empty",
       message: "The page has no visible content",
     });
-  if (before("script,iframe,object,embed,link,svg").length)
+  if (before("script[src],iframe,object,embed,link,svg").length)
     issues.push({
       severity: "warning",
       code: "removed_content",

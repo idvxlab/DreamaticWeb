@@ -6,6 +6,7 @@ import { extract, parserVersion, sourceFingerprint } from "./extract.js";
 import { readCanonicalSource } from "./source-content.js";
 import { Worker } from "node:worker_threads";
 import type { Source } from "../../../packages/shared/project.js";
+import { validSource } from "./source-validation.js";
 // Untrusted document parsers run outside the HTTP event loop, with a hard deadline.
 export async function ingest(
   buffer: Buffer,
@@ -51,10 +52,14 @@ export async function ingest(
       void worker.terminate();
       reject(new Error("文档解析超过 45 秒，请拆分文件后重试"));
     }, 45000);
-    worker.once("message", (result) => {
+    worker.on("message", (result) => {
+      if (result?.type !== "dreamatic:extraction") return;
       clearTimeout(timer);
       void worker.terminate();
-      result.error ? reject(new Error(result.error)) : resolve(result.source);
+      if (result.error) reject(new Error(String(result.error)));
+      else if (!validSource(result.source))
+        reject(new Error("文档解析返回无效资料"));
+      else resolve(result.source);
     });
     worker.once("error", (error) => {
       clearTimeout(timer);
@@ -62,7 +67,7 @@ export async function ingest(
     });
     worker.once("exit", (code) => {
       clearTimeout(timer);
-      if (code) reject(new Error("解析进程已退出，请检查文档大小与格式"));
+      reject(new Error(`解析进程已退出（${code}），未收到有效解析结果`));
     });
   });
 }

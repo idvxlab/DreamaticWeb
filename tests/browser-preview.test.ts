@@ -50,7 +50,7 @@ test("default-browser snapshot preserves unsaved HTML, scopes assets, expires an
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ html }),
     });
-  const html = `<html><body><h1>Unsaved canvas</h1><img alt="Source photo" src="${project.sources[0].assets[0].url}"><script>alert(1)</script></body></html>`;
+  const html = `<html><body><h1>Unsaved canvas</h1><button id="action">Run</button><output id="result">Waiting</output><img alt="Source photo" src="${project.sources[0].assets[0].url}"><script>document.querySelector('#action').addEventListener('click',()=>document.querySelector('#result').textContent='JavaScript works');try{localStorage.getItem('secret')}catch{document.body.dataset.isolated='yes'}</script></body></html>`;
   try {
     assert.equal((await post(html)).status, 200);
     assert.equal(opened.length, 1);
@@ -59,7 +59,7 @@ test("default-browser snapshot preserves unsaved HTML, scopes assets, expires an
     const content = await response.text();
     assert.match(content, /Unsaved canvas/);
     assert.match(content, new RegExp(project.sources[0].assets[0].url));
-    assert.doesNotMatch(content, /<script/);
+    assert.match(content, /<script/);
     assert.match(
       response.headers.get("content-security-policy") || "",
       /sandbox/,
@@ -68,13 +68,22 @@ test("default-browser snapshot preserves unsaved HTML, scopes assets, expires an
     const browser = await chromium.launch({
       executablePath:
         process.env.DREAMATIC_BROWSER_PATH ||
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        process.env.CHROME_PATH || chromium.executablePath(),
       headless: true,
     });
     try {
       const page = await browser.newPage();
       await page.goto(opened[0]);
       assert.equal(await page.locator("h1").innerText(), "Unsaved canvas");
+      await page.locator("#action").click();
+      assert.equal(
+        await page.locator("#result").innerText(),
+        "JavaScript works",
+      );
+      assert.equal(
+        await page.locator("body").getAttribute("data-isolated"),
+        "yes",
+      );
       assert.equal(
         await page
           .locator("img")

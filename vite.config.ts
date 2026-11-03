@@ -7,8 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:4310",
-      "/assets": "http://127.0.0.1:4310",
+      "/api": { target: "http://127.0.0.1:4310", changeOrigin: false },
+      "/assets": { target: "http://127.0.0.1:4310", changeOrigin: false },
     },
   },
 });

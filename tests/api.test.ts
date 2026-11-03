@@ -355,8 +355,9 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
     );
     const exported = await (await request(`/projects/${p.id}/export`)).text();
     assert.match(exported, /Saved/);
-    assert.match(exported, /script-src 'none'/);
-    assert.doesNotMatch(exported, /<script|action="https/);
+    assert.match(exported, /script-src 'unsafe-inline'/);
+    assert.match(exported, /<script>parent.alert\(1\)<\/script>/);
+    assert.doesNotMatch(exported, /action="https/);
     assert.equal(
       (
         await request(`/projects/${p.id}`, {
