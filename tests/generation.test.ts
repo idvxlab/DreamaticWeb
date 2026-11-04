@@ -788,7 +788,7 @@ test("additional source ranges and optional image inspection use Pi tools and ca
   }
 });
 
-test("normal A3 pipeline shares canonical media context in three calls, with optional vision and cached editing", async () => {
+test("legacy media appendices stay in source storage without Designer reinjection; optional vision and three-stage reuse remain", async () => {
   const p = await create();
   const observed: string[][] = [];
   try {
@@ -841,7 +841,14 @@ test("normal A3 pipeline shares canonical media context in three calls, with opt
       if (names.includes("submit_intent"))
         return answer(model, "submit_intent", brief);
       const all = JSON.stringify(input.messages);
-      assert.match(all, /Product illustration from source/);
+      if (names.includes("submit_facts"))
+        assert.match(all, /Product illustration from source/);
+      else {
+        assert.doesNotMatch(
+          all,
+          /# Canonical media associations|Media layout associations|Product illustration from source/,
+        );
+      }
       assert.ok(all.includes(source.assets[0].url));
       if (names.includes("submit_facts"))
         return answer(model, "submit_facts", {
@@ -1026,6 +1033,84 @@ test("Skill upgrades invalidate only affected stages, preserve patch mode and ke
   }
 });
 
+test("explicit adapted Skills reach only Designer and preserve three-stage generation and one-call patch editing", async () => {
+  const p = await create();
+  const names = ["designer-impeccable", "designer-3d-transforms"];
+  const prefix = names.map((name) => `/skill:${name}`).join(" ");
+  const designerSelections: string[][] = [];
+  const streamFn: StreamFn = (model, context) => {
+    const sys = getCurrentSystemMessage(context.messages)!;
+    const prompt =
+      typeof sys.content === "string"
+        ? sys.content
+        : sys.content.map((part) => part.text).join("\n");
+    if (prompt.includes("# Orchestrator")) {
+      assert.ok(!prompt.includes("<skill name="));
+      return answer(model, "submit_intent", brief);
+    }
+    if (prompt.includes("# Analyst")) {
+      assert.ok(!prompt.includes('name="designer-impeccable"'));
+      return answer(model, "submit_facts", {
+        summary: "Fixture",
+        facts: [],
+        limitations: [],
+      });
+    }
+    const selected = [...prompt.matchAll(/<skill name="([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    assert.deepEqual(selected, names);
+    designerSelections.push(selected);
+    assert.ok(
+      !prompt.includes("designer-visual-design"),
+      "no implicit visual baseline in an explicit experiment",
+    );
+    assert.ok(
+      !prompt.includes("# Upstream depth tokens in readable form"),
+      "references are still deferred",
+    );
+    const tools = (sys.toolsAdded || []).map((tool) => tool.name);
+    if (tools.includes("page_patch"))
+      return answer(model, "page_patch", {
+        baseVersionId: p.versions.at(-1)!.id,
+        operations: [
+          { selector: "#title", action: "set_text", value: "Edited" },
+        ],
+      });
+    return answer(model, "submit_page", { html, usedFactIds: [] });
+  };
+  try {
+    await runProject(
+      p,
+      requestSchema.parse({ text: prefix + " 生成公司官网，具有明显空间动效" }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 3);
+    assert.deepEqual(
+      p.generation!.metrics!.stages.find((stage) => stage.role === "designer")!
+        .skills,
+      names,
+    );
+    await runProject(
+      p,
+      requestSchema.parse({ text: prefix + " 把标题改成 Edited" }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 1);
+    assert.equal(p.generation!.metrics!.fullPageWrites, 0);
+    assert.equal(p.generation!.metrics!.sourceReads, 0);
+    assert.equal(designerSelections.length, 2);
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
 test("explicit fact selection updates publish associations atomically, support none, and reject stale versions", async () => {
   const p = await create();
   let selection: string[] = ["a", "b"];
@@ -1125,6 +1210,121 @@ test("explicit fact selection updates publish associations atomically, support n
     assert.deepEqual(p.versions.at(-1)!.appliedFactIds, []);
     assert.match(p.versions.at(-1)!.html, /No selected facts/);
     assert.equal(p.generation!.metrics!.modelCalls, 1);
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
+test("experiment observer preserves a rejected terminal call followed by successful recovery", async () => {
+  const p = await create();
+  const events: { role: string; event: any }[] = [];
+  let designerCalls = 0;
+  try {
+    await runProject(
+      p,
+      requestSchema.parse({ text: "生成品牌官网" }),
+      save,
+      () => {},
+      {
+        config,
+        skills: false,
+        onAgentEvent: (role, event) => {
+          events.push({ role, event });
+        },
+        streamFn: (model, context) => {
+          const names = getCurrentSystemMessage(
+            context.messages,
+          )!.toolsAdded!.map((t) => t.name);
+          if (names.includes("submit_intent"))
+            return answer(model, "submit_intent", brief);
+          if (names.includes("submit_facts"))
+            return answer(model, "submit_facts", {
+              summary: "No source facts",
+              facts: [],
+              limitations: [],
+            });
+          designerCalls++;
+          if (designerCalls === 1) return answer(model, "submit_page", {});
+          return answer(model, "submit_page", {
+            html,
+            usedFactIds: designerCalls === 2 ? ["not-a-valid-fact"] : [],
+          });
+        },
+      },
+    );
+    assert.equal(p.status, "complete");
+    assert.equal(p.generation?.metrics?.modelCalls, 5);
+    const results = events.filter(
+      (e) => e.role === "designer" && e.event.type === "tool_execution_end",
+    );
+    assert.deepEqual(
+      results.map((e) => e.event.isError),
+      [true, true, false],
+    );
+    assert.match(JSON.stringify(results[1]), /无效的事实 ID/);
+    const starts = events.filter(
+      (e) =>
+        e.event.type === "tool_execution_start" &&
+        e.event.toolName === "submit_page",
+    );
+    assert.equal(starts[0].event.args.html, undefined);
+    assert.equal(
+      events.filter(
+        (e) =>
+          e.event.type === "tool_execution_start" &&
+          e.event.toolName === "submit_page",
+      ).length,
+      3,
+    );
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
+test("Designer receives declared core references in the initial call without an extra read round", async () => {
+  const p = await create();
+  let calls = 0;
+  try {
+    await runProject(
+      p,
+      requestSchema.parse({
+        text: "/skill:designer-3d-transforms Create a spatial showcase",
+      }),
+      save,
+      () => {},
+      {
+        config,
+        streamFn: (model, context) => {
+          calls++;
+          const sys = getCurrentSystemMessage(context.messages)!;
+          const prompt =
+            typeof sys.content === "string"
+              ? sys.content
+              : sys.content.map((c) => c.text).join("\n");
+          if (prompt.includes("# Orchestrator"))
+            return answer(model, "submit_intent", brief);
+          if (prompt.includes("# Analyst"))
+            return answer(model, "submit_facts", {
+              summary: "No source facts",
+              facts: [],
+              limitations: [],
+            });
+          assert.match(prompt, /# Build a coherent 3D stage/);
+          assert.match(prompt, /width:min\(100%, 560px\)/);
+          assert.doesNotMatch(
+            prompt,
+            /# Upstream depth tokens in readable form/,
+          );
+          return answer(model, "submit_page", { html, usedFactIds: [] });
+        },
+      },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(calls, 3);
+    assert.equal(p.generation!.metrics!.skillReads, 0);
+    assert.deepEqual(p.generation!.metrics!.stages.at(-1)!.skillReferences, [
+      "designer-3d-transforms/references/spatial-patterns.md",
+    ]);
   } finally {
     await removeProject(p.id);
   }

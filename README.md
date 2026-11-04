@@ -57,7 +57,7 @@ PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；�
 
 网页只抓取指定页面和最多 12 项相关媒体，不递归爬站。重导入需要检查远程依赖，因此仍有网络请求。按需在 Designer 中查看图片只在启用视觉能力时开放，不会在导入阶段自动发给模型。
 
-文档导入默认保留最多 200 个去重素材、累计 80 MiB，达到限制会提示。程序将可取得的页码、原文图注和版面关联写进同一份 Markdown；横向双栏产品/案例关联采用启发式，未知图像类别保留为未知。Designer 复用这些关联，仍可按需看图，不增加 Agent 或独立 review。旧资料需重新导入才能获得新的关联；旧运行记录保留。
+文档导入默认保留最多 200 个去重素材、累计 80 MiB，达到限制会提示。Designer 使用事实里的素材 ID 和原始素材目录，按需调用 asset_view；大图只在查看时生成压缩预览，网页仍引用原图。新解析不再生成启发式图文关联附录，Designer 也不再默认追加整段关联；旧规范 Markdown 和历史记录保持原样。
 
 ## API 与运行
 
@@ -80,9 +80,33 @@ PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；�
 
 ## 专业 Skills
 
-`.agents/skills` 保存 10 项可移植 Skill。Pi 通过官方 `loadSkillsFromDir` 发现、`formatSkillsForPrompt` 展示目录、`createReadTool` 按需读取；角色权限和文件缓存由应用适配。仅添加锁定版本的 `pi-coding-agent@1.3.0` 原生加载依赖，不启用它的 CLI、shell 或额外 Agent。
+`.agents/skills` 保存 10 项基础 Skill 和 8 项 ZJT 上游适配版（Awwwards、frontend-design、Impeccable、animate、overdrive、Motion Design、web-animation-design、3d-transforms）。Pi 通过官方 `loadSkillsFromDir` 发现、`formatSkillsForPrompt` 展示目录、`createReadTool` 按需读取；角色权限和文件缓存由应用适配。继续使用锁定版本的 `pi-coding-agent@1.3.0`，不启用它的 CLI、shell 或额外 Agent。
 
-Analyst 默认使用 `analyst-information-extraction`。Designer 根据任务选择网站类型并组合必要的架构、视觉或交互指导，最多四项；简单文字编辑不加载设计 Skill。选定正文在现有模型请求前注入，不额外调用模型选择 Skill。可用 `/skill:designer-editorial` 明确选择已安装技能。参考资料通过受限原生 `read` 工具按需加载，不预读全部参考内容。
+Analyst 默认使用 `analyst-information-extraction`。未指定时，Designer 根据任务选择网站类型及必要的架构、视觉或交互指导，最多四项；简单文字编辑不加载设计 Skill。显式 `/skill:名称` 则精确使用所列组合，不再混入默认视觉/交互 Skill，读取权限也限定在该组合及其参考资料。选定正文在现有模型请求前注入，不额外调用模型选择 Skill。参考正文继续按需读取，缓存避免重复读盘。
+
+例如在需求前加两行，再写同一句页面要求：
+
+```text
+/skill:designer-impeccable
+/skill:designer-3d-transforms
+用上传资料生成公司产品宣传页，首屏要有明显、有主题的空间动效，桌面和手机都能正常浏览。
+```
+
+正文合计上限为 24,000 字符（原为 18,000），不是 Token 数，也不会自动填满；每次仍最多四项，单个可读 Markdown 文件仍最多 48,000 字节。适配版保留内联 JavaScript、CSS 3D、原生动画和动态 Canvas/WebGL 方向，不假设外部库已加载。每项 `upstream.json` 记录原包/来源/适配文件指纹和改动边界，许可证随包保留。正式生成效果和首次成功率需后续真实实验确认。
+
+运行前可离线检查选择和预算（不调用模型、不生成项目）：
+
+```sh
+node --import tsx scripts/check-skills.ts --request '/skill:designer-impeccable /skill:designer-3d-transforms 生成公司官网'
+```
+
+需要真实单次对照时，可在已设置 `DREAMATIC_*` 模型环境变量的进程中运行：
+
+```sh
+node --import tsx scripts/experiment-skills.ts --live --source /absolute/path/company.pdf --output workspace/experiments/skill-trial
+```
+
+默认先跑完整流程，再让 8 个适配版各复用同一份简报和事实、独立生成一次；对比 Designer 耗时。项目保存在同一 Workspace，前端可直接看到。`summary.json` 汇总耗时、模型调用和失败，分组 `trace.json` 保留工具尝试及修复，候选与最终 HTML 单独保存；不写入密钥。Agent 在原流程中的自修复仍计入本次尝试。已有尝试不自动重跑，可用 `--only designer-名称` 限定下一组。Ctrl+C 或 SIGTERM 会中止当前请求并停止后续组。实验默认每组最多 15 分钟，生产流程没有增加超时或审查阶段。浏览器效果、触控、保存重开和导出需要另外验收，工具提交成功不能替代这些检查。
 
 `GET /api/skills` 展示真实目录，`/api/skills/diagnostics` 返回原生发现诊断。新增或修改目录被 watcher 发现；相关 Skill/参考文件变化影响对应缓存指纹，不因修改无关技能而重跑分析。指标增加 Skills、加载字符数、预加载耗时和实际 provider token 用量。
 

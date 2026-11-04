@@ -1,0 +1,47 @@
+{
+  "adapterVersion": "1.1.0",
+  "upstreamName": "frontend-design",
+  "archive": "ZJT-Skills-上游原版-20261104.zip",
+  "archiveSha256": "91a56492417d4a759825e7ddfb45565ac81942708e2fcb1f50223a8da6aaf463",
+  "sources": [
+    {
+      "path": "ZJT-Skills-上游原版-20261104/02-frontend-design/skills/frontend-design/SKILL.md",
+      "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3"
+    }
+  ],
+  "license": {
+    "source": "02-frontend-design/skills/frontend-design/LICENSE.txt",
+    "local": "LICENSE",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  "retained": [
+    "subject-specific visual identity",
+    "original motion/depth/choreography objectives",
+    "responsive and reduced-motion usability"
+  ],
+  "adaptations": [
+    "role-prefixed discoverable name",
+    "scoped Markdown references and readable tokens",
+    "prepared brief instead of separate discovery/launcher/menu",
+    "existing single-document runtime rather than framework scaffolding or unprovided libraries",
+    "external visual evaluation instead of extra production review agents",
+    "no initial waiting greeting or forced review-table response",
+    "declare scoped core references for same-turn native preloading; other references stay on demand"
+  ],
+  "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
+  "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    },
+    {
+      "path": "SKILL.md",
+      "sha256": "f80f699f4c113f5b7afab439f75bfb239ade23f2cef4fb183923d23227cf49a9"
+    },
+    {
+      "path": "references/composition.md",
+      "sha256": "80db0ba05a95c7c801d300921a7da2e25bb4479718b88160488bdb220b8c11b5"
+    }
+  ]
+}

@@ -5,8 +5,12 @@ import zh from "grapesjs/locale/zh";
 import { useI18n } from "./i18n";
 import { api } from "./api";
 import { parseEditorCss } from "./editor-css";
+import {
+  parseEditorDocument,
+  serializeEditorDocument,
+} from "./editor-document";
 import { blockCard } from "./block-cards";
-import { EDITOR_CSP, PREVIEW_CSP } from "../../../packages/shared/html-policy";
+import { EDITOR_CSP } from "../../../packages/shared/html-policy";
 import type { Asset } from "../../../packages/shared/project";
 import {
   MousePointer2,
@@ -55,34 +59,28 @@ export default function Editor({
     lang: "zh-CN",
     description: "",
   });
-  const rememberMetadata = (value: string) => {
-    const doc = new DOMParser().parseFromString(value, "text/html");
-    scripts.current = Array.from(
-      doc.querySelectorAll("script:not([src])"),
-      (s) => s.outerHTML,
-    );
-    bodyAttributes.current = Object.fromEntries(
-      Array.from(doc.body.attributes)
-        .filter((attribute) =>
-          /^(id|class|style|lang|dir|title|role|aria-[\w-]+|data-[\w-]+)$/.test(
-            attribute.name,
-          ),
-        )
-        .map((attribute) => [attribute.name, attribute.value]),
-    );
-    metadata.current = {
-      title: doc.title || "Dreamatic · Web",
-      lang: doc.documentElement.lang || "zh-CN",
-      description:
-        doc
-          .querySelector('meta[name="description"]')
-          ?.getAttribute("content") || "",
-    };
+  const loadDocument = (e: GrapesEditor, value: string) => {
+    const parsed = parseEditorDocument(value);
+    scripts.current = parsed.scripts;
+    bodyAttributes.current = parsed.bodyAttributes;
+    metadata.current = parsed.metadata;
+    e.setStyle("");
+    e.setComponents(parsed.markup);
+    const wrapper = e.getWrapper();
+    wrapper?.setAttributes(bodyAttributes.current);
+    // Keep policy in the head model as well: GrapesJS renders that model after
+    // frameContent and replaces any manually inserted head nodes on reload.
+    wrapper?.head.components([
+      {
+        tagName: "meta",
+        attributes: {
+          "http-equiv": "Content-Security-Policy",
+          content: EDITOR_CSP,
+        },
+      },
+    ]);
   };
   const bodyAttributes = useRef<Record<string, string>>({});
-  const restoreBody = (e: GrapesEditor) => {
-    e.getWrapper()?.setAttributes(bodyAttributes.current);
-  };
   const snapshot = (e: GrapesEditor) =>
     e.getHtml() + "\n" + e.getCss() + "\n" + scripts.current.join("\n");
   const [tab, setTab] = useState("styles"),
@@ -284,16 +282,10 @@ export default function Editor({
     if (!e) return;
     const initial = baseline.current === "";
     resetting.current = true;
-    rememberMetadata(html);
-    e.setStyle("");
-    e.setComponents(html);
-    restoreBody(e);
+    loadDocument(e, html);
     baseline.current = snapshot(e);
     if (initial && draftHtml) {
-      rememberMetadata(draftHtml);
-      e.setStyle("");
-      e.setComponents(draftHtml);
-      restoreBody(e);
+      loadDocument(e, draftHtml);
     }
     e.UndoManager.clear();
     resetting.current = false;
@@ -344,40 +336,13 @@ export default function Editor({
   }, [preview]);
   const getHtml = () => {
     const e = editor.current!;
-    const doc = document.implementation.createHTMLDocument(
-      metadata.current.title,
-    );
-    doc.documentElement.lang = metadata.current.lang;
-    const charset = doc.createElement("meta");
-    charset.setAttribute("charset", "utf-8");
-    const policy = doc.createElement("meta");
-    policy.httpEquiv = "Content-Security-Policy";
-    policy.content = PREVIEW_CSP;
-    const viewport = doc.createElement("meta");
-    viewport.name = "viewport";
-    viewport.content = "width=device-width,initial-scale=1";
-    const description = doc.createElement("meta");
-    description.name = "description";
-    description.content = metadata.current.description;
-    const style = doc.createElement("style");
-    style.textContent = e.getCss() || "";
-    doc.head.prepend(charset, policy);
-    doc.head.append(viewport, description, style);
-    const exported = new DOMParser().parseFromString(e.getHtml(), "text/html");
-    doc.body.innerHTML = exported.body.innerHTML;
-    for (const attribute of Array.from(exported.body.attributes))
-      doc.body.setAttribute(attribute.name, attribute.value);
-    for (const [name, value] of Object.entries(
-      e.getWrapper()?.getAttributes() || {},
-    ))
-      if (value !== undefined && value !== null)
-        doc.body.setAttribute(name, String(value));
-    doc.body
-      .querySelectorAll("script,meta[http-equiv]")
-      .forEach((s) => s.remove());
-    for (const script of scripts.current)
-      doc.body.insertAdjacentHTML("beforeend", script);
-    return "<!doctype html>" + doc.documentElement.outerHTML;
+    return serializeEditorDocument({
+      html: e.getHtml(),
+      css: e.getCss() || "",
+      metadata: metadata.current,
+      scripts: scripts.current,
+      bodyAttributes: e.getWrapper()?.getAttributes() || {},
+    });
   };
   async function openInBrowser() {
     if (opening) return;
@@ -398,11 +363,8 @@ export default function Editor({
     const e = editor.current;
     if (!e || locked || saving) return;
     resetting.current = true;
-    rememberMetadata(html);
     e.select();
-    e.setStyle("");
-    e.setComponents(html);
-    restoreBody(e);
+    loadDocument(e, html);
     e.UndoManager.clear();
     baseline.current = snapshot(e);
     resetting.current = false;
@@ -608,10 +570,7 @@ export default function Editor({
                 disabled={locked}
                 className="primary"
                 onClick={() => {
-                  rememberMetadata(source);
-                  editor.current?.setStyle("");
-                  editor.current?.setComponents(source);
-                  if (editor.current) restoreBody(editor.current);
+                  if (editor.current) loadDocument(editor.current, source);
                   setCode(false);
                   onDirty(true);
                 }}

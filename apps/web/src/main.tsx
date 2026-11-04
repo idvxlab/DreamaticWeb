@@ -1282,7 +1282,11 @@ function App() {
                   <BookOpen size={24} />
                 </span>
                 <h2>{t("按需加载的设计知识")}</h2>
-                <p>{t("每个智能体根据当前任务，主动发现并加载所需 Skill。")}</p>
+                <p>
+                  {t(
+                    "在需求中用 /skill:名称 指定组合后，只使用所选 Skill 及其参考资料；未指定时按任务自动选择。",
+                  )}
+                </p>
                 <div className="skills-list">
                   {skills.map((s) => (
                     <article key={s.name}>

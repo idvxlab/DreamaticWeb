@@ -1,6 +1,7 @@
 import {
   Agent,
   type AgentTool,
+  type AgentEvent,
   type StreamFn,
 } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
@@ -34,7 +35,6 @@ import {
   factsMarkdown,
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
-import { canonicalMediaAssociations } from "../document-media.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import { imagePreview } from "../image-preview.js";
@@ -142,6 +142,8 @@ export interface RunOptions {
   resume?: boolean;
   /** Offline comparison seam; production always enables the project Skills. */
   skills?: SkillLibrary | false;
+  /** Offline experiment observer. Keep collection synchronous and free of I/O. */
+  onAgentEvent?: (role: Role, event: AgentEvent) => void;
 }
 export function runProject(
   project: Project,
@@ -351,24 +353,31 @@ async function execute(
             ? designerSkills
             : [];
       const skillStart = performance.now();
+      const selectedOnly =
+        role === "designer" && /\/skill:designer-[a-z0-9-]+/.test(request.text);
       const prepared =
         library && names.length
-          ? await library.prepare(role, names)
-          : { prompt: "", names: [], characters: 0 };
+          ? await library.prepare(role, names, { selectedOnly })
+          : { prompt: "", names: [], characters: 0, references: [] };
       const skillMs = Math.round(performance.now() - skillStart);
       metrics.skillCharacters += prepared.characters;
       metrics.skillLoads += prepared.names.length;
       if (prepared.names.length)
         event(role, "已加载 " + prepared.names.join(", "), "skill", {
           skillCharacters: prepared.characters,
+          skillReferences: prepared.references.join(", "),
         });
       // Expose Pi's native scoped reader only when this stage can benefit from Skills.
       if (library && role !== "orchestrator" && names.length)
         tools = [
           ...tools,
-          library.reader(role, () => {
-            metrics.skillReads++;
-          }),
+          library.reader(
+            role,
+            () => {
+              metrics.skillReads++;
+            },
+            selectedOnly ? names : undefined,
+          ),
         ];
       const runtime = modelRuntime(profile(role));
       const stageStart = performance.now(),
@@ -417,6 +426,7 @@ async function execute(
         },
       });
       agent.subscribe((event) => {
+        options.onAgentEvent?.(role, event);
         if (
           event.type === "message_end" &&
           event.message.role === "assistant"
@@ -429,19 +439,7 @@ async function execute(
       const abort = () => agent.abort();
       controller.signal.addEventListener("abort", abort, { once: true });
       try {
-        await agent.prompt(
-          input +
-            (role === "designer"
-              ? documents
-                  .map(({ source, document }) => {
-                    const media = canonicalMediaAssociations(document.markdown);
-                    return media
-                      ? `\n\n# Canonical media associations: ${source.id}\n${media}`
-                      : "";
-                  })
-                  .join("")
-              : ""),
-        );
+        await agent.prompt(input);
         controller.signal.throwIfAborted();
         if (agent.state.errorMessage) {
           const requestNumber = metrics.modelCalls - callStart;
@@ -466,6 +464,7 @@ async function execute(
         metrics.stages.push({
           role,
           skills: prepared.names,
+          skillReferences: prepared.references,
           skillCharacters: prepared.characters,
           skillMs,
           reused: false,

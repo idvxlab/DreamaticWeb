@@ -12,6 +12,20 @@ import type { Role } from "../../../../packages/shared/project.js";
 import { hash } from "./artifacts.js";
 
 export const SKILLS_ROOT = path.resolve(".agents/skills");
+export const SKILL_BODY_CHARACTER_LIMIT = 24000;
+export const SKILL_REFERENCE_BYTE_LIMIT = 48000;
+
+/** Portable Markdown declares only the references essential to this Skill. */
+function requiredReferences(body: string) {
+  const section =
+    body.split(/^## Required references[ \t]*\r?$/m)[1]?.split(/^## /m)[0] ||
+    "";
+  return [
+    ...new Set(
+      [...section.matchAll(/\]\((references\/[^)]+\.md)\)/g)].map((m) => m[1]),
+    ),
+  ];
+}
 const roleFor = (name: string): Role | undefined =>
   name.startsWith("analyst-")
     ? "analyst"
@@ -66,12 +80,19 @@ export function selectSkills(
 ) {
   const allowed = available.filter((s) => roleFor(s.name) === role);
   const exists = (name: string) => allowed.some((s) => s.name === name);
-  const explicit = [...context.text.matchAll(/\/skill:([a-z0-9-]+)/g)]
-    .map((m) => m[1])
-    .filter((name) => roleFor(name) === role);
+  const explicit = [
+    ...new Set(
+      [...context.text.matchAll(/\/skill:([a-z0-9-]+)/g)]
+        .map((m) => m[1])
+        .filter((name) => roleFor(name) === role),
+    ),
+  ];
   for (const name of explicit)
     if (!exists(name)) throw new Error(`Skill 不可用于 ${role}：${name}`);
   if (explicit.length > 4) throw new Error("一次最多显式选择 4 项 Skill");
+  // Explicit Designer selections are the complete set, including on edits.
+  // This keeps experiments from silently mixing the original visual/motion Skills.
+  if (role === "designer" && explicit.length) return explicit;
   const chosen = new Set<string>(
     role === "analyst"
       ? ["analyst-information-extraction", ...explicit]
@@ -215,11 +236,16 @@ export class SkillLibrary {
       permissions: ["guidance"],
     }));
   }
-  private async permitted(filename: string, role: Role) {
+  private async permitted(
+    filename: string,
+    role: Role,
+    names?: readonly string[],
+  ) {
     const resolved = await realpath(filename);
     const entry = (await this.catalog()).skills.find(
       (s) =>
         roleFor(s.name) === role &&
+        (!names || names.includes(s.name)) &&
         (resolved === s.filePath || resolved.startsWith(s.baseDir + path.sep)),
     );
     if (
@@ -230,7 +256,7 @@ export class SkillLibrary {
     )
       throw new Error("只能读取当前角色的 Skill 和 references Markdown");
     const file = await stat(resolved, { bigint: true });
-    if (file.size > 48000n)
+    if (file.size > BigInt(SKILL_REFERENCE_BYTE_LIMIT))
       throw new Error("Skill 文档超过 48 KB，请拆分按需参考资料");
     return {
       resolved,
@@ -240,14 +266,19 @@ export class SkillLibrary {
   reader(
     role: Role,
     onRead?: (name: string, characters: number) => void,
+    names?: readonly string[],
   ): AgentTool {
     const native = createReadTool(this.root, {
       operations: {
         access: async (filename) => {
-          await this.permitted(filename, role);
+          await this.permitted(filename, role, names);
         },
         readFile: async (filename) => {
-          const { resolved, stamp } = await this.permitted(filename, role);
+          const { resolved, stamp } = await this.permitted(
+            filename,
+            role,
+            names,
+          );
           let cached = this.buffers.get(resolved);
           if (cached?.stamp !== stamp) {
             cached = { stamp, buffer: await readFile(resolved) };
@@ -270,7 +301,10 @@ export class SkillLibrary {
           onUpdate,
         ),
       description:
-        "Read a role-authorized SKILL.md or its references Markdown. Other files, originals and scripts are not accessible.",
+        (names
+          ? "Read only the explicitly selected Skills and their references Markdown. "
+          : "Read a role-authorized SKILL.md or its references Markdown. ") +
+        "Other files, originals and scripts are not accessible.",
     };
   }
   async signature(role: Role, names: string[]) {
@@ -287,21 +321,31 @@ export class SkillLibrary {
       // Read only selected entries through the cached public Pi reader, never all bodies.
       await this.reader(role).execute("signature", { path: skill.filePath });
       const text = this.buffers.get(skill.filePath)!.buffer.toString("utf8");
+      const required = new Set(requiredReferences(text));
       for (const match of text.matchAll(/\]\((references\/[^)]+\.md)\)/g)) {
         const resource = await this.permitted(
           path.resolve(skill.baseDir, match[1]),
           role,
         );
         parts.push(resource.resolved + ":" + resource.stamp);
+        if (required.has(match[1]))
+          await this.reader(role, undefined, names).execute("signature", {
+            path: resource.resolved,
+          });
       }
     }
     return hash(parts.join("|"));
   }
-  async prepare(role: Role, names: string[]) {
+  async prepare(
+    role: Role,
+    names: string[],
+    options: { selectedOnly?: boolean } = {},
+  ) {
     const catalog = (await this.catalog()).skills.filter(
       (s) => roleFor(s.name) === role,
     );
     const blocks = [];
+    const references: string[] = [];
     let characters = 0;
     for (const name of names) {
       const skill = catalog.find((s) => s.name === name);
@@ -314,18 +358,42 @@ export class SkillLibrary {
         .map((c) => c.text)
         .join("\n");
       characters += body.length;
-      if (characters > 18000)
-        throw new Error("选定 Skills 超过上下文预算，请缩小选择");
+      if (characters > SKILL_BODY_CHARACTER_LIMIT)
+        throw new Error(
+          `选定 Skills 正文超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
+        );
       blocks.push(
         `<skill name="${name}" location="${skill.filePath}">\n${body}\n</skill>`,
       );
+      const raw = this.buffers.get(skill.filePath)!.buffer.toString("utf8");
+      for (const reference of requiredReferences(raw)) {
+        const filename = path.resolve(skill.baseDir, reference);
+        const result = await this.reader(role, undefined, names).execute(
+          "preload-reference",
+          { path: filename },
+        );
+        const content = result.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text)
+          .join("\n");
+        characters += content.length;
+        if (characters > SKILL_BODY_CHARACTER_LIMIT)
+          throw new Error(
+            `选定 Skills 和核心参考超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
+          );
+        references.push(`${name}/${reference}`);
+        blocks.push(
+          `<skill-reference skill="${name}" location="${filename}">\n${content}\n</skill-reference>`,
+        );
+      }
     }
     return {
       prompt: names.length
-        ? `${formatSkillsForPrompt(catalog, "read")}\n\nSelected skills already loaded below; do not read them again. Other skills/references are optional, only when needed.\n${blocks.join("\n\n")}`
+        ? `${formatSkillsForPrompt(options.selectedOnly ? catalog.filter((s) => names.includes(s.name)) : catalog, "read")}\n\nSelected skills and their required references are loaded below; apply them without reading them again. For other linked references, use read with the absolute Skill location's directory plus the relative reference path. ${options.selectedOnly ? "Only these selected Skills and their references are available." : "Read other relevant references only when needed."}\n${blocks.join("\n\n")}`
         : "",
       names,
       characters,
+      references,
     };
   }
 }

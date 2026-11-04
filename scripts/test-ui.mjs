@@ -204,7 +204,7 @@ try {
   const sourceEditor = page.getByLabel("HTML 源码编辑");
   const bodySource = (await sourceEditor.inputValue())
     .replace(/<body[^>]*>/i, '<body id="top" class="body-theme">')
-    .replace('</body>', '<a href="#top">Back to top</a></body>');
+    .replace('</body>', '<a href="#top">Back to top</a><canvas id="motion-fixture" width="80" height="40" aria-label="Canvas regression"></canvas><script>document.body.dataset.previewRuns=String(Number(document.body.dataset.previewRuns||0)+1);document.getElementById("motion-fixture").getContext("2d").fillRect(0,0,20,20)</script></body>');
   await sourceEditor.fill(bodySource);
   await page.getByRole("button", { name: "应用到画布", exact: true }).click();
   await page.route("**/api/projects/*/open", async (route) => {
@@ -228,6 +228,36 @@ try {
   assert.ok(p.versions.length >= 2);
   assert.match(p.versions.at(-1).html, /A greener tomorrow/);
   assert.match(p.versions.at(-1).html, /<title>素材与灵感<\/title>/);
+  // Repeat the real source/apply/save/reopen path: metadata must not accumulate,
+  // while static Canvas and its inline script still work in the isolated preview.
+  for (let cycle = 0; cycle < 2; cycle++) {
+    const before = await (await fetch(base + "/api/projects/" + p.id)).json();
+    await page.getByRole("button", { name: "HTML 源码", exact: true }).click();
+    await sourceEditor.fill((await sourceEditor.inputValue()).replace(/<body\b/i, `<body data-cycle-${cycle}="checked"`));
+    await page.getByRole("button", { name: "应用到画布", exact: true }).click();
+    await page.getByRole("button", { name: "保存", exact: true }).click();
+    let saved;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      saved = await (await fetch(base + "/api/projects/" + p.id)).json();
+      if (saved.versions.length > before.versions.length) break;
+      await page.waitForTimeout(100);
+    }
+    assert.equal(saved.versions.length, before.versions.length + 1);
+    const counts = await page.evaluate(html => {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      return { titles: doc.querySelectorAll("title").length, bodyMetadata: doc.body.querySelectorAll("title,meta").length, scripts: doc.querySelectorAll("script").length, canvas: doc.querySelectorAll("canvas#motion-fixture").length };
+    }, saved.versions.at(-1).html);
+    assert.deepEqual(counts, { titles: 1, bodyMetadata: 0, scripts: 1, canvas: 1 });
+    await page.reload();
+    await frame.locator("h1").waitFor();
+    assert.equal(await frame.locator('head meta[http-equiv="Content-Security-Policy"]').count(), 1);
+    assert.equal(await frame.locator("body").getAttribute("data-preview-runs"), null, "scripts never run in the design canvas");
+    await page.getByRole("button", { name: "预览", exact: true }).click();
+    const livePreview = page.frameLocator('iframe[sandbox="allow-scripts"]');
+    await livePreview.locator('body[data-preview-runs="1"]').waitFor();
+    assert.equal(await livePreview.locator("#motion-fixture").evaluate(canvas => canvas.getContext("2d").getImageData(10, 10, 1, 1).data[3]), 255);
+    await page.getByRole("button", { name: "设计", exact: true }).click();
+  }
   await page.getByRole("button", { name: "Mobile", exact: true }).click();
   await page.waitForTimeout(1000);
   assert.equal(
@@ -278,7 +308,7 @@ try {
 
   await page.getByRole("button", { name: "关闭资料" }).click();
   await page.getByTitle("查看技能", { exact: true }).click();
-  assert.equal(await page.locator(".skills-list > *").count(), 10);
+  assert.equal(await page.locator(".skills-list > *").count(), 18);
   await page.getByRole("button", { name: "关闭弹窗" }).click();
   assert.equal(await page.locator(".sidebar").getByRole("button",{name:"技能库",exact:false}).count(),0);
   await page.getByRole("button",{name:/^事实列表/}).click();

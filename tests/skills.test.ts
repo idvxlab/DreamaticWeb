@@ -12,19 +12,78 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { createHash } from "node:crypto";
 import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import {
   SkillLibrary,
   selectSkills,
   SKILLS_ROOT,
+  SKILL_BODY_CHARACTER_LIMIT,
 } from "../apps/server/src/generation/skills.js";
 
 const lib = new SkillLibrary();
 test.after(() => lib.close());
+
+test("required references are scoped, budgeted, cached and invalidate the selected Skill", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dreamatic-core-refs-"));
+  const dir = path.join(root, "designer-example");
+  const library = new SkillLibrary(root);
+  try {
+    await mkdir(path.join(dir, "references"), { recursive: true });
+    await writeFile(
+      path.join(dir, "SKILL.md"),
+      "---\nname: designer-example\ndescription: Example scene\n---\n# Scene\n[Optional](references/optional.md)\n\n## Required references\nApply [core](references/core.md).\n\n## Other work\nLeave the optional file deferred.\n",
+    );
+    await writeFile(
+      path.join(dir, "references/core.md"),
+      "# Essential scene\nA visible staged transformation.",
+    );
+    await writeFile(
+      path.join(dir, "references/optional.md"),
+      "OPTIONAL-NOT-NEEDED",
+    );
+    const names = ["designer-example"];
+    const first = await library.signature("designer", names);
+    const reads = library.io.reads;
+    const prepared = await library.prepare("designer", names, {
+      selectedOnly: true,
+    });
+    assert.match(prepared.prompt, /A visible staged transformation/);
+    assert.doesNotMatch(prepared.prompt, /OPTIONAL-NOT-NEEDED/);
+    assert.deepEqual(prepared.references, [
+      "designer-example/references/core.md",
+    ]);
+    assert.equal(library.io.reads, reads);
+    await library.prepare("designer", names);
+    assert.equal(library.io.reads, reads);
+    await writeFile(
+      path.join(dir, "references/core.md"),
+      "# Essential scene\nUpdated core mechanics.",
+    );
+    assert.notEqual(await library.signature("designer", names), first);
+    assert.match(
+      (await library.prepare("designer", names)).prompt,
+      /Updated core mechanics/,
+    );
+    await writeFile(path.join(dir, "references/core.md"), "x".repeat(24000));
+    await assert.rejects(
+      () => library.prepare("designer", names),
+      /24000.*预算/,
+    );
+    const outside = path.join(root, "outside.md");
+    await writeFile(outside, "DO-NOT-LOAD");
+    await rm(path.join(dir, "references/core.md"));
+    await symlink(outside, path.join(dir, "references/core.md"));
+    await assert.rejects(() => library.prepare("designer", names), /只能读取/);
+  } finally {
+    library.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("published Pi loader discovers portable Skills; Codex and Claude paths resolve the same resources", async () => {
   const pi = loadSkillsFromDir({ dir: SKILLS_ROOT, source: "test" });
   assert.equal(pi.diagnostics.length, 0);
-  assert.equal(pi.skills.length, 10);
+  assert.equal(pi.skills.length, 18);
   const alias = path.resolve(".claude/skills");
   assert.equal(await realpath(alias), await realpath(SKILLS_ROOT));
   const claudeLayout = loadSkillsFromDir({
@@ -51,6 +110,179 @@ test("published Pi loader discovers portable Skills; Codex and Claude paths reso
         await readFile(path.join(s.baseDir, ref[1]), "utf8"),
       );
     }
+  }
+});
+
+test("explicit Designer selections stay exact and scoped while references remain on demand", async () => {
+  const library = new SkillLibrary();
+  try {
+    const { skills } = await library.catalog();
+    const names = ["designer-impeccable", "designer-3d-transforms"];
+    const text =
+      names.map((name) => `/skill:${name}`).join(" ") +
+      " 生成多页公司官网，带交互";
+    for (const editing of [false, true])
+      assert.deepEqual(
+        selectSkills("designer", { text, editing }, skills),
+        names,
+      );
+    assert.deepEqual(
+      selectSkills("analyst", { text, editing: false }, skills),
+      ["analyst-information-extraction"],
+    );
+    assert.deepEqual(
+      selectSkills(
+        "designer",
+        { text: text + " /skill:designer-impeccable", editing: false },
+        skills,
+      ),
+      names,
+    );
+    assert.throws(
+      () =>
+        selectSkills(
+          "designer",
+          {
+            text: [
+              "designer-awwwards",
+              "designer-impeccable",
+              "designer-frontend-design",
+              "designer-3d-transforms",
+              "designer-motion-design",
+            ]
+              .map((n) => `/skill:${n}`)
+              .join(" "),
+            editing: false,
+          },
+          skills,
+        ),
+      /最多/,
+    );
+    await library.signature("designer", names);
+    const before = library.io.reads;
+    const prepared = await library.prepare("designer", names, {
+      selectedOnly: true,
+    });
+    assert.equal(
+      library.io.reads,
+      before,
+      "signature/preload reuse the same body bytes",
+    );
+    assert.deepEqual(prepared.names, names);
+    assert.ok(prepared.characters < SKILL_BODY_CHARACTER_LIMIT);
+    assert.ok(!prepared.prompt.includes('name="designer-visual-design"'));
+    assert.ok(
+      !prepared.prompt.includes("# Upstream depth tokens in readable form"),
+      "optional depth reference is not preloaded",
+    );
+    const reader = library.reader("designer", undefined, names);
+    await assert.rejects(
+      () =>
+        reader.execute("unselected", {
+          path: path.join(SKILLS_ROOT, "designer-awwwards/SKILL.md"),
+        }),
+      /只能读取/,
+    );
+    const result = await reader.execute("selected", {
+      path: path.join(
+        SKILLS_ROOT,
+        "designer-3d-transforms/references/depth-tokens.md",
+      ),
+    });
+    assert.match(JSON.stringify(result.content), /1200px/);
+    assert.equal(library.io.reads, before + 1);
+  } finally {
+    library.close();
+  }
+});
+
+test("24k body ceiling permits larger inputs, rejects excess and keeps the 48k file boundary", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dreamatic-budget-"));
+  const library = new SkillLibrary(root);
+  try {
+    for (const [name, chars] of [
+      ["designer-large", 20000],
+      ["designer-extra", 5000],
+    ] as const) {
+      await mkdir(path.join(root, name));
+      await writeFile(
+        path.join(root, name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: Budget test fixture\n---\n` +
+          "x".repeat(chars) +
+          "\nEND-OF-BODY\n",
+      );
+    }
+    const large = await library.prepare("designer", ["designer-large"]);
+    assert.ok(
+      large.characters > 18000 && large.characters < SKILL_BODY_CHARACTER_LIMIT,
+    );
+    assert.match(large.prompt, /END-OF-BODY/);
+    await assert.rejects(
+      () => library.prepare("designer", ["designer-large", "designer-extra"]),
+      /24000.*预算/,
+    );
+    await mkdir(path.join(root, "designer-large/references"));
+    await writeFile(
+      path.join(root, "designer-large/references/too-big.md"),
+      "x".repeat(48001),
+    );
+    await assert.rejects(
+      () =>
+        library.reader("designer").execute("oversize", {
+          path: path.join(root, "designer-large/references/too-big.md"),
+        }),
+      /48 KB/,
+    );
+  } finally {
+    library.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("adapted Skills carry intact licenses/provenance and every linked reference is natively readable", async () => {
+  const library = new SkillLibrary();
+  try {
+    const { skills } = await library.catalog();
+    let adapted = 0;
+    for (const skill of skills) {
+      let manifest;
+      try {
+        manifest = JSON.parse(
+          await readFile(path.join(skill.baseDir, "upstream.json"), "utf8"),
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      adapted++;
+      assert.match(manifest.archiveSha256, /^[a-f0-9]{64}$/);
+      for (const file of manifest.files) {
+        const bytes = await readFile(path.join(skill.baseDir, file.path));
+        assert.equal(
+          createHash("sha256").update(bytes).digest("hex"),
+          file.sha256,
+          skill.name + "/" + file.path,
+        );
+      }
+      const prepared = await library.prepare("designer", [skill.name], {
+        selectedOnly: true,
+      });
+      assert.ok(prepared.characters < SKILL_BODY_CHARACTER_LIMIT);
+      assert.ok(
+        prepared.references.length > 0,
+        "core methods are supplied without a model read turn",
+      );
+      const body = await readFile(skill.filePath, "utf8");
+      for (const ref of body.matchAll(/\]\((references\/[^)]+\.md)\)/g)) {
+        const result = await library
+          .reader("designer", undefined, [skill.name])
+          .execute("reference", { path: path.join(skill.baseDir, ref[1]) });
+        assert.ok(!result.isError, skill.name + "/" + ref[1]);
+      }
+    }
+    assert.equal(adapted, 8);
+  } finally {
+    library.close();
   }
 });
 
