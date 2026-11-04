@@ -80,5 +80,5 @@ function cleanCss(css: string) {
   return css
     .replace(/@import[^;]+;?/gi, "")
     .replace(/expression\s*\([^)]*\)/gi, "")
-    .replace(/(?:-moz-binding|behavior)\s*:[^;}]*/gi, "");
+    .replace(/(^|[;{])\s*(?:-moz-binding|behavior)\s*:[^;}]*/gi, "$1");
 }
