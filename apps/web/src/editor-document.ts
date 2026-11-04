@@ -24,10 +24,15 @@ export function parseEditorDocument(html: string) {
         .querySelector('meta[name="description"]')
         ?.getAttribute("content") || "",
   };
-  const scripts = Array.from(
-    doc.querySelectorAll("script:not([src])"),
-    (script) => script.outerHTML,
-  );
+  const scripts = Array.from(doc.querySelectorAll("script:not([src])"))
+    // SVG (including foreignObject HTML) must not be lifted into an ordinary
+    // HTML script that would escape the server's SVG content policy on save.
+    .filter(
+      (script) =>
+        script.namespaceURI === "http://www.w3.org/1999/xhtml" &&
+        !script.closest("svg"),
+    )
+    .map((script) => script.outerHTML);
   const bodyAttributes = Object.fromEntries(
     Array.from(doc.body.attributes)
       .filter((attribute) =>

@@ -202,7 +202,7 @@ try {
   let openedCanvas = "";
   await page.getByRole("button", { name: "HTML 源码", exact: true }).click();
   const sourceEditor = page.getByLabel("HTML 源码编辑");
-  const svgFixture = `<svg id="vector-fixture" viewBox="0 0 80 40" width="80" height="40" aria-labelledby="vector-title"><title id="vector-title">Vector regression</title><defs><linearGradient id="vector-paint"><stop offset="0%" stop-color="#fe6b35"/><stop offset="100%" stop-color="#b8d66b"/></linearGradient><clipPath id="vector-clip"><rect width="80" height="40"/></clipPath><path id="vector-path" d="M0 0L60 0L60 30L0 30Z"/></defs><g class="vector-motion" clip-path="url(#vector-clip)"><use href="#vector-path" fill="url(#vector-paint)"/></g></svg><button id="vector-control" aria-label="SVG menu"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor"/></svg></button>`;
+  const svgFixture = `<svg id="vector-fixture" viewBox="0 0 80 40" width="80" height="40" aria-labelledby="vector-title"><title id="vector-title">Vector regression</title><script>document.body.dataset.svgScriptRan='yes'</script><foreignObject><div xmlns="http://www.w3.org/1999/xhtml"><script>document.body.dataset.svgForeignRan='yes'</script></div></foreignObject><defs><linearGradient id="vector-paint"><stop offset="0%" stop-color="#fe6b35"/><stop offset="100%" stop-color="#b8d66b"/></linearGradient><clipPath id="vector-clip"><rect width="80" height="40"/></clipPath><path id="vector-path" d="M0 0L60 0L60 30L0 30Z"/></defs><g class="vector-motion" clip-path="url(#vector-clip)"><use href="#vector-path" fill="url(#vector-paint)"/></g></svg><button id="vector-control" aria-label="SVG menu"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor"/></svg></button>`;
   const bodySource = (await sourceEditor.inputValue())
     .replace(/<body[^>]*>/i, '<body id="top" class="body-theme">')
     .replace('</head>', '<style>.vector-motion{animation:vector-shift 2s linear infinite alternate}@keyframes vector-shift{to{transform:translateX(8px)}}</style></head>')
@@ -257,6 +257,8 @@ try {
     await page.getByRole("button", { name: "预览", exact: true }).click();
     const livePreview = page.frameLocator('iframe[sandbox="allow-scripts"]');
     await livePreview.locator('body[data-preview-runs="1"]').waitFor();
+    assert.equal(await livePreview.locator('body').getAttribute('data-svg-script-ran'),null);
+    assert.equal(await livePreview.locator('body').getAttribute('data-svg-foreign-ran'),null);
     assert.equal(await livePreview.locator("#motion-fixture").evaluate(canvas => canvas.getContext("2d").getImageData(10, 10, 1, 1).data[3]), 255);
     assert.equal(await livePreview.locator('#vector-fixture').getAttribute('viewBox'),'0 0 80 40');
     assert.equal(await livePreview.locator('#vector-fixture use').getAttribute('href'),'#vector-path');
