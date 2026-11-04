@@ -3,6 +3,43 @@ import assert from "node:assert/strict";
 import { create, removeProject } from "../apps/server/src/store.js";
 import { validatePage } from "../apps/server/src/page-validation.js";
 import { pageChecks } from "../apps/server/src/page-checks.js";
+import * as cheerio from "cheerio";
+import { sanitizeHtml } from "../apps/server/src/html.js";
+
+test("Canvas survives validation without relaxing script, SVG or network policy", async () => {
+  const project = await create();
+  try {
+    const result = await validatePage(
+      project,
+      `<!doctype html><html><body>
+      <h1>Canvas scene</h1><canvas id="scene" width="640" height="320" aria-label="Scene" onclick="alert(1)">Static fallback</canvas>
+      <script>document.querySelector('#scene').getContext('2d').fillRect(0,0,20,20)</script>
+      <script src="https://example.com/external.js"></script><svg><circle r="10"/></svg>
+      <form action="https://example.com/post"><button>Send</button></form>
+      </body></html>`,
+    );
+    assert.equal(result.valid, true);
+    const $ = cheerio.load(result.html);
+    assert.equal($("canvas#scene").length, 1);
+    assert.equal($("canvas").attr("width"), "640");
+    assert.equal($("canvas").attr("height"), "320");
+    assert.equal($("canvas").attr("aria-label"), "Scene");
+    assert.equal($("canvas").attr("onclick"), undefined);
+    assert.equal($("canvas").text(), "Static fallback");
+    assert.equal($("script").length, 1);
+    assert.match($("script").text(), /getContext/);
+    assert.equal($("svg,script[src]").length, 0);
+    assert.equal($("form").attr("action"), undefined);
+    assert.equal($("button").attr("type"), "button");
+    assert.match(
+      $("meta[http-equiv]").attr("content") || "",
+      /connect-src 'none'/,
+    );
+    assert.equal(sanitizeHtml(result.html), result.html);
+  } finally {
+    await removeProject(project.id);
+  }
+});
 
 test("manual pages retain inline design and reject invalid structure and foreign assets", async () => {
   const project = await create();
