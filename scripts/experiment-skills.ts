@@ -41,7 +41,7 @@ if (!args.includes("--source") || !args.includes("--output"))
 const output = path.resolve(arg("--output"));
 const request = args.includes("--request")
   ? arg("--request")
-  : "用上传资料生成公司的产品宣传页。要求：事实和配图准确，视觉成熟炫酷，首屏有明显的主题动效，手机端可用。";
+  : "用上传资料生成公司的产品宣传页。要求：事实和配图准确，手机端可用；视觉成熟、酷炫、惊艳，整页有编排的主题动效，核心视觉与章节转场连贯，并有持续的氛围动效。风格由资料与设计目标决定。";
 const minutes = args.includes("--minutes") ? Number(arg("--minutes")) : 15;
 if (!(minutes > 0 && minutes <= 30))
   throw new Error("Experimental deadline must be 0–30 minutes per condition");
