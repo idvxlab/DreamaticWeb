@@ -18,7 +18,9 @@ import { persistExtraction, readCanonicalSource } from "./source-content.js";
 import { DATA, projectDir } from "./store.js";
 import { fetchPublic } from "./network.js";
 import type { Source, Asset } from "../../../packages/shared/project.js";
-export const PARSER_VERSION = "markdown-media-v3";
+export const PARSER_VERSION = "markdown-media-v4";
+export const DOCUMENT_MEDIA_LIMIT = 200;
+export const DOCUMENT_MEDIA_BYTES = 80 * 1024 * 1024;
 export const sourceFingerprint = (buffer: Buffer) =>
   createHash("sha256").update(buffer).digest("hex");
 export const parserVersion = () =>
@@ -108,10 +110,17 @@ async function asset(
     mime: type.mime,
   };
 }
+export interface ExtractionOptions {
+  /** Internal experiment hooks; not exposed by the upload API. */
+  onParsed?: (parsed: Awaited<ReturnType<typeof parseOffice>>) => void;
+  legacyFirstAttachments?: number;
+  mediaLimit?: number;
+}
 export async function extract(
   buffer: Buffer,
   name: string,
   projectId?: string,
+  options: ExtractionOptions = {},
 ): Promise<Source> {
   if (buffer.length > 30 * 1024 * 1024) throw new Error("单文件超过 30 MB");
   const ext = path.extname(name).slice(1).toLowerCase();
@@ -132,6 +141,27 @@ export async function extract(
     provenance: "upload:" + name,
   };
   let structured: StructuredExtraction | undefined;
+  const mediaLimit = options.mediaLimit ?? DOCUMENT_MEDIA_LIMIT;
+  if (!Number.isInteger(mediaLimit) || mediaLimit < 1 || mediaLimit > 1000)
+    throw new Error("文档媒体数量上限无效");
+  const mediaHashes = new Set<string>();
+  let mediaBytes = 0,
+    skippedMedia = 0;
+  const addDocumentMedia = async (data: Buffer, filename: string) => {
+    const digest = sourceFingerprint(data);
+    if (mediaHashes.has(digest)) return;
+    if (
+      s.assets.length >= mediaLimit ||
+      mediaBytes + data.length > DOCUMENT_MEDIA_BYTES
+    ) {
+      skippedMedia++;
+      return;
+    }
+    const imported = await asset(data, filename, projectId);
+    s.assets.push(imported);
+    mediaHashes.add(digest);
+    mediaBytes += data.length;
+  };
   if (TEXT.has(ext)) s.text = buffer.toString("utf8");
   else if (["csv", "tsv"].includes(ext)) {
     const rows = parse(buffer, {
@@ -186,11 +216,9 @@ export async function extract(
       for (const e of zip
         .getEntries()
         .filter((e) => /(?:word|ppt|xl)\/media\/|^Pictures\//.test(e.entryName))
-        .slice(0, 40)) {
+        .slice(0, options.legacyFirstAttachments)) {
         try {
-          s.assets.push(
-            await asset(e.getData(), path.basename(e.entryName), projectId),
-          );
+          await addDocumentMedia(e.getData(), path.basename(e.entryName));
         } catch {
           s.warnings.push("未提取素材：" + path.basename(e.entryName));
         }
@@ -226,6 +254,7 @@ export async function extract(
         },
         pdfParserConfig: { maxTimeMs: 30000 },
       });
+      options.onParsed?.(parsed);
       structured = structureDocument(parsed.content);
       s.tables = structured.tables;
       if (ext === "pdf" && process.env.DREAMATIC_PDF_ENHANCE === "true") {
@@ -254,15 +283,16 @@ export async function extract(
       if (structured.truncated)
         s.warnings.push("结构化阅读文本达到存储上限，请拆分材料");
       s.warnings.push(...parsed.warnings.map((w) => w.message));
-      for (const a of parsed.attachments.slice(0, 40)) {
+      for (const a of parsed.attachments.slice(
+        0,
+        options.legacyFirstAttachments,
+      )) {
         if (
           a.type === "image" &&
           !s.assets.some((existing) => existing.name === a.name)
         ) {
           try {
-            s.assets.push(
-              await asset(Buffer.from(a.data, "base64"), a.name, projectId),
-            );
+            await addDocumentMedia(Buffer.from(a.data, "base64"), a.name);
           } catch {
             s.warnings.push("暂无法复用附件：" + a.name);
           }
@@ -276,6 +306,10 @@ export async function extract(
         );
     }
   }
+  if (skippedMedia)
+    s.warnings.push(
+      `文档媒体达到数量或总大小上限（${mediaLimit} 个去重素材 / 80 MiB），另有 ${skippedMedia} 项未导入；请拆分资料。`,
+    );
   s.assets = [...new Map(s.assets.map((a) => [a.id, a])).values()];
   if (projectId) {
     const dir = path.join(projectDir(projectId), "uploads");
