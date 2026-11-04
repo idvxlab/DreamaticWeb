@@ -38,6 +38,10 @@ import { applyPagePatch } from "./page-patch.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import { imagePreview } from "../image-preview.js";
+import {
+  designerContext,
+  DESIGNER_CONTEXT_VERSION,
+} from "./designer-context.js";
 
 class ModelRequestError extends Error {
   constructor(
@@ -292,7 +296,7 @@ async function execute(
           (role === "analyst"
             ? analystSignature
             : role === "designer"
-              ? designerSignature
+              ? designerSignature + DESIGNER_CONTEXT_VERSION
               : ""),
       );
     const documents = await Promise.all(
@@ -895,7 +899,7 @@ async function execute(
       );
     await roleRun(
       "designer",
-      `# Fact application\nReport usedFactIds in the terminal tool: IDs actually represented in the resulting page, including preserved content. ${request.updateFacts ? "EXACT selection update: use every selected fact and remove content relying on deselected facts. Preserve unrelated design and components. Empty selection means remove all fact-derived content, not use all facts." : "Preserve existing fact associations when editing; report changed associations accurately."}\n# Previously applied fact IDs\n${JSON.stringify(existingPage?.appliedFactIds || [])}\n# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${selected ? factsMarkdown(chosen) : facts!.markdown}\n\n# Media catalog\n${JSON.stringify(catalog)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,
+      `# Fact application\nReport usedFactIds in the terminal tool: IDs actually represented in the resulting page, including preserved content. ${request.updateFacts ? "EXACT selection update: use every selected fact and remove content relying on deselected facts. Preserve unrelated design and components. Empty selection means remove all fact-derived content, not use all facts." : "Preserve existing fact associations when editing; report changed associations accurately."}\n# Previously applied fact IDs\n${JSON.stringify(existingPage?.appliedFactIds || [])}\n# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${designerContext(chosen, catalog, selected ? factsMarkdown(chosen) : facts!.markdown)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,
       tools,
       () => Boolean(accepted),
     );
