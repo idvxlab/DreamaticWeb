@@ -202,9 +202,11 @@ try {
   let openedCanvas = "";
   await page.getByRole("button", { name: "HTML 源码", exact: true }).click();
   const sourceEditor = page.getByLabel("HTML 源码编辑");
+  const svgFixture = `<svg id="vector-fixture" viewBox="0 0 80 40" width="80" height="40" aria-labelledby="vector-title"><title id="vector-title">Vector regression</title><defs><linearGradient id="vector-paint"><stop offset="0%" stop-color="#fe6b35"/><stop offset="100%" stop-color="#b8d66b"/></linearGradient><clipPath id="vector-clip"><rect width="80" height="40"/></clipPath><path id="vector-path" d="M0 0L60 0L60 30L0 30Z"/></defs><g class="vector-motion" clip-path="url(#vector-clip)"><use href="#vector-path" fill="url(#vector-paint)"/></g></svg><button id="vector-control" aria-label="SVG menu"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor"/></svg></button>`;
   const bodySource = (await sourceEditor.inputValue())
     .replace(/<body[^>]*>/i, '<body id="top" class="body-theme">')
-    .replace('</body>', '<a href="#top">Back to top</a><canvas id="motion-fixture" width="80" height="40" aria-label="Canvas regression"></canvas><script>document.body.dataset.previewRuns=String(Number(document.body.dataset.previewRuns||0)+1);document.getElementById("motion-fixture").getContext("2d").fillRect(0,0,20,20)</script></body>');
+    .replace('</head>', '<style>.vector-motion{animation:vector-shift 2s linear infinite alternate}@keyframes vector-shift{to{transform:translateX(8px)}}</style></head>')
+    .replace('</body>', '<a href="#top">Back to top</a><canvas id="motion-fixture" width="80" height="40" aria-label="Canvas regression"></canvas>'+svgFixture+'<script>document.body.dataset.previewRuns=String(Number(document.body.dataset.previewRuns||0)+1);document.getElementById("motion-fixture").getContext("2d").fillRect(0,0,20,20);document.getElementById("vector-control").addEventListener("click",()=>{document.body.dataset.vectorClicked="yes"})</script></body>');
   await sourceEditor.fill(bodySource);
   await page.getByRole("button", { name: "应用到画布", exact: true }).click();
   await page.route("**/api/projects/*/open", async (route) => {
@@ -245,9 +247,9 @@ try {
     assert.equal(saved.versions.length, before.versions.length + 1);
     const counts = await page.evaluate(html => {
       const doc = new DOMParser().parseFromString(html, "text/html");
-      return { titles: doc.querySelectorAll("title").length, bodyMetadata: doc.body.querySelectorAll("title,meta").length, scripts: doc.querySelectorAll("script").length, canvas: doc.querySelectorAll("canvas#motion-fixture").length };
+      return { titles: doc.head.querySelectorAll("title").length, bodyMetadata: [...doc.body.querySelectorAll("title,meta")].filter(e=>e.namespaceURI==='http://www.w3.org/1999/xhtml').length, scripts: doc.querySelectorAll("script").length, canvas: doc.querySelectorAll("canvas#motion-fixture").length, svg:doc.querySelectorAll('svg').length,svgTitle:doc.querySelector('svg title')?.textContent };
     }, saved.versions.at(-1).html);
-    assert.deepEqual(counts, { titles: 1, bodyMetadata: 0, scripts: 1, canvas: 1 });
+    assert.deepEqual(counts, { titles: 1, bodyMetadata: 0, scripts: 1, canvas: 1, svg:2, svgTitle:'Vector regression' });
     await page.reload();
     await frame.locator("h1").waitFor();
     assert.equal(await frame.locator('head meta[http-equiv="Content-Security-Policy"]').count(), 1);
@@ -256,6 +258,16 @@ try {
     const livePreview = page.frameLocator('iframe[sandbox="allow-scripts"]');
     await livePreview.locator('body[data-preview-runs="1"]').waitFor();
     assert.equal(await livePreview.locator("#motion-fixture").evaluate(canvas => canvas.getContext("2d").getImageData(10, 10, 1, 1).data[3]), 255);
+    assert.equal(await livePreview.locator('#vector-fixture').getAttribute('viewBox'),'0 0 80 40');
+    assert.equal(await livePreview.locator('#vector-fixture use').getAttribute('href'),'#vector-path');
+    assert.equal(await livePreview.locator('#vector-fixture g').getAttribute('clip-path'),'url(#vector-clip)');
+    assert.equal(await livePreview.locator('#vector-fixture').evaluate(e=>e.namespaceURI),'http://www.w3.org/2000/svg');
+    assert.ok(await livePreview.locator('#vector-fixture').evaluate(e=>e.getAnimations({subtree:true}).some(a=>a.playState==='running')));
+    await livePreview.getByRole('button',{name:'SVG menu',exact:true}).click();
+    assert.equal(await livePreview.locator('body').getAttribute('data-vector-clicked'),'yes');
+    const vectorExport = await (await fetch(base + '/api/projects/' + p.id + '/export?version=' + saved.versions.at(-1).id)).text();
+    assert.match(vectorExport, /viewBox="0 0 80 40"/);
+    assert.match(vectorExport, /Vector regression/);
     await page.getByRole("button", { name: "设计", exact: true }).click();
   }
   await page.getByRole("button", { name: "Mobile", exact: true }).click();

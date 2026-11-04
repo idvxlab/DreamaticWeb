@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { PREVIEW_CSP } from "../../../packages/shared/html-policy.js";
+import { sanitizeSvg, SVG_NAMESPACE } from "./svg-policy.js";
 const tags = new Set(
   "html head body title meta style main header footer nav section article aside div span p h1 h2 h3 h4 h5 h6 a img picture figure figcaption canvas ul ol li dl dt dd table thead tbody tfoot tr th td caption col colgroup button input select option optgroup textarea label fieldset legend form datalist output progress meter details summary dialog video audio source track br hr strong em b i u s small sub sup blockquote q cite abbr time address pre code kbd samp mark ins del wbr noscript".split(
     " ",
@@ -13,8 +14,9 @@ const attributes = new Set(
 export function sanitizeHtml(html: string) {
   const $ = cheerio.load(html);
   $(
-    "iframe,object,embed,base,link,svg,math,template,noscript,meta[http-equiv]",
+    "iframe,object,embed,base,link,math,template,noscript,meta[http-equiv]",
   ).remove();
+  sanitizeSvg($);
   $("script").each((_i, e) => {
     if ($(e).attr("src")) {
       $(e).remove();
@@ -27,6 +29,7 @@ export function sanitizeHtml(html: string) {
   });
   $("*").each((_i, e) => {
     if (e.type !== "tag" && e.type !== "style") return;
+    if (e.namespace === SVG_NAMESPACE) return;
     if (!tags.has(e.tagName)) {
       $(e).remove();
       return;

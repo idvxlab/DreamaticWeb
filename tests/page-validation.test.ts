@@ -6,7 +6,7 @@ import { pageChecks } from "../apps/server/src/page-checks.js";
 import * as cheerio from "cheerio";
 import { sanitizeHtml } from "../apps/server/src/html.js";
 
-test("Canvas survives validation without relaxing script, SVG or network policy", async () => {
+test("Canvas and SVG geometry survive validation while external scripts and network remain restricted", async () => {
   const project = await create();
   try {
     const result = await validatePage(
@@ -28,7 +28,8 @@ test("Canvas survives validation without relaxing script, SVG or network policy"
     assert.equal($("canvas").text(), "Static fallback");
     assert.equal($("script").length, 1);
     assert.match($("script").text(), /getContext/);
-    assert.equal($("svg,script[src]").length, 0);
+    assert.equal($("svg circle").length, 1);
+    assert.equal($("script[src]").length, 0);
     assert.equal($("form").attr("action"), undefined);
     assert.equal($("button").attr("type"), "button");
     assert.match(

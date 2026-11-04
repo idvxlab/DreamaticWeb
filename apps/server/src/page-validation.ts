@@ -45,13 +45,58 @@ export async function validatePage(project: Project, raw: string) {
       code: "empty",
       message: "The page has no visible content",
     });
-  if (before("script[src],iframe,object,embed,link,svg").length)
+  if (before("script[src],iframe,object,embed,link").length)
     issues.push({
       severity: "warning",
       code: "removed_content",
       message:
-        "Active content/external dependencies/SVG will be removed by preview policy",
+        "Active content/external dependencies will be removed by preview policy",
     });
+  if (
+    JSON.stringify(
+      before("svg")
+        .toArray()
+        .map((node) => before(node).toString()),
+    ) !==
+    JSON.stringify(
+      $("svg")
+        .toArray()
+        .map((node) => $(node).toString()),
+    )
+  )
+    issues.push({
+      severity: "warning",
+      code: "svg_policy",
+      message:
+        "Unsupported SVG content or non-local references were removed; use inline graphics with page CSS/JavaScript",
+    });
+  const originalRoots = before("svg").filter(
+    (_, node) => !before(node).parents("svg").length,
+  );
+  const savedRoots = $("svg").filter(
+    (_, node) => !$(node).parents("svg").length,
+  );
+  originalRoots.each((index, node) => {
+    // Do not accept an icon/scene reduced to an empty shell. Definitions-only
+    // SVGs and empty containers intended for page JavaScript remain valid.
+    if (
+      before(node)
+        .find("*")
+        .toArray()
+        .some((child) =>
+          ["foreignobject", "image"].includes(child.tagName.toLowerCase()),
+        ) &&
+      !savedRoots
+        .eq(index)
+        .find("path,circle,ellipse,rect,line,polygon,polyline,text,use").length
+    )
+      issues.push({
+        severity: "error",
+        code: "svg_empty",
+        message:
+          "SVG lost its only visual content during filtering; use supported SVG geometry or an HTML image",
+      });
+  });
   if (before.html() !== cheerio.load(html).html())
     issues.push({
       severity: "warning",
