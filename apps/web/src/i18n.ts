@@ -259,6 +259,13 @@ const english: Record<string, string> = {
   多智能体协作: "Multiple agents, one workflow",
   所见即所得: "Visual editing",
   关闭错误: "Dismiss error",
+  重试上传: "Retry upload",
+  "上传连接中断，所选文件已暂存。服务恢复后可重试上传；已导入的相同资料会复用。":
+    "Upload connection interrupted. Selected files are kept temporarily. Retry when the service is available; identical imported sources will be reused.",
+  "后端连接中断，开发服务可能正在重启。请稍后重试。":
+    "Backend connection interrupted. The development server may be restarting. Please retry shortly.",
+  "无法连接服务，请检查连接后重试。":
+    "Cannot connect to the service. Check the connection and retry.",
   关闭弹窗: "Close dialog",
   添加一个网站: "Add a website",
   "提取公开网页中的文本、表格和媒体素材。":

@@ -17,6 +17,24 @@ export function applyPagePatch(project: Project, value: unknown) {
       ["replace_html", "remove", "set_text"].includes(op.action)
     )
       throw new Error("局部编辑不得替换页面根结构，请定位具体章节或组件");
+    if (tag === "style" || tag === "script") {
+      if (op.action === "append_html")
+        throw new Error(`${tag} 内容请使用 set_text 修改，不要追加 HTML`);
+      if (op.action === "replace_html") {
+        const fragment = cheerio.load(op.value || "", null, false);
+        const children = fragment
+          .root()
+          .contents()
+          .filter((_i, e) => e.type !== "text" || !!e.data.trim());
+        if (
+          children.length !== 1 ||
+          children.first().prop("tagName")?.toLowerCase() !== tag
+        )
+          throw new Error(
+            `${tag} 替换必须保留单个 <${tag}> 标签；仅修改内容请使用 set_text`,
+          );
+      }
+    }
     if (op.action === "remove") node.remove();
     else if (op.action === "set_text") node.text(op.value || "");
     else if (op.action === "replace_html") node.replaceWith(op.value || "");

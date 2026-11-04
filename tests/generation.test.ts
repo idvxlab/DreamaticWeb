@@ -519,6 +519,86 @@ test("unsafe root patches fail without mutating the saved page", async () => {
   }
 });
 
+test("raw-text patches preserve style/script tags and failed batches never publish a version", async () => {
+  const p = await create();
+  try {
+    p.versions.push({
+      id: crypto.randomUUID(),
+      html,
+      label: "fixture",
+      createdAt: new Date().toISOString(),
+    });
+    const baseVersionId = p.versions[0].id;
+    for (const [action, value] of [
+      ["replace_html", "body{color:white;background:#111}"],
+      ["replace_html", "<style>body{color:red}</style><p>extra</p>"],
+      ["append_html", "body{color:red}"],
+    ])
+      assert.throws(
+        () =>
+          applyPagePatch(p, {
+            baseVersionId,
+            operations: [
+              {
+                selector: "#title",
+                action: "set_text",
+                value: "Must not persist",
+              },
+              { selector: "#design", action, value },
+            ],
+          }),
+        /style/,
+      );
+    for (const [action, value] of [
+      ["set_text", "body{color:green}"],
+      ["replace_html", ' <style id="design">body{color:green}</style> '],
+    ]) {
+      const patched = applyPagePatch(p, {
+        baseVersionId,
+        operations: [{ selector: "#design", action, value }],
+      });
+      assert.match(patched.html, /<style[^>]*>body\{color:green\}<\/style>/);
+    }
+    assert.equal(p.versions.length, 1);
+    assert.equal(p.versions[0].html, html);
+    const streamFn: StreamFn = (model, context) => {
+      const names = (
+        getCurrentSystemMessage(context.messages)?.toolsAdded || []
+      ).map((t) => t.name);
+      if (names.includes("submit_intent"))
+        return answer(model, "submit_intent", brief);
+      if (names.includes("submit_facts"))
+        return answer(model, "submit_facts", {
+          summary: "Fixture",
+          facts: [],
+          limitations: [],
+        });
+      return answer(model, "page_patch", {
+        baseVersionId,
+        operations: [
+          {
+            selector: "#design",
+            action: "replace_html",
+            value: "body{color:red}",
+          },
+        ],
+      });
+    };
+    await runProject(
+      p,
+      requestSchema.parse({ text: "Change the page color", mode: "edit" }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+    assert.equal(p.status, "error");
+    assert.equal(p.versions.length, 1);
+    assert.equal(p.versions[0].html, html);
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
 test("resume after a provider failure reuses saved intent/facts even for mode:intent, and tampered Markdown is rejected", async () => {
   const p = await create();
   let fail = true;

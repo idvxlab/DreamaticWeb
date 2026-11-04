@@ -31,3 +31,32 @@ test("manual pages retain inline design and reject invalid structure and foreign
     await removeProject(project.id);
   }
 });
+
+test("visible CSS source is rejected while intentional code samples and prose remain valid", async () => {
+  const project = await create();
+  try {
+    for (const body of [
+      "body{background:#fff;color:#111}.hero>div{display:flex}<h1>Broken</h1>",
+      "```css\nbody{color:red}\n```<h1>Broken</h1>",
+      "&lt;html&gt;&lt;body&gt;Source&lt;/body&gt;&lt;/html&gt;<h1>Broken</h1>",
+    ]) {
+      const result = await validatePage(
+        project,
+        `<html><body>${body}</body></html>`,
+      );
+      assert.equal(result.valid, false);
+      assert.ok(
+        result.issues.some(
+          (i) => i.code === "visible_source" && i.severity === "error",
+        ),
+      );
+    }
+    const result = await validatePage(
+      project,
+      "<html><body><h1>CSS guide</h1><pre><code>body{color:red}</code></pre>Welcome to our company.</body></html>",
+    );
+    assert.equal(result.valid, true);
+  } finally {
+    await removeProject(project.id);
+  }
+});
