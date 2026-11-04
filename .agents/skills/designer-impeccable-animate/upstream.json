@@ -1,0 +1,50 @@
+{
+  "adapterVersion": "1.0.0",
+  "upstreamName": "impeccable animate",
+  "archive": "ZJT-Skills-上游原版-20261104.zip",
+  "archiveSha256": "91a56492417d4a759825e7ddfb45565ac81942708e2fcb1f50223a8da6aaf463",
+  "sources": [
+    {
+      "path": "ZJT-Skills-上游原版-20261104/03-Impeccable/impeccable/reference/animate.md",
+      "sha256": "d658c48ffbe0031e8e3b318996cad6ceafe29e40aa50d5bb25e4bf1d6839dc7c"
+    }
+  ],
+  "license": {
+    "source": "03-Impeccable/LICENSE",
+    "local": "LICENSE",
+    "sha256": "02bb8c3b4e70190e3986c0404ad2fd8d639b4f534252d82379cc1b502b6d1812"
+  },
+  "retained": [
+    "subject-specific visual identity",
+    "original motion/depth/choreography objectives",
+    "responsive and reduced-motion usability"
+  ],
+  "adaptations": [
+    "role-prefixed discoverable name",
+    "scoped Markdown references and readable tokens",
+    "prepared brief instead of separate discovery/launcher/menu",
+    "existing single-document runtime rather than framework scaffolding or unprovided libraries",
+    "external visual evaluation instead of extra production review agents",
+    "no initial waiting greeting or forced review-table response"
+  ],
+  "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
+  "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "02bb8c3b4e70190e3986c0404ad2fd8d639b4f534252d82379cc1b502b6d1812"
+    },
+    {
+      "path": "SKILL.md",
+      "sha256": "6018386951e76c277893e3ee6f2fcf598e95b278fa9d270f915589736ff0951a"
+    },
+    {
+      "path": "references/performance-and-fallback.md",
+      "sha256": "778a5ec11d9153a1d322f9f849874be180e15828ef735b1ab4d8508f3c2117d6"
+    },
+    {
+      "path": "references/sequencing.md",
+      "sha256": "b7cbe5b4c0eaf43793c80d1986d676549ce5eab187e61215ef0c3fd1bba04673"
+    }
+  ]
+}

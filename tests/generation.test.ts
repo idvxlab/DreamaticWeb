@@ -1026,6 +1026,84 @@ test("Skill upgrades invalidate only affected stages, preserve patch mode and ke
   }
 });
 
+test("explicit adapted Skills reach only Designer and preserve three-stage generation and one-call patch editing", async () => {
+  const p = await create();
+  const names = ["designer-impeccable", "designer-3d-transforms"];
+  const prefix = names.map((name) => `/skill:${name}`).join(" ");
+  const designerSelections: string[][] = [];
+  const streamFn: StreamFn = (model, context) => {
+    const sys = getCurrentSystemMessage(context.messages)!;
+    const prompt =
+      typeof sys.content === "string"
+        ? sys.content
+        : sys.content.map((part) => part.text).join("\n");
+    if (prompt.includes("# Orchestrator")) {
+      assert.ok(!prompt.includes("<skill name="));
+      return answer(model, "submit_intent", brief);
+    }
+    if (prompt.includes("# Analyst")) {
+      assert.ok(!prompt.includes('name="designer-impeccable"'));
+      return answer(model, "submit_facts", {
+        summary: "Fixture",
+        facts: [],
+        limitations: [],
+      });
+    }
+    const selected = [...prompt.matchAll(/<skill name="([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    assert.deepEqual(selected, names);
+    designerSelections.push(selected);
+    assert.ok(
+      !prompt.includes("designer-visual-design"),
+      "no implicit visual baseline in an explicit experiment",
+    );
+    assert.ok(
+      !prompt.includes("# Upstream depth tokens in readable form"),
+      "references are still deferred",
+    );
+    const tools = (sys.toolsAdded || []).map((tool) => tool.name);
+    if (tools.includes("page_patch"))
+      return answer(model, "page_patch", {
+        baseVersionId: p.versions.at(-1)!.id,
+        operations: [
+          { selector: "#title", action: "set_text", value: "Edited" },
+        ],
+      });
+    return answer(model, "submit_page", { html, usedFactIds: [] });
+  };
+  try {
+    await runProject(
+      p,
+      requestSchema.parse({ text: prefix + " 生成公司官网，具有明显空间动效" }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 3);
+    assert.deepEqual(
+      p.generation!.metrics!.stages.find((stage) => stage.role === "designer")!
+        .skills,
+      names,
+    );
+    await runProject(
+      p,
+      requestSchema.parse({ text: prefix + " 把标题改成 Edited" }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 1);
+    assert.equal(p.generation!.metrics!.fullPageWrites, 0);
+    assert.equal(p.generation!.metrics!.sourceReads, 0);
+    assert.equal(designerSelections.length, 2);
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
 test("explicit fact selection updates publish associations atomically, support none, and reject stale versions", async () => {
   const p = await create();
   let selection: string[] = ["a", "b"];

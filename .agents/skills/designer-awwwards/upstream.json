@@ -1,0 +1,74 @@
+{
+  "adapterVersion": "1.0.0",
+  "upstreamName": "awwwards",
+  "archive": "ZJT-Skills-上游原版-20261104.zip",
+  "archiveSha256": "91a56492417d4a759825e7ddfb45565ac81942708e2fcb1f50223a8da6aaf463",
+  "sources": [
+    {
+      "path": "ZJT-Skills-上游原版-20261104/01-Awwwards/awwwards/SKILL.md",
+      "sha256": "87f9e001615cbe13188025c1c7f534ed797ea48be86335cf809ee5cbc34bf9aa"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/01-Awwwards/awwwards/references/concepts.md",
+      "sha256": "af5b3b401cbde5af858670fc7160409cecccc49f27058e0f66c11c8cf0a82099"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/01-Awwwards/awwwards/references/art-direction.md",
+      "sha256": "646266e21e3b656cbf31a8ca89bc810d9644c1eb6538b0933c529d50d5f78ca0"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/01-Awwwards/awwwards/references/motion.md",
+      "sha256": "c0485886f69b4dc19a67e38dbfd3b3c4ae0816593d4228071d9c2d0da2b07a0f"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/01-Awwwards/awwwards/references/patterns.md",
+      "sha256": "ba09fd0cbf2898bd06349d7ac4779ec8ad3f5ae0265815755b0d0d83c29cd169"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/01-Awwwards/awwwards/references/webgl.md",
+      "sha256": "37815f066dac2d3ca9115fb88912e6ea4aed442ce07660d786baeadb05b396e8"
+    }
+  ],
+  "license": {
+    "source": "01-Awwwards/LICENSE",
+    "local": "LICENSE",
+    "sha256": "26577196d8f396c81c0b17c1ba71800f957a0af72b3681cecfc832800bfa4a06"
+  },
+  "retained": [
+    "subject-specific visual identity",
+    "original motion/depth/choreography objectives",
+    "responsive and reduced-motion usability"
+  ],
+  "adaptations": [
+    "role-prefixed discoverable name",
+    "scoped Markdown references and readable tokens",
+    "prepared brief instead of separate discovery/launcher/menu",
+    "existing single-document runtime rather than framework scaffolding or unprovided libraries",
+    "external visual evaluation instead of extra production review agents",
+    "no initial waiting greeting or forced review-table response"
+  ],
+  "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
+  "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "26577196d8f396c81c0b17c1ba71800f957a0af72b3681cecfc832800bfa4a06"
+    },
+    {
+      "path": "SKILL.md",
+      "sha256": "92f618b3035c42b4ce785dba5a648cf606c39ccc745a4c5a6c23ebb50c104924"
+    },
+    {
+      "path": "references/canvas-and-shaders.md",
+      "sha256": "cdba2f933ecc17517df33412e9c74250402b00252bb30fc17775bba582117cfa"
+    },
+    {
+      "path": "references/concept-and-composition.md",
+      "sha256": "3ee7967ccba1d680db88b440097282a3bd922b9fabbc6b2c0d8fa3c3dac97934"
+    },
+    {
+      "path": "references/signature-motion.md",
+      "sha256": "7177068c84d68f937ceba9997a2fbc0d35294b62d7b552a27fa707440cc654aa"
+    }
+  ]
+}

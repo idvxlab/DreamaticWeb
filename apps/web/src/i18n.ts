@@ -259,6 +259,8 @@ const english: Record<string, string> = {
   多智能体协作: "Multiple agents, one workflow",
   所见即所得: "Visual editing",
   关闭错误: "Dismiss error",
+  "在需求中用 /skill:名称 指定组合后，只使用所选 Skill 及其参考资料；未指定时按任务自动选择。":
+    "Use /skill:name in your request to select an exact combination and its references. Otherwise, Skills are selected for the task.",
   重试上传: "Retry upload",
   "上传连接中断，所选文件已暂存。服务恢复后可重试上传；已导入的相同资料会复用。":
     "Upload connection interrupted. Selected files are kept temporarily. Retry when the service is available; identical imported sources will be reused.",

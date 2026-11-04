@@ -1,0 +1,82 @@
+{
+  "adapterVersion": "1.0.0",
+  "upstreamName": "motion-design",
+  "archive": "ZJT-Skills-上游原版-20261104.zip",
+  "archiveSha256": "91a56492417d4a759825e7ddfb45565ac81942708e2fcb1f50223a8da6aaf463",
+  "sources": [
+    {
+      "path": "ZJT-Skills-上游原版-20261104/04-Motion-Design/skills/motion-design/SKILL.md",
+      "sha256": "8729ecbc7e5736c1295baaa8ba0384bb4b1aac9cf91b83fcdc64d9548a57bb19"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/04-Motion-Design/skills/motion-design/director/motion-personality.md",
+      "sha256": "66a3623b6654869482c02157ca791034a614ca6dcb02a8112049e28d292ee18a"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/04-Motion-Design/skills/motion-design/director/choreography.md",
+      "sha256": "c81257b56160b9b2f3d99f78d4b8172b425c22d9ca73be06d3ffaa7305a34deb"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/04-Motion-Design/skills/motion-design/reference/timing-easing-tables.md",
+      "sha256": "e478f3b99c4cac3f96eca008e20f8808d4cfae165f5799f260092baf9b6ebcff"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/04-Motion-Design/skills/motion-design/patterns/ambient-continuous.md",
+      "sha256": "f9cfa00d3325dceadcb9ffd77dcb5dcbc51d34121f3b1f162979939006056773"
+    },
+    {
+      "path": "ZJT-Skills-上游原版-20261104/04-Motion-Design/skills/motion-design/patterns/state-feedback.md",
+      "sha256": "dac86388c2d8fcdfc2f194b4f8877caedcdc010df9ce29d27dfc99d08cf8c60e"
+    }
+  ],
+  "license": {
+    "source": "04-Motion-Design/LICENSE",
+    "local": "LICENSE",
+    "sha256": "9fc2e8685daa09e28d54b6afa8a38f168417c5735a3cd676c80c159785e93a80"
+  },
+  "retained": [
+    "subject-specific visual identity",
+    "original motion/depth/choreography objectives",
+    "responsive and reduced-motion usability"
+  ],
+  "adaptations": [
+    "role-prefixed discoverable name",
+    "scoped Markdown references and readable tokens",
+    "prepared brief instead of separate discovery/launcher/menu",
+    "existing single-document runtime rather than framework scaffolding or unprovided libraries",
+    "external visual evaluation instead of extra production review agents",
+    "no initial waiting greeting or forced review-table response"
+  ],
+  "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
+  "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "9fc2e8685daa09e28d54b6afa8a38f168417c5735a3cd676c80c159785e93a80"
+    },
+    {
+      "path": "SKILL.md",
+      "sha256": "1583eefb027c04b476b56c77539dbe20ec6d7474f356b28a3e854da1ade5bc57"
+    },
+    {
+      "path": "references/choreography.md",
+      "sha256": "c81257b56160b9b2f3d99f78d4b8172b425c22d9ca73be06d3ffaa7305a34deb"
+    },
+    {
+      "path": "references/interactive-patterns.md",
+      "sha256": "dac86388c2d8fcdfc2f194b4f8877caedcdc010df9ce29d27dfc99d08cf8c60e"
+    },
+    {
+      "path": "references/personality.md",
+      "sha256": "66a3623b6654869482c02157ca791034a614ca6dcb02a8112049e28d292ee18a"
+    },
+    {
+      "path": "references/scene-patterns.md",
+      "sha256": "f9cfa00d3325dceadcb9ffd77dcb5dcbc51d34121f3b1f162979939006056773"
+    },
+    {
+      "path": "references/timing-and-easing.md",
+      "sha256": "17ee2a55240fa679ae8b23383b61be6ff060add491eaa29298ac426c0afc92de"
+    }
+  ]
+}

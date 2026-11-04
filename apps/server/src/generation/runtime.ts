@@ -351,9 +351,11 @@ async function execute(
             ? designerSkills
             : [];
       const skillStart = performance.now();
+      const selectedOnly =
+        role === "designer" && /\/skill:designer-[a-z0-9-]+/.test(request.text);
       const prepared =
         library && names.length
-          ? await library.prepare(role, names)
+          ? await library.prepare(role, names, { selectedOnly })
           : { prompt: "", names: [], characters: 0 };
       const skillMs = Math.round(performance.now() - skillStart);
       metrics.skillCharacters += prepared.characters;
@@ -366,9 +368,13 @@ async function execute(
       if (library && role !== "orchestrator" && names.length)
         tools = [
           ...tools,
-          library.reader(role, () => {
-            metrics.skillReads++;
-          }),
+          library.reader(
+            role,
+            () => {
+              metrics.skillReads++;
+            },
+            selectedOnly ? names : undefined,
+          ),
         ];
       const runtime = modelRuntime(profile(role));
       const stageStart = performance.now(),

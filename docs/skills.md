@@ -1,6 +1,29 @@
 # Professional Skills integration and evaluation
 
-Implemented 2026-10-21. Frontend application code and design are unchanged. The existing three-role workflow, canonical Markdown, fact contract, patches and result reuse remain authoritative.
+Initial integration: 2026-10-21. ZJT adapters: 2026-11-04. The existing three-role workflow, canonical Markdown, fact contract, patches and result reuse remain authoritative.
+
+## ZJT adapter addition
+
+The library now contains 18 entries: the 10 baseline Skills below plus 8 adapters. These are derived design instructions, not unchanged upstream plugins. Each adapter retains its upstream license and `upstream.json` records archive/source hashes, local instruction hashes, implementation mappings and validation limits. Original archives remain experiment data, not runtime input.
+
+| Entry | Scope |
+| --- | --- |
+| designer-awwwards | Subject-specific concept, composed frames, one signature and coherent motion driver |
+| designer-frontend-design | Distinct visual identity, typography and content-led composition |
+| designer-impeccable | Visitor mode, committed visual world and detailed craft |
+| designer-impeccable-animate | Focal sequence, continuity, interruption and feedback |
+| designer-impeccable-overdrive | Ambitious spatial/procedural effect with usable fallback |
+| designer-motion-design | Emotional intent, personality, timing and layered choreography |
+| designer-web-animation-design | Natural and interruptible web interaction motion |
+| designer-3d-transforms | Perceptible perspective, z layers, spatial transforms and depth tokens |
+
+The ports replace plugin launchers, framework scaffolds, unprovided library globals, automatic critic loops and readiness-only responses with guidance usable in the existing Designer task. Visual goals and native JavaScript remain; no independent review agent is introduced. Reference paths are readable Markdown under each Skill's `references/`; depth tokens are converted to Markdown without changing their values. The current host requires canvas creation from inline JavaScript and blocks external scripts, so an original GSAP/Three.js implementation is not claimed to execute unchanged.
+
+Explicit `/skill:designer-...` selections now define the complete Designer set (up to four unique entries) and restrict the stage's catalog/reader accordingly. This prevents a test of an adapter from silently mixing in the baseline visual/interaction Skills. Requests without explicit selections retain deterministic routing. Analyst behavior is unchanged.
+
+Selected bodies have a 24,000-character ceiling, up from 18,000; references remain deferred, 48,000 bytes per file, with realpath/role restrictions and byte-cache reuse. Raising the ceiling changes neither the model's output limit nor the number of stages; actual provider latency and tokens still require live measurement. `scripts/check-skills.ts` checks discovery, exact selection, cold/warm preparation and actual body size without a provider call. The compatibility table later in this document describes the original 10-entry implementation, not new live visual-quality results.
+
+Adapter checks (2026-11-04): type checking, all 66 tests, production build and browser UI regression pass. All 8 skill-creator validators pass; Pi discovers all 18 entries without diagnostics and can read every linked adapter reference. Twelve offline selection/preload cases (8 single entries and 4 combinations) use 2,799–9,385 body characters, with no additional warm-cache disk reads. A deterministic pipeline test confirms 3 model calls for initial generation and 1 for a patch edit with an explicit adapter combination; this does not measure live provider latency. No live model-generated adapter page has been evaluated yet. The existing editor bundle-size advisory remains.
 
 ## Library and responsibilities
 
@@ -43,16 +66,16 @@ Verified installed Pi 1.3.0 exports and upstream sources before implementation. 
 
 - `apps/server/src/generation/skills.ts`: native discovery, diagnostics, deterministic selection, cached scoped native reads and signatures. Startup discovers the project library; filesystem changes invalidate discovery.
 - Discovery uses Pi's YAML/metadata parser. The native discovery implementation reads entry files to obtain metadata; it is not claimed to perform zero body I/O. Only selected bodies enter model context. Reference bodies are deferred.
-- Analyst gets its extraction Skill. New designs get one type (or generic architecture), visual design, and additional complementary architecture/interaction only when warranted; maximum four. Basic navigation alone no longer adds interaction expertise. Text-only edits get none, color edits visual only; type semantics are loaded only for relevant data/product edits.
+- Analyst gets its extraction Skill. Without explicit selections, new designs get one type (or generic architecture), visual design, and additional complementary architecture/interaction only when warranted; maximum four. Basic navigation alone no longer adds interaction expertise. Text-only edits get none, color edits visual only; type semantics are loaded only for relevant data/product edits. Explicit Designer selections use exactly the requested set.
 - Selected instructions are preloaded through native `read` before the existing call, with a notice not to reread. Metadata is formatted using Pi's native formatter. Roles can use the same scoped reader for genuinely needed references.
 - Reader operations allow only current-role Skill entry/reference Markdown under real project paths, maximum 48 KB/file. Original materials, cross-role files, scripts and escaped symlinks are denied. No new write/shell tool.
-- Combined selected bodies are bounded to 18,000 characters. Cached bytes avoid warm rereads; stat fingerprints invalidate only dependent results. Reference signatures use stat metadata without loading their bodies.
+- Combined selected bodies are bounded to 24,000 characters. Cached bytes avoid warm rereads; stat fingerprints invalidate only dependent results. Reference signatures use stat metadata without loading their bodies.
 - `runtime.ts`: selected Skill signatures join existing stage dependencies, Skill events/metrics use existing events, token usage comes from existing assistant responses. No new planning/review call.
 - `index.ts`: initialization and real `/api/skills` and `/api/skills/diagnostics` endpoints. Shared metrics/completed-plan fields are optional, preserving existing clients.
 
 The runtime remains Orchestrator → Analyst → Designer. References requested by a model can require tool continuation, just like existing optional tools; this is optional and is not a default extra stage. Output remains one HTML document under current host policy. Skills do not claim to add a multi-page router, executable filtering or checkout backend.
 
-## Compatibility actually checked
+## Original compatibility checks (2026-10-21)
 
 | Environment                 | Evidence                                                                                                                                                                    | Limit                                                                                                 |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
