@@ -7,7 +7,8 @@ import { enhancePdf } from "./pdf-structure.js";
 import { imageSize } from "image-size";
 import path from "node:path";
 import { writeFile, mkdir, link, access } from "node:fs/promises";
-import { parseOffice } from "officeparser";
+import { parseOffice, type OfficeContentNode } from "officeparser";
+import { documentMediaAssociations } from "./document-media.js";
 import ExcelJS from "exceljs";
 import { parse } from "csv-parse/sync";
 import AdmZip from "adm-zip";
@@ -18,7 +19,7 @@ import { persistExtraction, readCanonicalSource } from "./source-content.js";
 import { DATA, projectDir } from "./store.js";
 import { fetchPublic } from "./network.js";
 import type { Source, Asset } from "../../../packages/shared/project.js";
-export const PARSER_VERSION = "markdown-media-v4";
+export const PARSER_VERSION = "markdown-media-v5";
 export const DOCUMENT_MEDIA_LIMIT = 200;
 export const DOCUMENT_MEDIA_BYTES = 80 * 1024 * 1024;
 export const sourceFingerprint = (buffer: Buffer) =>
@@ -141,15 +142,21 @@ export async function extract(
     provenance: "upload:" + name,
   };
   let structured: StructuredExtraction | undefined;
+  let documentNodes: OfficeContentNode[] = [];
+  const mediaNames = new Map<string, Asset>();
   const mediaLimit = options.mediaLimit ?? DOCUMENT_MEDIA_LIMIT;
   if (!Number.isInteger(mediaLimit) || mediaLimit < 1 || mediaLimit > 1000)
     throw new Error("文档媒体数量上限无效");
-  const mediaHashes = new Set<string>();
+  const mediaHashes = new Map<string, Asset>();
   let mediaBytes = 0,
     skippedMedia = 0;
   const addDocumentMedia = async (data: Buffer, filename: string) => {
     const digest = sourceFingerprint(data);
-    if (mediaHashes.has(digest)) return;
+    const existing = mediaHashes.get(digest);
+    if (existing) {
+      mediaNames.set(filename, existing);
+      return;
+    }
     if (
       s.assets.length >= mediaLimit ||
       mediaBytes + data.length > DOCUMENT_MEDIA_BYTES
@@ -159,7 +166,8 @@ export async function extract(
     }
     const imported = await asset(data, filename, projectId);
     s.assets.push(imported);
-    mediaHashes.add(digest);
+    mediaHashes.set(digest, imported);
+    mediaNames.set(filename, imported);
     mediaBytes += data.length;
   };
   if (TEXT.has(ext)) s.text = buffer.toString("utf8");
@@ -255,6 +263,7 @@ export async function extract(
         pdfParserConfig: { maxTimeMs: 30000 },
       });
       options.onParsed?.(parsed);
+      documentNodes = parsed.content;
       structured = structureDocument(parsed.content);
       s.tables = structured.tables;
       if (ext === "pdf" && process.env.DREAMATIC_PDF_ENHANCE === "true") {
@@ -328,7 +337,12 @@ export async function extract(
       );
     else await writeFile(target, buffer, { mode: 0o600 });
   }
-  return persistExtraction(s, projectId, structured);
+  return persistExtraction(
+    s,
+    projectId,
+    structured,
+    documentMediaAssociations(documentNodes, s.assets, mediaNames).markdown,
+  );
 }
 export async function extractUrl(
   url: string,
