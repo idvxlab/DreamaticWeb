@@ -57,6 +57,8 @@ PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；�
 
 网页只抓取指定页面和最多 12 项相关媒体，不递归爬站。重导入需要检查远程依赖，因此仍有网络请求。按需在 Designer 中查看图片只在启用视觉能力时开放，不会在导入阶段自动发给模型。
 
+文档导入默认保留最多 200 个去重素材、累计 80 MiB，达到限制会提示。程序将可取得的页码、原文图注和版面关联写进同一份 Markdown；横向双栏产品/案例关联采用启发式，未知图像类别保留为未知。Designer 复用这些关联，仍可按需看图，不增加 Agent 或独立 review。旧资料需重新导入才能获得新的关联；旧运行记录保留。
+
 ## API 与运行
 
 - `POST /api/projects/:id/run`：`text`，可选 `mode: auto|edit|redesign|intent|answer`、`selectedFactIds`、`refreshFacts`。`answer` 仅回答，不写页面；自动模式识别“只解释”“先回答”等明确只读要求。

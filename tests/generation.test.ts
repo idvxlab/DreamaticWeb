@@ -26,6 +26,11 @@ import {
 } from "../apps/server/src/generation/runtime.js";
 import { requestSchema } from "../packages/shared/generation.js";
 import { applyPagePatch } from "../apps/server/src/generation/page-patch.js";
+import { documentMediaAssociations } from "../apps/server/src/document-media.js";
+import {
+  persistExtraction,
+  readCanonicalSource,
+} from "../apps/server/src/source-content.js";
 
 const config: RuntimeConfig = {
   mode: "live",
@@ -778,6 +783,135 @@ test("additional source ranges and optional image inspection use Pi tools and ca
       "only explicitly needed tools add follow-up requests",
     );
     assert.ok(p.versions[0].html.includes(media.assets[0].url));
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
+test("normal A3 pipeline shares canonical media context in three calls, with optional vision and cached editing", async () => {
+  const p = await create();
+  const observed: string[][] = [];
+  try {
+    const media = await ingest(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9JkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+      "product.png",
+      p.id,
+    );
+    const context = documentMediaAssociations(
+      [
+        {
+          type: "page",
+          metadata: { pageNumber: 8 },
+          children: [
+            {
+              type: "image",
+              metadata: {
+                attachmentName: "product.png",
+                altText: "Product illustration from source",
+              },
+            },
+          ],
+        },
+      ],
+      media.assets,
+    );
+    await persistExtraction(
+      { ...media, text: "User supplied product material" },
+      p.id,
+      undefined,
+      context.markdown,
+    ).then((source) => p.sources.push(source));
+    const source = p.sources[0];
+    const before = await readCanonicalSource(p.id, source);
+    const filename = path.join(
+      projectDir(p.id),
+      "sources",
+      source.id,
+      "reading.md",
+    );
+    const originalTime = (await stat(filename)).mtimeMs;
+    const streamFn: StreamFn = (model, input) => {
+      const names = (
+        getCurrentSystemMessage(input.messages)?.toolsAdded || []
+      ).map((t) => t.name);
+      observed.push(names);
+      if (names.includes("submit_intent"))
+        return answer(model, "submit_intent", brief);
+      const all = JSON.stringify(input.messages);
+      assert.match(all, /Product illustration from source/);
+      assert.ok(all.includes(source.assets[0].url));
+      if (names.includes("submit_facts"))
+        return answer(model, "submit_facts", {
+          summary: "Material",
+          facts: [
+            {
+              id: "product",
+              text: "User supplied product material",
+              sourceId: source.id,
+              assetIds: [source.assets[0].id],
+            },
+          ],
+          limitations: [],
+        });
+      assert.ok(
+        names.includes("asset_view"),
+        "vision remains optional, never forced",
+      );
+      assert.equal(
+        input.messages.some(
+          (message) =>
+            message.role === "toolResult" &&
+            message.content.some((part) => part.type === "image"),
+        ),
+        false,
+      );
+      if (names.includes("page_patch"))
+        return answer(model, "page_patch", {
+          baseVersionId: p.versions.at(-1)!.id,
+          operations: [
+            { selector: "#title", action: "set_text", value: "Edited" },
+          ],
+        });
+      return answer(model, "submit_page", {
+        html: `<html><body><h1 id="title">Product</h1><img alt="Product illustration" src="${source.assets[0].url}"></body></html>`,
+        usedFactIds: ["product"],
+      });
+    };
+    const options = {
+      config: {
+        ...config,
+        models: {
+          ...config.models,
+          reasoning: { ...config.models.reasoning, vision: true },
+        },
+      },
+      streamFn,
+    };
+    await runProject(
+      p,
+      requestSchema.parse({ text: "Make a company product page" }),
+      save,
+      () => {},
+      options,
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 3);
+    assert.equal(p.generation!.metrics!.sourceReads, 0);
+    await runProject(
+      p,
+      requestSchema.parse({ text: "Change the title to Edited" }),
+      save,
+      () => {},
+      options,
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 1);
+    assert.equal(observed.length, 4);
+    assert.equal((await stat(filename)).mtimeMs, originalTime);
+    assert.equal((await readCanonicalSource(p.id, source)).hash, before.hash);
   } finally {
     await removeProject(p.id);
   }

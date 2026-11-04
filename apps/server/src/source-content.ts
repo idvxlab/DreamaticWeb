@@ -40,6 +40,7 @@ export async function persistExtraction(
   source: Source,
   projectId?: string,
   structured?: StructuredExtraction,
+  mediaAssociations = "",
 ) {
   if ((source.text?.length ?? 0) > MAX || structured?.truncated)
     throw new Error(
@@ -75,6 +76,7 @@ export async function persistExtraction(
         .join("\n") +
       "\n";
   }
+  reading.markdown += mediaAssociations;
   if (
     reading.truncated ||
     reading.markdown.length > MAX ||

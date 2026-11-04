@@ -34,6 +34,7 @@ import {
   factsMarkdown,
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
+import { canonicalMediaAssociations } from "../document-media.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import { imagePreview } from "../image-preview.js";
@@ -428,7 +429,19 @@ async function execute(
       const abort = () => agent.abort();
       controller.signal.addEventListener("abort", abort, { once: true });
       try {
-        await agent.prompt(input);
+        await agent.prompt(
+          input +
+            (role === "designer"
+              ? documents
+                  .map(({ source, document }) => {
+                    const media = canonicalMediaAssociations(document.markdown);
+                    return media
+                      ? `\n\n# Canonical media associations: ${source.id}\n${media}`
+                      : "";
+                  })
+                  .join("")
+              : ""),
+        );
         controller.signal.throwIfAborted();
         if (agent.state.errorMessage) {
           const requestNumber = metrics.modelCalls - callStart;
