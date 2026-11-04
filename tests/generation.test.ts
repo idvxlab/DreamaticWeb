@@ -1207,3 +1207,69 @@ test("explicit fact selection updates publish associations atomically, support n
     await removeProject(p.id);
   }
 });
+
+test("experiment observer preserves a rejected terminal call followed by successful recovery", async () => {
+  const p = await create();
+  const events: { role: string; event: any }[] = [];
+  let designerCalls = 0;
+  try {
+    await runProject(
+      p,
+      requestSchema.parse({ text: "生成品牌官网" }),
+      save,
+      () => {},
+      {
+        config,
+        skills: false,
+        onAgentEvent: (role, event) => {
+          events.push({ role, event });
+        },
+        streamFn: (model, context) => {
+          const names = getCurrentSystemMessage(
+            context.messages,
+          )!.toolsAdded!.map((t) => t.name);
+          if (names.includes("submit_intent"))
+            return answer(model, "submit_intent", brief);
+          if (names.includes("submit_facts"))
+            return answer(model, "submit_facts", {
+              summary: "No source facts",
+              facts: [],
+              limitations: [],
+            });
+          designerCalls++;
+          if (designerCalls === 1) return answer(model, "submit_page", {});
+          return answer(model, "submit_page", {
+            html,
+            usedFactIds: designerCalls === 2 ? ["not-a-valid-fact"] : [],
+          });
+        },
+      },
+    );
+    assert.equal(p.status, "complete");
+    assert.equal(p.generation?.metrics?.modelCalls, 5);
+    const results = events.filter(
+      (e) => e.role === "designer" && e.event.type === "tool_execution_end",
+    );
+    assert.deepEqual(
+      results.map((e) => e.event.isError),
+      [true, true, false],
+    );
+    assert.match(JSON.stringify(results[1]), /无效的事实 ID/);
+    const starts = events.filter(
+      (e) =>
+        e.event.type === "tool_execution_start" &&
+        e.event.toolName === "submit_page",
+    );
+    assert.equal(starts[0].event.args.html, undefined);
+    assert.equal(
+      events.filter(
+        (e) =>
+          e.event.type === "tool_execution_start" &&
+          e.event.toolName === "submit_page",
+      ).length,
+      3,
+    );
+  } finally {
+    await removeProject(p.id);
+  }
+});

@@ -100,6 +100,14 @@ Analyst 默认使用 `analyst-information-extraction`。未指定时，Designer 
 node --import tsx scripts/check-skills.ts --request '/skill:designer-impeccable /skill:designer-3d-transforms 生成公司官网'
 ```
 
+需要真实单次对照时，可在已设置 `DREAMATIC_*` 模型环境变量的进程中运行：
+
+```sh
+node --import tsx scripts/experiment-skills.ts --live --source /absolute/path/company.pdf --output workspace/experiments/skill-trial
+```
+
+默认先跑完整流程，再让 8 个适配版各复用同一份简报和事实、独立生成一次；对比 Designer 耗时。项目保存在同一 Workspace，前端可直接看到。`summary.json` 汇总耗时、模型调用和失败，分组 `trace.json` 保留工具尝试及修复，候选与最终 HTML 单独保存；不写入密钥。Agent 在原流程中的自修复仍计入本次尝试。已有尝试不自动重跑，可用 `--only designer-名称` 限定下一组。Ctrl+C 或 SIGTERM 会中止当前请求并停止后续组。实验默认每组最多 15 分钟，生产流程没有增加超时或审查阶段。浏览器效果、触控、保存重开和导出需要另外验收，工具提交成功不能替代这些检查。
+
 `GET /api/skills` 展示真实目录，`/api/skills/diagnostics` 返回原生发现诊断。新增或修改目录被 watcher 发现；相关 Skill/参考文件变化影响对应缓存指纹，不因修改无关技能而重跑分析。指标增加 Skills、加载字符数、预加载耗时和实际 provider token 用量。
 
 同一目录由 Codex 原生 `.agents/skills` 发现；`.claude/skills` 是指向它的符号链接。格式与资源访问已检查，Claude 客户端是否执行通过须以当前环境的实际测试为准。完整职责、兼容性与质量/性能报告见 [Skills 实施记录](docs/skills.md)。

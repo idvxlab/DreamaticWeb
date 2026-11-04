@@ -1,6 +1,7 @@
 import {
   Agent,
   type AgentTool,
+  type AgentEvent,
   type StreamFn,
 } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
@@ -142,6 +143,8 @@ export interface RunOptions {
   resume?: boolean;
   /** Offline comparison seam; production always enables the project Skills. */
   skills?: SkillLibrary | false;
+  /** Offline experiment observer. Keep collection synchronous and free of I/O. */
+  onAgentEvent?: (role: Role, event: AgentEvent) => void;
 }
 export function runProject(
   project: Project,
@@ -423,6 +426,7 @@ async function execute(
         },
       });
       agent.subscribe((event) => {
+        options.onAgentEvent?.(role, event);
         if (
           event.type === "message_end" &&
           event.message.role === "assistant"
