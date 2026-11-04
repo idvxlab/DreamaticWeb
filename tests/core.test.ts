@@ -73,6 +73,18 @@ test("HTML preserves inline scripts while removing external frames and event att
   assert.match(html, /body\{color:red\}/);
   assert.match(html, /Safe/);
 });
+test("CSS policy preserves scroll/overscroll behavior while removing legacy executable declarations", () => {
+  const html = sanitizeHtml(`<html><head><style>
+    html{scroll-behavior:smooth;overscroll-behavior:contain;behavior:url(unsafe.htc);color:red}
+    p{ -moz-binding:url(unsafe.xml);background:white;BEHAVIOR: url(unsafe.htc)}
+  </style></head><body style="  behavior:url(unsafe.htc);scroll-behavior:auto;overscroll-behavior-x:none"><h1>Safe</h1></body></html>`);
+  assert.match(html, /scroll-behavior:smooth/);
+  assert.match(html, /overscroll-behavior:contain/);
+  assert.match(html, /scroll-behavior:auto/);
+  assert.match(html, /overscroll-behavior-x:none/);
+  assert.doesNotMatch(html, /unsafe\.(?:htc|xml)|\{scroll-\}|-moz-binding/i);
+  assert.match(html, /color:red/);
+});
 test("Crawler blocks loopback, private, metadata and IPv4-mapped IPv6 addresses", async () => {
   for (const ip of [
     "127.0.0.1",

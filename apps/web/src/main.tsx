@@ -38,7 +38,7 @@ import type {
   Source,
   RunEvent,
 } from "../../../packages/shared/project";
-import { api, download, token } from "./api";
+import { api, download, token, ApiConnectionError } from "./api";
 import "./styles.css";
 import Settings from "./Settings";
 import ConversationThread from "./ConversationThread";
@@ -85,6 +85,15 @@ function App() {
   const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
 
   const file = useRef<HTMLInputElement>(null);
+  const [pendingUpload, setPendingUpload] = useState<{
+    projectId: string;
+    files: File[];
+  } | null>(null);
+  useEffect(() => {
+    setPendingUpload((pending) =>
+      pending?.projectId === project?.id ? pending : null,
+    );
+  }, [project?.id]);
   const composerInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const input = composerInput.current;
@@ -303,17 +312,24 @@ function App() {
     }
   }
   async function upload(files: FileList | File[] | null) {
-    if (!files?.length) return;
+    if (!files?.length || busy || running) return;
+    const selectedFiles = Array.from(files);
+    let targetId: string | undefined,
+      uploaded = false;
     setBusy(true);
     setError("");
+    setPendingUpload(null);
     try {
       const p = await ensure();
+      targetId = p.id;
+      if (!project) setProject(p);
       const form = new FormData();
-      Array.from(files).forEach((f) => form.append("files", f));
+      selectedFiles.forEach((f) => form.append("files", f));
       const result = await api("/projects/" + p.id + "/sources", {
         method: "POST",
         body: form,
       });
+      uploaded = true;
       setProject(await api("/projects/" + p.id));
       if (result.errors.length)
         setError(
@@ -321,7 +337,12 @@ function App() {
         );
       await refresh();
     } catch (e) {
-      handleError(e);
+      if (e instanceof ApiConnectionError && targetId && !uploaded) {
+        setPendingUpload({ projectId: targetId, files: selectedFiles });
+        setError(
+          "上传连接中断，所选文件已暂存。服务恢复后可重试上传；已导入的相同资料会复用。",
+        );
+      } else handleError(e);
     } finally {
       setBusy(false);
       if (file.current) file.current.value = "";
@@ -1180,7 +1201,21 @@ function App() {
         <div className="toast" role="alert">
           <AlertCircle size={17} />
           <span>{t(error)}</span>
-          <button aria-label={t("关闭错误")} onClick={() => setError("")}>
+          {pendingUpload && pendingUpload.projectId === project?.id && (
+            <button
+              disabled={busy || running}
+              onClick={() => void upload(pendingUpload.files)}
+            >
+              {t("重试上传")}
+            </button>
+          )}
+          <button
+            aria-label={t("关闭错误")}
+            onClick={() => {
+              setError("");
+              setPendingUpload(null);
+            }}
+          >
             <X size={14} />
           </button>
         </div>

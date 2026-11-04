@@ -9,7 +9,8 @@ test("editor preserves variable shorthands, media rules, important colors and co
   const browser = await chromium.launch({
     executablePath:
       process.env.DREAMATIC_BROWSER_PATH ||
-      process.env.CHROME_PATH || chromium.executablePath(),
+      process.env.CHROME_PATH ||
+      chromium.executablePath(),
     headless: true,
   });
   try {
@@ -81,6 +82,113 @@ test("editor preserves variable shorthands, media rules, important colors and co
     assert.equal(report.issues[0].selector, "#bad");
     assert.equal(report.issues[0].ratio, 1);
     assert.ok(report.unchecked > 0);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("editor round trips variable animation/transition/background shorthands with longhand overrides", async () => {
+  const browser = await chromium.launch({
+    executablePath:
+      process.env.DREAMATIC_BROWSER_PATH ||
+      process.env.CHROME_PATH ||
+      chromium.executablePath(),
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage({ reducedMotion: "no-preference" });
+    await page.setContent('<div id="editor"></div>');
+    await page.addScriptTag({
+      path: "node_modules/grapesjs/dist/grapes.min.js",
+    });
+    const source = await readFile("apps/web/src/editor-css.ts", "utf8");
+    await page.addScriptTag({
+      content: ts
+        .transpileModule(source, {
+          compilerOptions: {
+            module: ts.ModuleKind.None,
+            target: ts.ScriptTarget.ES2022,
+          },
+        })
+        .outputText.replace(/export /g, ""),
+    });
+    const css = `:root{--ease:cubic-bezier(.2,.7,.3,1);--surface:#123456;--duration:.5s;--data:{key:value};--dreamatic-editor-raw:author}
+      @font-face{font-family:Fixture;src:local(Arial);font-display:swap}
+      @media (prefers-reduced-motion:no-preference){
+        @keyframes plateIn{from{opacity:.5}to{opacity:1}}
+        .hero{animation:plateIn .82s var(--ease) both;animation-delay:.16s;
+          transition:opacity var(--duration) var(--ease);transition-delay:.2s;
+          background:var(--surface);background-position:center;
+          color: /* comment ; } */ white!important;color:red;}
+        .reverse{animation-delay:5s;animation:plateIn .9s var(--ease) both}
+        .repeat{animation:plateIn 5s var(--ease);animation-delay:.2s;animation:plateIn .7s var(--ease)}
+        .invalid{color:rgb(1,2,3);color:broken}
+        .hero::after{content:"semi; brace } and /* literal */"}
+      }
+      @media(prefers-reduced-motion:reduce){.hero{animation:none!important;transition:none!important}}`;
+    const original = `<html><head><style>${css}</style></head><body><div class="hero">Animated</div><div class="reverse">Reverse</div><div class="repeat">Repeat</div><div class="invalid">Invalid fallback</div></body></html>`;
+    const output = await page.evaluate((html) => {
+      const w = window as any;
+      const e = w.grapesjs.init({
+        container: "#editor",
+        storageManager: false,
+        parser: { parserCss: w.parseEditorCss },
+      });
+      let result = html;
+      for (let i = 0; i < 2; i++) {
+        e.setComponents(result);
+        result = `<html><head><style>${e.getCss()}</style></head><body>${e.getHtml()}</body></html>`;
+      }
+      e.destroy();
+      return result;
+    }, original);
+    const snapshot = async (html: string) => {
+      await page.setContent(html);
+      return page.evaluate(() =>
+        [".hero", ".reverse", ".repeat", ".invalid"].map((selector) => {
+          const style = getComputedStyle(document.querySelector(selector)!);
+          return Object.fromEntries(
+            [
+              "animation-name",
+              "animation-duration",
+              "animation-delay",
+              "animation-timing-function",
+              "transition-property",
+              "transition-duration",
+              "transition-delay",
+              "background-color",
+              "background-position",
+              "color",
+              "--data",
+              "--dreamatic-editor-raw",
+            ].map((key) => [key, style.getPropertyValue(key)]),
+          );
+        }),
+      );
+    };
+    const before = await snapshot(original),
+      after = await snapshot(output);
+    assert.equal(before[0]["animation-name"], "plateIn");
+    assert.deepEqual(after, before);
+    assert.match(output, /font-display:swap/);
+    assert.match(output, /src:local\("?Arial"?\)/);
+    assert.match(output, /literal/);
+    assert.doesNotMatch(output, /--dreamatic-editor-raw-:/);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    assert.equal(
+      await page
+        .locator(".hero")
+        .evaluate((e) => getComputedStyle(e).animationName),
+      "none",
+    );
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    assert.equal(
+      await page
+        .locator(".hero")
+        .evaluate((e) => getComputedStyle(e).animationName),
+      "plateIn",
+    );
   } finally {
     await browser.close();
   }

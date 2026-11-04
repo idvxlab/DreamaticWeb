@@ -16,6 +16,29 @@ export async function validatePage(project: Project, raw: string) {
   const html = sanitizeHtml(raw),
     $ = cheerio.load(html),
     before = cheerio.load(raw);
+  // A damaged style replacement becomes a direct body text node. Code samples
+  // inside pre/code and ordinary prose are not part of this structural check.
+  if (
+    $("body")
+      .contents()
+      .toArray()
+      .some((node) => {
+        if (node.type !== "text") return false;
+        const text = node.data.trim();
+        return (
+          /^(?:```(?:css|html)\b|<\/?(?:html|head|body)\b)/i.test(text) ||
+          /^(?:[.#:[*][^{}<>]*|[a-z][\w-]*(?:[.#:[\s>+~][^{}<>]*)?)\s*\{\s*(?:--[\w-]+|[a-z-]+)\s*:[^{}]*\}/i.test(
+            text,
+          )
+        );
+      })
+  )
+    issues.push({
+      severity: "error",
+      code: "visible_source",
+      message:
+        "CSS/HTML source is visible directly in body; keep CSS in style and code examples in pre/code",
+    });
   if (!$("body").text().trim() && !$("body img,body video,body audio").length)
     issues.push({
       severity: "error",
