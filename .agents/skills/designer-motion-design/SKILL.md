@@ -28,3 +28,7 @@ Use [choreography](references/choreography.md) for multiple elements, [scene and
 Preserve velocity or continuity when an interaction reverses; do not queue repeated animations indefinitely. Keep the default composition useful if enhancement fails. Reduce spatial movement for reduced-motion preferences, adapt hover to touch, pause offscreen loops and provide meaningful control of continuous motion. Use the available runtime rather than outputting unresolvable framework components.
 
 The result should express the selected personality and story in actual playback. Source-level animation declarations alone do not prove timing, smoothness or emotional effect; those need external device and visual testing.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [choreography](references/choreography.md), [scene patterns](references/scene-patterns.md). Other linked references support specific techniques and remain conditional.

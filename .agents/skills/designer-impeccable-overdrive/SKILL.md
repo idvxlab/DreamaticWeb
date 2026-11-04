@@ -29,3 +29,7 @@ Default content is visible before enhancement. Detect capabilities; retain a com
 Target smooth rendering on the actual device; a declared transform or canvas is not evidence of a frame rate. Reduced motion receives an intentional lower-motion composition. No interaction depends solely on hover, sound or a device permission.
 
 Judge against the brief: does the moment belong to this brand, remain legible on mobile, feel coherent when interrupted, and lose something meaningful when removed? Testing must examine real playback, not just the presence of keyframes in source. Do not add an autonomous critic or repeat generation until an invented score passes.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [native effects](references/native-effects.md). Other linked references support specific techniques and remain conditional.

@@ -30,3 +30,7 @@ One authored moment is stronger than the same entrance repeated on every section
 Follow [the craft floor](references/craft-floor.md) for readability, spacing, states, copy, browser details and motion continuity. Controls, selection, caret, focus, captions and data alignment belong to the same world. Keep the default content visible, provide a composed reduced-motion path, and preserve useful touch and keyboard behavior.
 
 The brief's pinned aesthetics take precedence over generic anti-template advice. Do not fabricate unsupported business claims or replace real content to fit a design. Finish the current scoped deliverable; optional audit, polishing, asset-production or documentation workflows are not automatic extra agents or calls. Claims about rendering or smoothness require observed evidence from testing.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [visual world](references/visual-world.md), [craft floor](references/craft-floor.md). Other linked references support specific techniques and remain conditional.

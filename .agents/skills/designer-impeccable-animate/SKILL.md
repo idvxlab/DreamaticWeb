@@ -31,3 +31,7 @@ Follow [sequencing and interruption](references/sequencing.md) when actions over
 Keep content visible if initialization fails. Pause nonessential loops when offscreen or the tab is hidden, with a visible pause control when persistent motion is part of the presentation. Under reduced motion, reduce spatial travel while retaining legible feedback and state. Touch and keyboard paths must reach the same content.
 
 The delivered result must show the chosen focal effect as well as useful supporting states. External tests should inspect its timing, interruption, repeated use and device behavior. Do not claim a preview occurred or launch a follow-on polish/review workflow automatically.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [sequencing](references/sequencing.md). Other linked references support specific techniques and remain conditional.

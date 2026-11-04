@@ -1,5 +1,5 @@
 {
-  "adapterVersion": "1.0.0",
+  "adapterVersion": "1.1.0",
   "upstreamName": "motion-design",
   "archive": "ZJT-Skills-上游原版-20261104.zip",
   "archiveSha256": "91a56492417d4a759825e7ddfb45565ac81942708e2fcb1f50223a8da6aaf463",
@@ -45,7 +45,8 @@
     "prepared brief instead of separate discovery/launcher/menu",
     "existing single-document runtime rather than framework scaffolding or unprovided libraries",
     "external visual evaluation instead of extra production review agents",
-    "no initial waiting greeting or forced review-table response"
+    "no initial waiting greeting or forced review-table response",
+    "declare scoped core references for same-turn native preloading; other references stay on demand"
   ],
   "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
   "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
@@ -56,7 +57,7 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "1583eefb027c04b476b56c77539dbe20ec6d7474f356b28a3e854da1ade5bc57"
+      "sha256": "65a8cac6e0d2efd06147ee484715ac19011db20d16d0c377c9dc6d14ff111307"
     },
     {
       "path": "references/choreography.md",

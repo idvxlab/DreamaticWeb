@@ -23,6 +23,63 @@ import {
 
 const lib = new SkillLibrary();
 test.after(() => lib.close());
+
+test("required references are scoped, budgeted, cached and invalidate the selected Skill", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dreamatic-core-refs-"));
+  const dir = path.join(root, "designer-example");
+  const library = new SkillLibrary(root);
+  try {
+    await mkdir(path.join(dir, "references"), { recursive: true });
+    await writeFile(
+      path.join(dir, "SKILL.md"),
+      "---\nname: designer-example\ndescription: Example scene\n---\n# Scene\n[Optional](references/optional.md)\n\n## Required references\nApply [core](references/core.md).\n\n## Other work\nLeave the optional file deferred.\n",
+    );
+    await writeFile(
+      path.join(dir, "references/core.md"),
+      "# Essential scene\nA visible staged transformation.",
+    );
+    await writeFile(
+      path.join(dir, "references/optional.md"),
+      "OPTIONAL-NOT-NEEDED",
+    );
+    const names = ["designer-example"];
+    const first = await library.signature("designer", names);
+    const reads = library.io.reads;
+    const prepared = await library.prepare("designer", names, {
+      selectedOnly: true,
+    });
+    assert.match(prepared.prompt, /A visible staged transformation/);
+    assert.doesNotMatch(prepared.prompt, /OPTIONAL-NOT-NEEDED/);
+    assert.deepEqual(prepared.references, [
+      "designer-example/references/core.md",
+    ]);
+    assert.equal(library.io.reads, reads);
+    await library.prepare("designer", names);
+    assert.equal(library.io.reads, reads);
+    await writeFile(
+      path.join(dir, "references/core.md"),
+      "# Essential scene\nUpdated core mechanics.",
+    );
+    assert.notEqual(await library.signature("designer", names), first);
+    assert.match(
+      (await library.prepare("designer", names)).prompt,
+      /Updated core mechanics/,
+    );
+    await writeFile(path.join(dir, "references/core.md"), "x".repeat(24000));
+    await assert.rejects(
+      () => library.prepare("designer", names),
+      /24000.*预算/,
+    );
+    const outside = path.join(root, "outside.md");
+    await writeFile(outside, "DO-NOT-LOAD");
+    await rm(path.join(dir, "references/core.md"));
+    await symlink(outside, path.join(dir, "references/core.md"));
+    await assert.rejects(() => library.prepare("designer", names), /只能读取/);
+  } finally {
+    library.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("published Pi loader discovers portable Skills; Codex and Claude paths resolve the same resources", async () => {
   const pi = loadSkillsFromDir({ dir: SKILLS_ROOT, source: "test" });
   assert.equal(pi.diagnostics.length, 0);
@@ -116,7 +173,7 @@ test("explicit Designer selections stay exact and scoped while references remain
     assert.ok(!prepared.prompt.includes('name="designer-visual-design"'));
     assert.ok(
       !prepared.prompt.includes("# Upstream depth tokens in readable form"),
-      "reference body is not preloaded",
+      "optional depth reference is not preloaded",
     );
     const reader = library.reader("designer", undefined, names);
     await assert.rejects(
@@ -171,11 +228,9 @@ test("24k body ceiling permits larger inputs, rejects excess and keeps the 48k f
     );
     await assert.rejects(
       () =>
-        library
-          .reader("designer")
-          .execute("oversize", {
-            path: path.join(root, "designer-large/references/too-big.md"),
-          }),
+        library.reader("designer").execute("oversize", {
+          path: path.join(root, "designer-large/references/too-big.md"),
+        }),
       /48 KB/,
     );
   } finally {
@@ -212,7 +267,11 @@ test("adapted Skills carry intact licenses/provenance and every linked reference
       const prepared = await library.prepare("designer", [skill.name], {
         selectedOnly: true,
       });
-      assert.ok(prepared.characters < 5000);
+      assert.ok(prepared.characters < SKILL_BODY_CHARACTER_LIMIT);
+      assert.ok(
+        prepared.references.length > 0,
+        "core methods are supplied without a model read turn",
+      );
       const body = await readFile(skill.filePath, "utf8");
       for (const ref of body.matchAll(/\]\((references\/[^)]+\.md)\)/g)) {
         const result = await library

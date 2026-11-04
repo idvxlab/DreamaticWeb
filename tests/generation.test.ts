@@ -788,7 +788,7 @@ test("additional source ranges and optional image inspection use Pi tools and ca
   }
 });
 
-test("normal A3 pipeline shares canonical media context in three calls, with optional vision and cached editing", async () => {
+test("legacy media appendices stay in source storage without Designer reinjection; optional vision and three-stage reuse remain", async () => {
   const p = await create();
   const observed: string[][] = [];
   try {
@@ -841,7 +841,14 @@ test("normal A3 pipeline shares canonical media context in three calls, with opt
       if (names.includes("submit_intent"))
         return answer(model, "submit_intent", brief);
       const all = JSON.stringify(input.messages);
-      assert.match(all, /Product illustration from source/);
+      if (names.includes("submit_facts"))
+        assert.match(all, /Product illustration from source/);
+      else {
+        assert.doesNotMatch(
+          all,
+          /# Canonical media associations|Media layout associations|Product illustration from source/,
+        );
+      }
       assert.ok(all.includes(source.assets[0].url));
       if (names.includes("submit_facts"))
         return answer(model, "submit_facts", {
@@ -1269,6 +1276,55 @@ test("experiment observer preserves a rejected terminal call followed by success
       ).length,
       3,
     );
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
+test("Designer receives declared core references in the initial call without an extra read round", async () => {
+  const p = await create();
+  let calls = 0;
+  try {
+    await runProject(
+      p,
+      requestSchema.parse({
+        text: "/skill:designer-3d-transforms Create a spatial showcase",
+      }),
+      save,
+      () => {},
+      {
+        config,
+        streamFn: (model, context) => {
+          calls++;
+          const sys = getCurrentSystemMessage(context.messages)!;
+          const prompt =
+            typeof sys.content === "string"
+              ? sys.content
+              : sys.content.map((c) => c.text).join("\n");
+          if (prompt.includes("# Orchestrator"))
+            return answer(model, "submit_intent", brief);
+          if (prompt.includes("# Analyst"))
+            return answer(model, "submit_facts", {
+              summary: "No source facts",
+              facts: [],
+              limitations: [],
+            });
+          assert.match(prompt, /# Build a coherent 3D stage/);
+          assert.match(prompt, /width:min\(100%, 560px\)/);
+          assert.doesNotMatch(
+            prompt,
+            /# Upstream depth tokens in readable form/,
+          );
+          return answer(model, "submit_page", { html, usedFactIds: [] });
+        },
+      },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(calls, 3);
+    assert.equal(p.generation!.metrics!.skillReads, 0);
+    assert.deepEqual(p.generation!.metrics!.stages.at(-1)!.skillReferences, [
+      "designer-3d-transforms/references/spatial-patterns.md",
+    ]);
   } finally {
     await removeProject(p.id);
   }

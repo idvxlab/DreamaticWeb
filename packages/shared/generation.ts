@@ -87,6 +87,7 @@ export interface GenerationState {
     stages: {
       role: string;
       skills?: string[];
+      skillReferences?: string[];
       skillCharacters?: number;
       skillMs?: number;
       reused: boolean;

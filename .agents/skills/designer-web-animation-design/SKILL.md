@@ -28,3 +28,7 @@ Prefer properties that avoid repeated layout, but measure rather than asserting 
 Provide a reduced-motion path that reduces spatial travel while preserving visible content and understandable state. Stop nonessential loops and honor pause. Keep hover-only behaviors under suitable pointer media queries and provide touch alternatives.
 
 This Skill supports implementation within the current task. Do not emit an initial readiness greeting, wait for another user question, or replace the requested deliverable with an animation-review table. When reviewing is actually requested, make before/after differences explicit. Actual playback, repeated use and device tests decide whether the result feels smooth.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [interaction mechanics](references/interaction-mechanics.md). Other linked references support specific techniques and remain conditional.

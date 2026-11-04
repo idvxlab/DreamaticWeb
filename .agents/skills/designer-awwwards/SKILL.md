@@ -28,3 +28,7 @@ Use [concept and art direction](references/concept-and-composition.md) when choo
 Keep the first meaningful content frame strong and readable. Avoid fictional loaders. Keep the native cursor usable; no action depends on hover. Coordinate foreground/background colors through every state. Preserve keyboard access, useful focus, mobile composition and visible content when enhancement fails.
 
 Judge the actual delivered effect against the concept: could the same scene belong to any company? Does the signature still work after a second visit or interrupted interaction? Is the mobile alternative intentional? Browser performance, visual scoring and screenshot inspection require actual external evidence; do not invent a score or add an autonomous review workflow.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [concept and composition](references/concept-and-composition.md), [signature motion](references/signature-motion.md). Other linked references support specific techniques and remain conditional.

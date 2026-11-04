@@ -26,3 +26,7 @@ Provide mobile reflow, keyboard focus, intentional reduced-motion behavior, read
 ## Write as the visitor speaks
 
 Use the product's own real language. Actions say what they do. Keep the same name for an action and its resulting state. Errors explain recovery; empty states offer a next action. Remove filler and process narration. The delivered page should be useful without explaining how its content was extracted.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [composition](references/composition.md). Other linked references support specific techniques and remain conditional.

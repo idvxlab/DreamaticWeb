@@ -14,6 +14,18 @@ import { hash } from "./artifacts.js";
 export const SKILLS_ROOT = path.resolve(".agents/skills");
 export const SKILL_BODY_CHARACTER_LIMIT = 24000;
 export const SKILL_REFERENCE_BYTE_LIMIT = 48000;
+
+/** Portable Markdown declares only the references essential to this Skill. */
+function requiredReferences(body: string) {
+  const section =
+    body.split(/^## Required references[ \t]*\r?$/m)[1]?.split(/^## /m)[0] ||
+    "";
+  return [
+    ...new Set(
+      [...section.matchAll(/\]\((references\/[^)]+\.md)\)/g)].map((m) => m[1]),
+    ),
+  ];
+}
 const roleFor = (name: string): Role | undefined =>
   name.startsWith("analyst-")
     ? "analyst"
@@ -309,12 +321,17 @@ export class SkillLibrary {
       // Read only selected entries through the cached public Pi reader, never all bodies.
       await this.reader(role).execute("signature", { path: skill.filePath });
       const text = this.buffers.get(skill.filePath)!.buffer.toString("utf8");
+      const required = new Set(requiredReferences(text));
       for (const match of text.matchAll(/\]\((references\/[^)]+\.md)\)/g)) {
         const resource = await this.permitted(
           path.resolve(skill.baseDir, match[1]),
           role,
         );
         parts.push(resource.resolved + ":" + resource.stamp);
+        if (required.has(match[1]))
+          await this.reader(role, undefined, names).execute("signature", {
+            path: resource.resolved,
+          });
       }
     }
     return hash(parts.join("|"));
@@ -328,6 +345,7 @@ export class SkillLibrary {
       (s) => roleFor(s.name) === role,
     );
     const blocks = [];
+    const references: string[] = [];
     let characters = 0;
     for (const name of names) {
       const skill = catalog.find((s) => s.name === name);
@@ -347,13 +365,35 @@ export class SkillLibrary {
       blocks.push(
         `<skill name="${name}" location="${skill.filePath}">\n${body}\n</skill>`,
       );
+      const raw = this.buffers.get(skill.filePath)!.buffer.toString("utf8");
+      for (const reference of requiredReferences(raw)) {
+        const filename = path.resolve(skill.baseDir, reference);
+        const result = await this.reader(role, undefined, names).execute(
+          "preload-reference",
+          { path: filename },
+        );
+        const content = result.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text)
+          .join("\n");
+        characters += content.length;
+        if (characters > SKILL_BODY_CHARACTER_LIMIT)
+          throw new Error(
+            `选定 Skills 和核心参考超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
+          );
+        references.push(`${name}/${reference}`);
+        blocks.push(
+          `<skill-reference skill="${name}" location="${filename}">\n${content}\n</skill-reference>`,
+        );
+      }
     }
     return {
       prompt: names.length
-        ? `${formatSkillsForPrompt(options.selectedOnly ? catalog.filter((s) => names.includes(s.name)) : catalog, "read")}\n\nSelected skills already loaded below; do not read them again. ${options.selectedOnly ? "Only their references are available for this explicit selection." : "Other skills/references are optional, only when needed."}\n${blocks.join("\n\n")}`
+        ? `${formatSkillsForPrompt(options.selectedOnly ? catalog.filter((s) => names.includes(s.name)) : catalog, "read")}\n\nSelected skills and their required references are loaded below; apply them without reading them again. For other linked references, use read with the absolute Skill location's directory plus the relative reference path. ${options.selectedOnly ? "Only these selected Skills and their references are available." : "Read other relevant references only when needed."}\n${blocks.join("\n\n")}`
         : "",
       names,
       characters,
+      references,
     };
   }
 }

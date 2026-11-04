@@ -3,7 +3,7 @@
 Perspective belongs on the containing stage. The transformed objects occupy its 3D space; preserve-3d belongs on intermediate containers whose children must retain separate depth. Keep any clipping surface separate when an overflow or compositing choice would flatten the scene.
 
 ```css
-.stage { perspective: 800px; perspective-origin: 50% 45%; }
+.stage { position:relative; width:min(100%, 560px); aspect-ratio:1; perspective:800px; perspective-origin:50% 45%; }
 .assembly { transform-style: preserve-3d; }
 .back { transform: translateZ(-100px) scale(1.1); }
 .middle { transform: translateZ(0); }

@@ -5,7 +5,7 @@ description: Create perceptible spatial depth with CSS perspective, preserve-3d,
 
 # Compose real spatial relationships
 
-Place perspective on a containing stage and preserve-3d along the relevant nested transform chain. Give the layers deliberate z positions and a meaningful transform origin. Rotation alone without a viewing perspective is not a complete depth composition. Avoid ancestors that unintentionally flatten or clip the scene.
+Place perspective on a containing stage and preserve-3d along the relevant nested transform chain. Give the layers deliberate z positions and a meaningful transform origin. Rotation alone without a viewing perspective is not a complete depth composition. Avoid ancestors that unintentionally flatten or clip the scene. Size an absolutely positioned scene with an explicit responsive width and height or aspect ratio. For example, width:min(100%, 560px) plus aspect-ratio:1 gives the stage area; max-width alone can collapse to zero when its children contribute no intrinsic size.
 
 ## Choose depth by scale
 
@@ -26,3 +26,7 @@ Use [spatial patterns](references/spatial-patterns.md) for a reliable stage, int
 Preserve a coherent flat composition for reduced motion and initialization failure. Stop nonessential loops offscreen or in hidden tabs, expose pause for persistent presentation motion, and restore a sensible state after repeated interaction. Limit promoted layers and expensive filters. Native transforms and JavaScript are sufficient for many spatial scenes; do not output imports or assumed libraries that are absent from the runtime.
 
 Verify perspective, actual transforms, clipping and readability in the delivered runtime. A static frame or the presence of translateZ in source does not by itself establish a convincing spatial effect.
+
+## Required references
+
+Apply these core methods before implementing this Skill: [spatial patterns](references/spatial-patterns.md). Other linked references support specific techniques and remain conditional.

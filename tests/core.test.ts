@@ -203,11 +203,7 @@ test("PDF embedded raster images are extracted alongside text for page reuse", a
   assert.ok(images.length > 0, JSON.stringify(source.warnings));
   assert.equal(images[0].width, 2);
   assert.equal(images[0].height, 2);
-  assert.match(
-    source.markdown!,
-    /Media layout associations \(program-extracted\)/,
-  );
-  assert.match(source.markdown!, /第1页/);
+  assert.doesNotMatch(source.markdown!, /dreamatic:media-associations/);
   assert.ok(source.markdown!.includes(images[0].url));
 });
 

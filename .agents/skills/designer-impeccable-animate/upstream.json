@@ -1,5 +1,5 @@
 {
-  "adapterVersion": "1.0.0",
+  "adapterVersion": "1.1.0",
   "upstreamName": "impeccable animate",
   "archive": "ZJT-Skills-上游原版-20261104.zip",
   "archiveSha256": "91a56492417d4a759825e7ddfb45565ac81942708e2fcb1f50223a8da6aaf463",
@@ -25,7 +25,8 @@
     "prepared brief instead of separate discovery/launcher/menu",
     "existing single-document runtime rather than framework scaffolding or unprovided libraries",
     "external visual evaluation instead of extra production review agents",
-    "no initial waiting greeting or forced review-table response"
+    "no initial waiting greeting or forced review-table response",
+    "declare scoped core references for same-turn native preloading; other references stay on demand"
   ],
   "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
   "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
@@ -36,7 +37,7 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "6018386951e76c277893e3ee6f2fcf598e95b278fa9d270f915589736ff0951a"
+      "sha256": "0280f36514411160a6f7d5c1979d3846a70e5ed47d233668583cc392eb142bea"
     },
     {
       "path": "references/performance-and-fallback.md",

@@ -1,5 +1,5 @@
 {
-  "adapterVersion": "1.0.0",
+  "adapterVersion": "1.1.0",
   "upstreamName": "impeccable",
   "archive": "ZJT-Skills-上游原版-20261104.zip",
   "archiveSha256": "91a56492417d4a759825e7ddfb45565ac81942708e2fcb1f50223a8da6aaf463",
@@ -33,7 +33,8 @@
     "prepared brief instead of separate discovery/launcher/menu",
     "existing single-document runtime rather than framework scaffolding or unprovided libraries",
     "external visual evaluation instead of extra production review agents",
-    "no initial waiting greeting or forced review-table response"
+    "no initial waiting greeting or forced review-table response",
+    "declare scoped core references for same-turn native preloading; other references stay on demand"
   ],
   "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
   "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
@@ -44,7 +45,7 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "ba13ac3da42c7c442d15945f216961e8abc1da69f1fb4fbf3a503c3ca23987fb"
+      "sha256": "0dc5e22e68fe0508a149be0c7a32e483add8b9fbd2dc4547c10a0a5efceb14a3"
     },
     {
       "path": "references/craft-floor.md",

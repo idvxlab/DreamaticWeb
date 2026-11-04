@@ -35,7 +35,6 @@ import {
   factsMarkdown,
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
-import { canonicalMediaAssociations } from "../document-media.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import { imagePreview } from "../image-preview.js";
@@ -359,13 +358,14 @@ async function execute(
       const prepared =
         library && names.length
           ? await library.prepare(role, names, { selectedOnly })
-          : { prompt: "", names: [], characters: 0 };
+          : { prompt: "", names: [], characters: 0, references: [] };
       const skillMs = Math.round(performance.now() - skillStart);
       metrics.skillCharacters += prepared.characters;
       metrics.skillLoads += prepared.names.length;
       if (prepared.names.length)
         event(role, "已加载 " + prepared.names.join(", "), "skill", {
           skillCharacters: prepared.characters,
+          skillReferences: prepared.references.join(", "),
         });
       // Expose Pi's native scoped reader only when this stage can benefit from Skills.
       if (library && role !== "orchestrator" && names.length)
@@ -439,19 +439,7 @@ async function execute(
       const abort = () => agent.abort();
       controller.signal.addEventListener("abort", abort, { once: true });
       try {
-        await agent.prompt(
-          input +
-            (role === "designer"
-              ? documents
-                  .map(({ source, document }) => {
-                    const media = canonicalMediaAssociations(document.markdown);
-                    return media
-                      ? `\n\n# Canonical media associations: ${source.id}\n${media}`
-                      : "";
-                  })
-                  .join("")
-              : ""),
-        );
+        await agent.prompt(input);
         controller.signal.throwIfAborted();
         if (agent.state.errorMessage) {
           const requestNumber = metrics.modelCalls - callStart;
@@ -476,6 +464,7 @@ async function execute(
         metrics.stages.push({
           role,
           skills: prepared.names,
+          skillReferences: prepared.references,
           skillCharacters: prepared.characters,
           skillMs,
           reused: false,
