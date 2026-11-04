@@ -216,7 +216,7 @@ test("HTML policy restricts network, custom elements, navigation, event handlers
   assert.match(html, /rel="noopener noreferrer"/);
   assert.doesNotMatch(
     html,
-    /custom-widget|onclick|formaction|<svg|@import|http:\/\/127/,
+    /custom-widget|onclick|formaction|alert\(1\)|@import|http:\/\/127/,
   );
   assert.match(html, /type="button"/);
 });
