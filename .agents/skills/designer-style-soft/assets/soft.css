@@ -1,0 +1,50 @@
+/* designer-style-soft: one complete look over the designer-taste kit's blocks. Scoped to
+   html[data-style="soft"] so it never leaks into another style. */
+html[data-style="soft"] {
+  --font-display: -apple-system, "SF Pro Display", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-text: -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --display-weight: 700; --display-tracking: -0.03em;
+  --spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --shell: 0 0 0 6px rgb(0 0 0 / 0.035), 0 0 0 7px rgb(0 0 0 / 0.05), 0 40px 80px -40px rgb(0 0 0 / 0.18);
+}
+html[data-style="soft"] body { background: var(--p-bg); }
+html[data-style="soft"] main > :is(section, .section):not(.hero) { padding-block: clamp(96px, 11vw, 168px); }
+html[data-style="soft"] :is(h1, h2) { font-weight: 700; letter-spacing: -0.035em; line-height: 1.02; }
+html[data-style="soft"] .hero h1 { font-size: clamp(3rem, 6.4vw, 6.5rem); }
+html[data-style="soft"] .section-head h2 { font-size: clamp(2.25rem, 4.4vw, 4rem); }
+html[data-style="soft"] .eyebrow {
+  display: inline-block; width: fit-content; max-width: max-content; justify-self: start; align-self: flex-start; margin: 0 0 var(--s-5); padding: 6px 14px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase;
+  background: color-mix(in oklab, var(--p-accent) 10%, white); color: var(--p-accent);
+}
+/* the double bezel: an outer shell, its hairline and a long diffused shadow */
+html[data-style="soft"] :is(.range__item, .feature__media, .case__media > figure, .figure-panel, .spec-table-wrap) {
+  border: 0; border-radius: 28px; box-shadow: var(--shell); background: var(--surface, #fff); margin: 7px;
+  transition: transform 0.7s var(--spring), box-shadow 0.7s var(--spring);
+}
+html[data-style="soft"] .range { gap: calc(var(--gutter) + 14px); }
+html[data-style="soft"] .range > * { flex-basis: calc((100% - (var(--cols) - 1) * (var(--gutter) + 14px)) / var(--cols) - 14px); }
+html[data-style="soft"] .range__item:hover { transform: translateY(-6px); }
+html[data-style="soft"] .range__body { border-top: 0; }
+html[data-style="soft"] .spec-table-wrap { padding: var(--s-4) var(--s-5); }
+html[data-style="soft"] .spec-table :is(th, td) { border-bottom-color: rgb(0 0 0 / 0.06); }
+html[data-style="soft"] .case { border-top: 0; }
+html[data-style="soft"] .case + .case { margin-top: var(--s-6); }
+html[data-style="soft"] .case:last-child { border-bottom: 0; }
+/* pill actions; the primary carries its arrow in its own circle */
+html[data-style="soft"] .btn { border-radius: 999px; transition: transform 0.5s var(--spring), background 0.5s var(--spring); }
+html[data-style="soft"] .btn:active { transform: scale(0.98); }
+html[data-style="soft"] .btn--primary { padding-right: 8px; display: inline-flex; align-items: center; gap: 12px; }
+html[data-style="soft"] .btn--primary::after {
+  content: "↗"; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: rgb(255 255 255 / 0.16); font-size: 14px; transition: transform 0.5s var(--spring);
+}
+html[data-style="soft"] .btn--primary:hover::after { transform: translate(2px, -1px) scale(1.05); }
+/* the navigation floats as a pill below the top edge */
+html[data-style="soft"] header.nav { background: transparent; border: 0; box-shadow: none; }
+html[data-style="soft"] header.nav .nav__bar {
+  margin-top: 12px; padding: 8px 8px 8px 22px; border-radius: 999px; max-width: min(1120px, calc(100% - 32px));
+  background: rgb(255 255 255 / 0.72); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.05), 0 20px 40px -24px rgb(0 0 0 / 0.25);
+}
+html[data-style="soft"] .section-reveal, html[data-style="soft"] [data-reveal] { transition-timing-function: var(--spring) !important; transition-duration: 0.9s !important; }

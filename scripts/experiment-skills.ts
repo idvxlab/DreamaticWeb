@@ -32,7 +32,7 @@ const args = process.argv.slice(2);
 const arg = (name: string) => args[args.indexOf(name) + 1];
 if (args.includes("--help") || !args.includes("--live")) {
   console.log(
-    "Usage: node --import tsx scripts/experiment-skills.ts --live --source company.pdf --output workspace/experiments/NAME [--only baseline|default|designer-NAME] [--request TEXT] [--minutes 15] [--thinking-budget N]\nUses environment DREAMATIC_* profiles. Baseline runs ingestion + all roles; later entries reuse identical brief/facts in separate visible projects. Each condition runs once, no automatic retries. No credentials are saved.",
+    "Usage: node --import tsx scripts/experiment-skills.ts --live --source company.pdf --output workspace/experiments/NAME [--only baseline|default|none|designer-NAME] [--request TEXT] [--minutes 15] [--thinking-budget N]\nUses environment DREAMATIC_* profiles. Baseline runs ingestion + all roles; later entries reuse identical brief/facts in separate visible projects. Each condition runs once, no automatic retries. No credentials are saved.",
   );
   process.exit(args.includes("--help") ? 0 : 1);
 }
@@ -78,6 +78,8 @@ const variants = [
   "baseline",
   // Reuses the baseline's brief/facts with default routing: a Designer-only rerun.
   "default",
+  // The same Designer rerun with no Skill at all (runtime skills: false): the no-Skill control.
+  "none",
   "designer-awwwards",
   "designer-frontend-design",
   "designer-impeccable",
@@ -196,7 +198,9 @@ try {
         { text: request, editing: false },
         (await library.catalog()).skills,
       );
-      const analystSignature = await library.signature("analyst", analystNames);
+      // Without Skills the runtime signs the Analyst policy with "", so the reused facts must too.
+      const analystSignature =
+        variant === "none" ? "" : await library.signature("analyst", analystNames);
       const analystProfile = config.models.analyst || config.models.reasoning;
       const analystPolicy = hash(
         (await readFile("config/agents/analyst.md", "utf8")) +
@@ -227,7 +231,7 @@ try {
     p.title = `Skill 实验 · ${variant}`;
     p.titleEdited = true;
     const text =
-      (["baseline", "default"].includes(variant) ? "" : `/skill:${variant}\n`) +
+      (["baseline", "default", "none"].includes(variant) ? "" : `/skill:${variant}\n`) +
       request;
     p.messages.push({ role: "user", text, time: new Date().toISOString() });
     await save(p);
@@ -324,7 +328,7 @@ try {
           ),
         {
           config,
-          skills: library,
+          skills: variant === "none" ? false : library,
           onAgentEvent: observe,
           streamFn: (model, context, opts) => {
             const provider = providers.find(

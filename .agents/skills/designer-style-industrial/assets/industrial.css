@@ -1,0 +1,53 @@
+/* designer-style-industrial: one complete look over the designer-taste kit's blocks. Scoped to
+   html[data-style="industrial"] so it never leaks into another style. */
+html[data-style="industrial"] {
+  --font-display: "Helvetica Neue", "Arial Black", Arial, "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-text: "Helvetica Neue", Arial, "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "JetBrains Mono", Consolas, monospace;
+  --display-weight: 800; --display-tracking: -0.04em;
+}
+html[data-style="industrial"] *, html[data-style="industrial"] *::before, html[data-style="industrial"] *::after {
+  border-radius: 0 !important; box-shadow: none !important; text-shadow: none !important;
+}
+html[data-style="industrial"] body { background: var(--p-bg); color: var(--p-ink); }
+html[data-style="industrial"] :is(h1, h2) { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.04em; line-height: 0.92; text-transform: uppercase; }
+html[data-style="industrial"] .hero h1 { font-size: clamp(3.25rem, 7.4vw, 8rem); }
+html[data-style="industrial"] .section-head h2 { font-size: clamp(2.25rem, 4.6vw, 4.5rem); }
+html[data-style="industrial"] h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; }
+html[data-style="industrial"] .muted { color: var(--p-muted); }
+/* the monospaced micro layer */
+html[data-style="industrial"] :is(.tag, .nav__link, .case__tag, .figures dt, .range__figures dt, .spec-table thead th, .spec-table th:first-child, .rows__name, .t-small, .range-group > h3, .hero__facts dt, .btn) {
+  font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 500;
+}
+html[data-style="industrial"] .tag { margin: 0 0 var(--s-4); color: var(--p-accent); }
+html[data-style="industrial"] .tag + h2, html[data-style="industrial"] .tag + .section-head { margin-top: 0; }
+/* sections divided by a full-width ink rule */
+html[data-style="industrial"] main > :is(section, .section) + :is(section, .section) { border-top: 2px solid var(--p-ink); }
+html[data-style="industrial"] header.nav { background: var(--p-bg); border-bottom: 1px solid var(--p-ink); }
+/* buttons: square ink blocks, red on hover */
+html[data-style="industrial"] .btn { padding: 14px 20px; border: 1px solid var(--p-ink); }
+html[data-style="industrial"] .btn--primary { background: var(--p-ink); color: var(--p-bg); }
+html[data-style="industrial"] .btn--primary:hover { background: var(--p-accent); border-color: var(--p-accent); }
+html[data-style="industrial"] .btn--secondary { background: transparent; color: var(--p-ink); }
+/* the ruled product grid: cells share 1px ink lines */
+html[data-style="industrial"] .range { --gutter: 0px; border-top: 1px solid var(--p-ink); border-left: 1px solid var(--p-ink); justify-content: flex-start; }
+html[data-style="industrial"] .range > * { border-right: 1px solid var(--p-ink); border-bottom: 1px solid var(--p-ink); }
+html[data-style="industrial"] .range__item { border-top: 0; border-left: 0; }
+html[data-style="industrial"] .range__item { background: var(--range-bg); }
+html[data-style="industrial"] .range__body { border-top: 1px solid var(--p-ink); }
+html[data-style="industrial"] :is(.figures, .range__figures) dd { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.03em; }
+html[data-style="industrial"] .t-stat { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.05em; }
+/* plates and tables */
+html[data-style="industrial"] :is(.feature__media, .case__media > figure, .figure-panel) { border: 1px solid var(--p-ink); }
+html[data-style="industrial"] .spec-table { border: 1px solid var(--p-ink); }
+html[data-style="industrial"] .spec-table thead th { background: var(--p-ink); color: var(--p-bg); }
+html[data-style="industrial"] .spec-table :is(th, td) { border-bottom: 1px solid color-mix(in oklab, var(--p-ink) 35%, transparent); }
+html[data-style="industrial"] .spec-table th:first-child, html[data-style="industrial"] .spec-table td:first-child { background: var(--p-bg); }
+html[data-style="industrial"] .spec-table thead th:first-child { background: var(--p-ink); }
+html[data-style="industrial"] .case { border-top: 2px solid var(--p-ink); }
+html[data-style="industrial"] .case__tag { color: var(--p-accent); }
+html[data-style="industrial"] .rows > li { border-bottom: 1px solid color-mix(in oklab, var(--p-ink) 40%, transparent); }
+/* no drift: entrances stay short and mechanical */
+html[data-style="industrial"] [data-reveal], html[data-style="industrial"] .section-reveal { transition-duration: 0.35s !important; transition-timing-function: steps(6, end) !important; }
+html[data-style="industrial"] .rows__name { white-space: nowrap; flex: none; min-width: 9em; padding-right: var(--s-4); }
+html[data-style="industrial"] .rows__name small { display: block; }
