@@ -16,7 +16,11 @@ import { ingest } from "../apps/server/src/ingest.js";
 import { runProject } from "../apps/server/src/generation/runtime.js";
 import { requestSchema, type Analysis } from "../packages/shared/generation.js";
 import { validatePage } from "../apps/server/src/page-validation.js";
-import { contactSheet } from "../apps/server/src/image-preview.js";
+import {
+  contactSheet,
+  CONTACT_SHEET_LIMIT,
+  ASSET_VIEW_LIMIT,
+} from "../apps/server/src/image-preview.js";
 import {
   imageSignals,
   mediaLayout,
@@ -188,6 +192,10 @@ test("contact sheet returns one bounded JPEG for several images", async () => {
   assert.equal(meta.height, 768);
   assert.ok(sheet.length < 1024 * 1024);
   await assert.rejects(contactSheet([]));
+  // A second sheet of a split asset_view call continues the numbering; the tile layout is the same.
+  const second = await sharp(await contactSheet(files, 13)).metadata();
+  assert.equal(second.width, 768);
+  assert.ok(ASSET_VIEW_LIMIT > CONTACT_SHEET_LIMIT, "asset_view splits instead of failing");
 });
 
 const config: RuntimeConfig = {

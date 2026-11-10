@@ -34,6 +34,8 @@ export async function imagePreview(filename: string, cacheDir: string) {
 }
 
 export const CONTACT_SHEET_LIMIT = 12;
+/** One asset_view call may name two sheets' worth; the host splits them, so the model never has to. */
+export const ASSET_VIEW_LIMIT = CONTACT_SHEET_LIMIT * 2;
 const CELL = 384,
   LABEL = 28;
 
@@ -41,7 +43,7 @@ const CELL = 384,
  * One labelled grid for several requested images, so a batched asset_view costs
  * one tool result instead of one model round per image. Display files are unchanged.
  */
-export async function contactSheet(filenames: string[]) {
+export async function contactSheet(filenames: string[], firstNumber = 1) {
   if (!filenames.length || filenames.length > CONTACT_SHEET_LIMIT)
     throw new Error("批量查看数量无效");
   const columns = filenames.length <= 4 ? 2 : filenames.length <= 9 ? 3 : 4;
@@ -62,7 +64,7 @@ export async function contactSheet(filenames: string[]) {
       const left = (index % columns) * CELL,
         top = Math.floor(index / columns) * CELL;
       const label = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${CELL}" height="${LABEL}"><rect width="100%" height="100%" fill="#111"/><text x="10" y="20" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#fff">${index + 1}</text></svg>`,
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${CELL}" height="${LABEL}"><rect width="100%" height="100%" fill="#111"/><text x="10" y="20" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#fff">${index + firstNumber}</text></svg>`,
       );
       return [
         { input: label, left, top },

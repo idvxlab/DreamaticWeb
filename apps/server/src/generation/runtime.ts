@@ -42,6 +42,7 @@ import {
   imagePreview,
   contactSheet,
   CONTACT_SHEET_LIMIT,
+  ASSET_VIEW_LIMIT,
 } from "../image-preview.js";
 import { offeredAsset, recallFactAssets } from "../media-layout.js";
 import {
@@ -932,12 +933,12 @@ async function execute(
       tools.push({
         name: "asset_view",
         label: "asset_view",
-        description: `Inspect relevant project images only when visual information is needed. Pass every candidate you need in ONE call (assetIds, at most ${CONTACT_SHEET_LIMIT}); several images return as one numbered contact sheet. Original bytes remain unchanged.`,
+        description: `Inspect relevant project images only when visual information is needed. Pass every candidate you need in ONE call (assetIds, at most ${ASSET_VIEW_LIMIT}); several images return as numbered contact sheets of up to ${CONTACT_SHEET_LIMIT} tiles each. Original bytes remain unchanged.`,
         parameters: Type.Object({
           assetIds: Type.Optional(
             Type.Array(Type.String(), {
               minItems: 1,
-              maxItems: CONTACT_SHEET_LIMIT,
+              maxItems: ASSET_VIEW_LIMIT,
             }),
           ),
           assetId: Type.Optional(Type.String()),
@@ -950,17 +951,36 @@ async function execute(
           const ids = [
             ...new Set([...(assetIds || []), ...(assetId ? [assetId] : [])]),
           ];
-          if (!ids.length || ids.length > CONTACT_SHEET_LIMIT)
+          if (!ids.length || ids.length > ASSET_VIEW_LIMIT)
             throw new Error(
-              `asset_view 需要 1–${CONTACT_SHEET_LIMIT} 个 assetIds`,
+              `asset_view 需要 1–${ASSET_VIEW_LIMIT} 个 assetIds`,
             );
           signal?.throwIfAborted();
-          const items = ids.map(viewable);
-          let buffer: Buffer,
+          // A mistyped id skips that tile instead of failing the whole batch (no extra round).
+          const items: ReturnType<typeof viewable>[] = [],
+            unknown: string[] = [];
+          for (const id of ids)
+            try {
+              items.push(viewable(id));
+            } catch {
+              unknown.push(id);
+            }
+          if (!items.length)
+            throw new Error("图片不可用：" + unknown.join(", "));
+          let buffers: Buffer[] = [],
             mime = "image/jpeg";
           try {
             if (items.length > 1)
-              buffer = await contactSheet(items.map((i) => i.filename));
+              // Split into sheets here (numbering continues) instead of failing the call.
+              for (let at = 0; at < items.length; at += CONTACT_SHEET_LIMIT)
+                buffers.push(
+                  await contactSheet(
+                    items
+                      .slice(at, at + CONTACT_SHEET_LIMIT)
+                      .map((i) => i.filename),
+                    at + 1,
+                  ),
+                );
             else {
               const { asset, filename } = items[0];
               mime = asset.mime;
@@ -969,12 +989,14 @@ async function execute(
                 (asset.width || 0) > 1600 ||
                 (asset.height || 0) > 1600
               ) {
-                buffer = await imagePreview(
-                  filename,
-                  path.join(projectDir(p.id), "previews", "images"),
-                );
+                buffers = [
+                  await imagePreview(
+                    filename,
+                    path.join(projectDir(p.id), "previews", "images"),
+                  ),
+                ];
                 mime = "image/jpeg";
-              } else buffer = await readFile(filename);
+              } else buffers = [await readFile(filename)];
             }
           } catch {
             return {
@@ -990,6 +1012,14 @@ async function execute(
           signal?.throwIfAborted();
           return {
             content: [
+              ...(unknown.length
+                ? [
+                    {
+                      type: "text" as const,
+                      text: `Not in the media catalog, skipped: ${unknown.join(", ")}. Use exact catalog ids.`,
+                    },
+                  ]
+                : []),
               ...(items.length > 1
                 ? [
                     {
@@ -1006,11 +1036,11 @@ async function execute(
                     },
                   ]
                 : []),
-              {
+              ...buffers.map((buffer) => ({
                 type: "image" as const,
                 data: buffer.toString("base64"),
                 mimeType: mime,
-              },
+              })),
             ],
             details: {},
           };
@@ -1082,6 +1112,12 @@ async function execute(
               description: "Hero layout and its subject",
             }),
             type: Type.String({ description: "Type voice" }),
+            style: Type.Optional(
+              Type.String({
+                description:
+                  "The one visual style applied, by library id, and why (when a style library is loaded)",
+              }),
+            ),
             moments: Type.Array(Type.String(), {
               description: "The one or two signature moments, by kit id",
               maxItems: 3,

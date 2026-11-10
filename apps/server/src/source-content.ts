@@ -80,7 +80,7 @@ export async function persistExtraction(
         )
         .join("\n") +
       (source.assets.some((a) => a.flags?.length || a.context)
-        ? "\n\nnearby = text next to the image on the page, not its visual content. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page.\n"
+        ? "\n\nnearby = text next to the image on the page, not its visual content. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page (the brochure's own backdrop scene).\n"
         : "\n");
   }
   reading.markdown += mediaAssociations;
