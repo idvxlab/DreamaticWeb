@@ -1095,10 +1095,117 @@ return function (root, opts, lib) {
 
 })() };
 
+M["window-parallax"] = { phone: false, mount: (function () {
+/*
+  window-parallax - one wide photograph seen through a frame moves a little slower than the page, so
+  the frame reads as a window onto a larger picture. Scrubbed to the scrollbar, a few percent of
+  travel, no pin. Under reduced motion and without script the photograph stands.
+
+    <figure class="frame frame--photo mo-wp" data-moment="window-parallax" data-moment-opts='{"travel": 12}'>
+      <img src="…" alt="…" width="2400" height="1200">
+    </figure>
+
+  The host sets the frame's size (a wide band, 16:7 to 3:1); the picture is cut taller than it.
+  opts: travel (how far the picture moves, % of the frame's height each way; 12, 4-20).
+*/
+return function (root, opts, lib) {
+  const img = root.querySelector('img');
+  if (!img) return {};
+  root.classList.add('mo-wp');
+  if (lib.reduced()) return {};
+  const travel = lib.clamp(+opts.travel || 12, 4, 20);
+  root.style.setProperty('--mo-travel', `${travel}%`);
+  root.classList.add('is-live');
+  const s = lib.scrub(root, (p, r) => { img.style.transform = `translateY(${((0.5 - p) * 2 * (travel / 100) * r.height).toFixed(1)}px)`; }, { mode: 'view' });
+  return { destroy() { s.destroy(); img.style.transform = ''; root.classList.remove('is-live'); } };
+}
+
+})() };
+
+M["giant-type-pass"] = { phone: false, mount: (function () {
+/*
+  giant-type-pass - a statement of two to four words set very large, with a photograph showing through
+  the letters under a 35% ink tint; as the section crosses the screen the photograph passes upward
+  through the type, a little faster than the page, so the words read as a window onto the picture.
+  Scrubbed to the scrollbar, no pin. The picture's lower half is what shows (the sky of most
+  photographs is too pale for a letter). Under reduced motion and without script the photograph
+  stands still in the letters; without a picture the words are plain ink.
+
+    <section class="section" data-moment="giant-type-pass" data-moment-opts='{"image": "assets/img/photo-702.jpg", "travel": 60}'>
+      <div class="container">
+        <h2 class="mo-gt__type">Ride<br>higher</h2>
+        <div class="mo-gt__row"><p>…one or two lines…</p><a class="link" href="#">…</a></div>
+      </div>
+    </section>
+
+  opts: image (the photograph's URL; or set data-image on the h2), travel (how far the picture moves,
+        % of its spare height, default 60), focus (the x position of the picture in %, default 50),
+        focusY (the y position the travel is centred on, default 62: the lower half).
+*/
+return function (root, opts, lib) {
+  const type = root.querySelector('.mo-gt__type') || root.querySelector('h1, h2');
+  if (!type) return {};
+  const src = opts.image || type.dataset.image;
+  if (!src) return {};
+  type.style.setProperty('--mo-img', `url("${src}")`);
+  type.style.setProperty('--mo-x', `${lib.clamp(+(opts.focus ?? 50), 0, 100)}%`);
+  const fy = lib.clamp(+(opts.focusY ?? 62), 0, 100);
+  type.style.setProperty('--mo-y', `${fy}%`);
+  root.classList.add('is-live');
+  if (lib.reduced()) return {};
+  const travel = Math.max(0, Math.min(100, +opts.travel || 60));
+  const lo = lib.clamp(fy - travel / 2, 0, 100), hi = lib.clamp(fy + travel / 2, 0, 100);
+  const s = lib.scrub(root, p => { type.style.setProperty('--mo-y', `${lib.lerp(hi, lo, p).toFixed(2)}%`); }, { mode: 'view' });
+  return { destroy() { s.destroy(); type.style.removeProperty('--mo-y'); } };
+}
+
+})() };
+
+M["product-close-up"] = { phone: false, mount: (function () {
+/*
+  product-close-up (local addition to the taste-skill moments; same mount(root, opts, lib) contract).
+  One product photograph holds on screen while the page scrolls: it starts whole, then the camera
+  moves in on one detail (opts.focus, 0-1 of the picture) up to opts.zoom, and two or three short
+  notes about what is now in view arrive beside it at their data-at progress. The page scrolls
+  natively (sticky stage); reduced motion, no script or a phone: the whole photograph with every
+  note shown.
+
+    <section class="section" data-moment="product-close-up" data-moment-opts='{"focus":[0.6,0.45],"zoom":2.2}'>
+      <div class="container mo-cu__stage">
+        <figure class="mo-cu__pic"><img src="…" alt="…"></figure>
+        <ol class="mo-cu__notes"><li data-at="0.35"><h3>…</h3><p>…</p></li>…</ol>
+      </div>
+    </section>
+*/
+return function (root, opts, lib) {
+  const pic = root.querySelector(".mo-cu__pic");
+  const img = pic && pic.querySelector("img");
+  const notes = [...root.querySelectorAll(".mo-cu__notes > li")];
+  if (!img) return {};
+  const [fx, fy] = Array.isArray(opts.focus) ? opts.focus : [0.5, 0.5];
+  const zoom = lib.clamp(Number(opts.zoom) || 2.2, 1.2, 3.5);
+  img.style.transformOrigin = `${(fx * 100).toFixed(1)}% ${(fy * 100).toFixed(1)}%`;
+  if (lib.reduced()) {
+    root.classList.add("is-done");
+    notes.forEach((n) => n.classList.add("is-on"));
+    return {};
+  }
+  root.classList.add("is-live");
+  const at = notes.map((n, i) => Number(n.dataset.at) || 0.3 + i * 0.25);
+  const s = lib.scrub(root, (p) => {
+    const e = lib.ease.inOut ? lib.ease.inOut(lib.clamp(p / 0.7)) : lib.clamp(p / 0.7);
+    img.style.transform = `scale(${(1 + (zoom - 1) * e).toFixed(4)})`;
+    notes.forEach((n, i) => n.classList.toggle("is-on", p >= at[i]));
+  });
+  return { destroy: () => s.destroy() };
+}
+
+})() };
+
 
 // Static loader adapted from moments/moments.js: same mount(root, opts, lib) contract, no import().
 const html = document.documentElement;
-const STRUCTURE = { "pinned-chapters": ".mo-pc__grid", "photo-chapters": ".mo-ph" };
+const STRUCTURE = { "pinned-chapters": ".mo-pc__grid", "photo-chapters": ".mo-ph", "product-close-up": ".mo-cu__stage" };
 const libApi = { reduced, phone, still, stillWhy, inCard, coarse, clamp, lerp, ease, scrub, once, split, lines, fontsReady };
 function mount(el) {
   if (el.__momentMounted) return;

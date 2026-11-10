@@ -14,9 +14,19 @@ Say plainly what is sold, show the real thing on every screen and look made for 
 3. **One section per screen** at 1440×900: the hero alone on the first screen; every section one or two screens tall; no next heading peeking in.
 4. **Equal left and right content edges** (`.wrap` everywhere).
 5. **One entrance and one or two moments per page.** The hero enters once (`data-enter`); one moment, two on a long page, each in its own section. No tilt, carousels, timed tabs, or effects on cards.
-6. **Real material leads.** The client's own photographs and renders, large; prefer each image's `transparent` variant when the subject should stand on the page's ground.
+6. **Real material leads.** The client's own photographs, renders and drawings, large, exactly as supplied.
 7. **Colour from the subject.** The interface stays 90–95% neutral; one accent at most, taken from the product or brand; dark pages and dark heroes only when the subject is technical hardware or software.
 8. **Words people read are 16px or more**; sentence case; labels 13px at 500, never tracked capitals; no text baked into pictures.
+
+## Let the pictures set the page
+
+Inspect the candidate images first, then let them decide the page: their backdrop (a white studio, a dark render, a lit scene) sets the ground so each picture sits in the page without a box or a seam; their dominant colours give the one accent; the strongest close-up or whole-product view becomes the hero. A product shot on white wants a light page or a light band; never place an opaque white picture on a dark ground or fake a cut-out with filters. Drawings and charts go on a light panel at full legibility.
+
+In `imagePlan`, record for every image you use what it shows, why it belongs where it goes and its role (hero subject, detail, proof, use, process). In `designPlan`, record the kind, the ground and accent and the picture that decided them, the hero layout, the type voice and the one or two signature moments from the kit, each with its reason. Choose from the kit's menu in [kit markup](references/kit.md); the plan is a decision for this client, not a list of options.
+
+## A signature moment
+
+One moment should make the page memorable, built from the real material: a product close-up that moves in on its finest detail, the whole range changing on a pinned stage, a giant statement with the product photograph inside the letters, or a wide picture seen through a window. Put it where the reader most needs to be convinced, not only in the hero.
 
 ## Decide the kind first
 

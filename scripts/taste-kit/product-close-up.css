@@ -1,0 +1,14 @@
+/* product-close-up (local addition): static by default, a pinned stage when live. */
+[data-moment="product-close-up"] .mo-cu__stage { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: var(--s-7); align-items: center; }
+[data-moment="product-close-up"] .mo-cu__pic { margin: 0; overflow: hidden; border-radius: var(--r-lg); background: var(--surface); }
+[data-moment="product-close-up"] .mo-cu__pic > img { display: block; width: 100%; height: auto; will-change: transform; }
+[data-moment="product-close-up"] .mo-cu__notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-6); }
+[data-moment="product-close-up"] .mo-cu__notes h3 { margin: 0 0 var(--s-2); }
+[data-moment="product-close-up"] .mo-cu__notes p { margin: 0; color: var(--muted); }
+main > [data-moment="product-close-up"].is-live { height: 250vh; height: 250svh; padding: 0; }
+main > [data-moment="product-close-up"].is-live > .mo-cu__stage { position: sticky; top: 0; height: 100vh; height: 100svh; box-sizing: border-box; padding-top: calc(var(--nav, 72px) + var(--s-6)); padding-bottom: var(--s-6); }
+[data-moment="product-close-up"].is-live .mo-cu__pic { height: 100%; display: grid; place-items: center; }
+[data-moment="product-close-up"].is-live .mo-cu__pic > img { max-height: 100%; width: auto; max-width: 100%; object-fit: contain; }
+[data-moment="product-close-up"].is-live .mo-cu__notes > li { opacity: 0; transform: translateY(12px); transition: opacity .5s ease, transform .5s ease; }
+[data-moment="product-close-up"].is-live .mo-cu__notes > li.is-on { opacity: 1; transform: none; }
+@media (max-width: 1023px) { [data-moment="product-close-up"] .mo-cu__stage { grid-template-columns: 1fr; } }

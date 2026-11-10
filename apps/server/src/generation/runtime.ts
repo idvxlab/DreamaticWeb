@@ -779,6 +779,10 @@ async function execute(
       operations: number,
       usedFactIds?: string[],
       contentOutline?: { id: string }[],
+      plans: {
+        imagePlan?: { assetId: string }[];
+        designPlan?: { moments: string[] };
+      } = {},
     ) {
       if (usedFactIds?.some((id) => !analysis.facts.some((f) => f.id === id)))
         throw new Error("页面引用了无效的事实 ID");
@@ -822,6 +826,32 @@ async function execute(
           code: "outline_missing",
           message:
             "Content outline sections not found in page: " + missing.join(", "),
+        });
+      // Plans are recorded, never enforced: report only what the code does not carry out.
+      const used = new Set(
+        catalog.flatMap((source) =>
+          source.assets
+            .filter((a) => report.html.includes(a.url))
+            .map((a) => a.id),
+        ),
+      );
+      const unplaced = (plans.imagePlan || [])
+        .map((item) => item.assetId)
+        .filter((id) => !used.has(id));
+      if (unplaced.length)
+        report.issues.push({
+          severity: "warning",
+          code: "image_plan_missing",
+          message: "Planned images not used in page: " + unplaced.join(", "),
+        });
+      const absent = (plans.designPlan?.moments || []).filter(
+        (id) => !$page(`[data-moment="${id.replaceAll('"', "")}"]`).length,
+      );
+      if (absent.length)
+        report.issues.push({
+          severity: "warning",
+          code: "design_plan_missing",
+          message: "Planned moments not found in page: " + absent.join(", "),
         });
       accepted = {
         html: report.html,
@@ -1006,7 +1036,45 @@ async function execute(
           "submit_page",
           "Submit complete responsive inline HTML and finish",
           Type.Object({
-            // Listed first so the content organization is written before the code.
+            // Listed first: images are understood and the design decided before the code.
+            imagePlan: Type.Optional(
+              Type.Array(
+                Type.Object({
+                  assetId: Type.String(),
+                  shows: Type.String({
+                    description: "What the image actually shows",
+                  }),
+                  role: Type.String({
+                    description:
+                      "hero subject, detail, proof, use, process or brand",
+                  }),
+                  placement: Type.String({
+                    description: "Section id and why it belongs there",
+                  }),
+                }),
+                { maxItems: 24 },
+              ),
+            ),
+            designPlan: Type.Optional(
+              Type.Object({
+                ground: Type.String({
+                  description:
+                    "Ground and accent, and which image decided them",
+                }),
+                hero: Type.String({
+                  description: "Hero layout and its subject",
+                }),
+                type: Type.String({ description: "Type voice" }),
+                moments: Type.Array(Type.String(), {
+                  description: "The one or two signature moments, by kit id",
+                  maxItems: 3,
+                }),
+                reason: Type.String({
+                  description:
+                    "Why this design fits this client and these images",
+                }),
+              }),
+            ),
             contentOutline: Type.Optional(
               Type.Array(
                 Type.Object({
@@ -1031,8 +1099,17 @@ async function execute(
             html: Type.String({ minLength: 20, maxLength: 2500000 }),
             usedFactIds: Type.Array(Type.String()),
           }),
-          async ({ html, usedFactIds, contentOutline }) =>
-            accept(html, 0, usedFactIds, contentOutline),
+          async ({
+            html,
+            usedFactIds,
+            contentOutline,
+            imagePlan,
+            designPlan,
+          }) =>
+            accept(html, 0, usedFactIds, contentOutline, {
+              imagePlan,
+              designPlan,
+            }),
           true,
         ),
       );

@@ -87,6 +87,22 @@
     {
       "path": "skills/taste-skill/assets/moments/headline-arrives/moment.css",
       "sha256": "e280dd29ac51b5b8a539ef46cf9ca2022dde04ba7aaf67d60b0d1bdccbf43f0c"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/window-parallax/moment.js",
+      "sha256": "83b8354c9d7985b5d13ec5270b33e8629d689e34fb5b4bee0dbd715f596fc5d9"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/window-parallax/moment.css",
+      "sha256": "ea43aadab51d7d3023c9ce4732a0f20fb60b813f80bc0d4095c7e92ca599b3d0"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/giant-type-pass/moment.js",
+      "sha256": "ba231ccf5d6b71355fda462d77c1cf42210fe3bcfe6ef90b2e07b86d2b19a9e7"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/giant-type-pass/moment.css",
+      "sha256": "b56d953d93c86a1614cf62a57c6e8152308349ec8e610022f0f8edcff3a8b394"
     }
   ],
   "files": [
@@ -96,19 +112,19 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "727cfaf97472788c666d00bdbf2cfb004ab7e3be0e32c025cf8b2a4941523b07"
+      "sha256": "a74925b3a90326909ccf9610212f78deca4ce85acb19f25d2e31e991d9618504"
     },
     {
       "path": "references/kit.md",
-      "sha256": "3530fdd6bdd518560ed44d7b9b67cca9a729471a24b2bd031430e284cc976d50"
+      "sha256": "b4f10d1e10727e6e94ded1414f1cfc2a130aac7c421bcd10ceb505511f5a8f56"
     },
     {
       "path": "assets/taste.css",
-      "sha256": "4a9e701b6212369d02c32776c43db5aefe7c3aa079ab133aeb19b40b877bb3bf"
+      "sha256": "7ac9876f22a21c33521213a2ac2e8e495532c1e14f6aac39cb16324a62a1b0a2"
     },
     {
       "path": "assets/taste.js",
-      "sha256": "789ce60999f27ef8cbd703e6e3b7b7a1a4c0d932f2ea4e51de8af24e706366ad"
+      "sha256": "c4033a79bb97f289ee2c2c5f0ada40466e16992665e7af683af4a7aecc73796a"
     }
   ],
   "build": "node scripts/build-taste-kit.mjs <checkout>/skills/taste-skill",
@@ -118,6 +134,17 @@
     "remote Google fonts removed; system font stacks",
     "house rules, kind decision and product page rules condensed from SKILL.md and sections.md; kit markup written from system.md, hero-product.html and moment headers",
     "the host inlines skill:// references; pages set data-tone themselves because system.js is not included",
-    "the bundled loader leaves pinned-chapters and photo-chapters static unless they sit at main > section > block, so a deviating structure never collapses to an empty screen"
+    "the bundled loader leaves pinned-chapters and photo-chapters static unless they sit at main > section > block, so a deviating structure never collapses to an empty screen",
+    "window-parallax and giant-type-pass bundled; product-close-up added locally on the upstream moment lib; image-led page rules, imagePlan and designPlan added to the entry; transparent cut-outs removed by decision"
+  ],
+  "local": [
+    {
+      "path": "scripts/taste-kit/product-close-up.js",
+      "note": "local moment, not upstream; same mount contract"
+    },
+    {
+      "path": "scripts/taste-kit/product-close-up.css",
+      "note": "local moment styles"
+    }
   ]
 }

@@ -25,6 +25,14 @@
 
 The host replaces both `skill://` references with the kit's text. Choose all 16 palette tokens from the subject (`--p-inv-*` is the inverse ground for one band or the footer). A dark page sets `data-tone="dark"` on `<html>` and dark `--p-bg/--p-surface` with light `--p-ink`. `data-radius`: sharp | soft | round. `data-buttons`: solid | pill | tonal | arrow | block. No remote fonts load; use system stacks.
 
+## Menu for designPlan
+
+- Ground: light (`--p-bg` near the pictures' white or warm studio tone) or dark (`data-tone="dark"`), chosen from the pictures' backdrops; one inverse band may contrast.
+- Hero: `hero--product` (product whole, words above), `hero--split` (words left, picture right), `hero--film` (one full-bleed photograph), `hero--statement` (type-led, picture below), `hero--editorial`.
+- Radius `data-radius`: sharp | soft | round. Buttons `data-buttons`: solid | pill | tonal | arrow | block.
+- Type voice: tight grotesk (system sans, weight 600–700), or a light large display (weight 300–400, wide tracking off); numbers set large in `.t-stat`.
+- Moments (one or two): `product-close-up`, `pinned-chapters`, `photo-chapters`, `giant-type-pass`, `window-parallax`, `picture-develops`, `counter-rolls`, `headline-arrives`.
+
 ## Nav
 
 ```html
@@ -106,6 +114,20 @@ Photo chapters — 3–5 large photographs uncovered one by one with their chapt
 Counter rolls — real figures roll once: `<div class="grid" data-moment="counter-rolls"><div class="span-3"><p class="t-stat">110 kg</p><p class="t-small muted">最大拉力</p></div>…</div>`.
 Picture develops — one large photograph develops once: `<figure class="frame frame--photo" data-moment="picture-develops" style="aspect-ratio:3/2"><img src="…" alt="…"></figure>`.
 Headline arrives — hero words rise once: put `data-moment="headline-arrives"` on the hero's text block instead of using `data-enter`.
+
+Product close-up — one product photograph holds while the view moves in on its finest detail (`focus` is that detail's x, y as 0–1 of the picture; `zoom` 1.6–3); two or three notes about what comes into view arrive at their `data-at` progress:
+
+```html
+<section class="section" data-moment="product-close-up" data-moment-opts='{"focus":[0.62,0.48],"zoom":2.4}'>
+  <div class="container mo-cu__stage">
+    <figure class="mo-cu__pic"><img src="…" alt="…"></figure>
+    <ol class="mo-cu__notes"><li data-at="0.3"><h3>…</h3><p>…</p></li><li data-at="0.6"><h3>…</h3><p>…</p></li></ol>
+  </div>
+</section>
+```
+
+Giant type pass — two to four words set very large with a photograph passing through the letters: `<section class="section" data-moment="giant-type-pass" data-moment-opts='{"image":"PHOTO_URL"}'><div class="container"><h2 class="mo-gt__type">两到四个<br>字</h2><div class="mo-gt__row"><p>One line.</p></div></div></section>`.
+Window parallax — one wide photograph moves slower than the page inside a band frame: `<figure class="frame frame--photo mo-wp" data-moment="window-parallax" style="aspect-ratio:16/7"><img src="…" alt="…"></figure>`.
 
 Write each moment's final state in HTML; the kit animates it and shows the finished state without script or under reduced motion.
 

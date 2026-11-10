@@ -158,7 +158,7 @@ export async function validatePage(
   const references = [...new Set(raw.match(/\/assets\/[a-z\d/_.-]+/gi) || [])];
   for (const url of references) {
     const owned = project.sources.some((s) =>
-      s.assets.some((a) => a.url === url || a.transparent?.url === url),
+      s.assets.some((a) => a.url === url),
     );
     if (!url.startsWith(`/assets/${project.id}/`) || !owned)
       issues.push({
