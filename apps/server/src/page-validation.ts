@@ -1,10 +1,16 @@
+import { usableAsset } from "./media-layout.js";
 import path from "node:path";
 import { access } from "node:fs/promises";
 import * as cheerio from "cheerio";
 import { projectDir } from "./store.js";
 import { sanitizeHtml } from "./html.js";
 import type { Project, PageIssue } from "../../../packages/shared/project.js";
-export async function validatePage(project: Project, raw: string) {
+export async function validatePage(
+  project: Project,
+  raw: string,
+  /** Generated pages must not present layout fragments as content; manual saves only warn. */
+  options: { rejectUnusableMedia?: boolean } = {},
+) {
   const issues: PageIssue[] = [];
   if (raw.length > 2500000) throw new Error("HTML exceeds 2.5M characters");
   if (!/<html[\s>]/i.test(raw) || !/<body[\s>]/i.test(raw))
@@ -159,6 +165,16 @@ export async function validatePage(project: Project, raw: string) {
         severity: "error",
         code: "asset_scope",
         message: `Asset is not in this project's source catalog: ${url}`,
+      });
+    else if (
+      project.sources.some((s) =>
+        s.assets.some((a) => a.url === url && !usableAsset(a)),
+      )
+    )
+      issues.push({
+        severity: options.rejectUnusableMedia ? "error" : "warning",
+        code: "asset_unusable",
+        message: `Asset is a flat colour tile or an empty frame from the document layout, not standalone content; choose another asset or omit it: ${url}`,
       });
     else {
       try {

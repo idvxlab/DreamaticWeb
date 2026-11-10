@@ -37,7 +37,12 @@ import {
 import { applyPagePatch } from "./page-patch.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
-import { imagePreview } from "../image-preview.js";
+import {
+  imagePreview,
+  contactSheet,
+  CONTACT_SHEET_LIMIT,
+} from "../image-preview.js";
+import { recallFactAssets, usableAsset } from "../media-layout.js";
 import {
   designerContext,
   DESIGNER_CONTEXT_VERSION,
@@ -334,11 +339,12 @@ async function execute(
     delete p.error;
     p.run = { id: crypto.randomUUID(), checkpoints: {} };
     await save(p);
+    // Media flagged at import as flat tiles or empty frames stay stored but are not offered as content.
     const catalog = documents.map(({ source }) => ({
       id: source.id,
       name: source.name,
       format: source.format,
-      assets: source.assets,
+      assets: source.assets.filter(usableAsset),
     }));
     async function roleRun(
       role: Role,
@@ -691,7 +697,13 @@ async function execute(
                   )
                 )
                   throw new Error("事实素材不属于其资料");
+                // Flat tiles and empty frames are never content; drop them without another round.
+                fact.assetIds = fact.assetIds.filter((id) =>
+                  source?.assets.some((a) => a.id === id && usableAsset(a)),
+                );
               }
+              // Add same-source images whose printed label names exactly one fact.
+              recallFactAssets(data.facts, p.sources);
               value = data;
               return "Facts accepted";
             },
@@ -764,7 +776,7 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
-      const report = await validatePage(p, html);
+      const report = await validatePage(p, html, { rejectUnusableMedia: true });
       if (!report.valid)
         throw new Error(
           "页面结构需要修正：" +
@@ -799,45 +811,74 @@ async function execute(
       profile("designer").vision &&
       catalog.some((s) => s.assets.some((a) => a.type === "image"))
     ) {
-      tools.push({
-        name: "asset_view",
-        label: "asset_view",
-        description:
-          "Inspect a relevant project image only when visual information is needed; original bytes remain unchanged",
-        parameters: Type.Object({ assetId: Type.String() }),
-        execute: async (_id, args, signal) => {
-          const { assetId } = args as { assetId: string };
-          signal?.throwIfAborted();
-          const asset = catalog
-            .flatMap((s) => s.assets)
-            .find((a) => a.id === assetId && a.type === "image");
-          if (!asset || !/^image\/(png|jpeg|webp|gif)$/.test(asset.mime))
-            throw new Error("图片不可用");
-          const filename = path.join(
+      const viewable = (assetId: string) => {
+        const asset = catalog
+          .flatMap((s) => s.assets)
+          .find((a) => a.id === assetId && a.type === "image");
+        if (!asset || !/^image\/(png|jpeg|webp|gif)$/.test(asset.mime))
+          throw new Error("图片不可用：" + assetId);
+        return {
+          asset,
+          filename: path.join(
             projectDir(p.id),
             "assets",
             path.basename(asset.url),
-          );
+          ),
+        };
+      };
+      tools.push({
+        name: "asset_view",
+        label: "asset_view",
+        description: `Inspect relevant project images only when visual information is needed. Pass every candidate you need in ONE call (assetIds, at most ${CONTACT_SHEET_LIMIT}); several images return as one numbered contact sheet. Original bytes remain unchanged.`,
+        parameters: Type.Object({
+          assetIds: Type.Optional(
+            Type.Array(Type.String(), {
+              minItems: 1,
+              maxItems: CONTACT_SHEET_LIMIT,
+            }),
+          ),
+          assetId: Type.Optional(Type.String()),
+        }),
+        execute: async (_id, args, signal) => {
+          const { assetId, assetIds } = args as {
+            assetId?: string;
+            assetIds?: string[];
+          };
+          const ids = [
+            ...new Set([...(assetIds || []), ...(assetId ? [assetId] : [])]),
+          ];
+          if (!ids.length || ids.length > CONTACT_SHEET_LIMIT)
+            throw new Error(
+              `asset_view 需要 1–${CONTACT_SHEET_LIMIT} 个 assetIds`,
+            );
+          signal?.throwIfAborted();
+          const items = ids.map(viewable);
           let buffer: Buffer,
-            mime = asset.mime;
+            mime = "image/jpeg";
           try {
-            if (
-              (await stat(filename)).size > 1024 * 1024 ||
-              (asset.width || 0) > 1600 ||
-              (asset.height || 0) > 1600
-            ) {
-              buffer = await imagePreview(
-                filename,
-                path.join(projectDir(p.id), "previews", "images"),
-              );
-              mime = "image/jpeg";
-            } else buffer = await readFile(filename);
+            if (items.length > 1)
+              buffer = await contactSheet(items.map((i) => i.filename));
+            else {
+              const { asset, filename } = items[0];
+              mime = asset.mime;
+              if (
+                (await stat(filename)).size > 1024 * 1024 ||
+                (asset.width || 0) > 1600 ||
+                (asset.height || 0) > 1600
+              ) {
+                buffer = await imagePreview(
+                  filename,
+                  path.join(projectDir(p.id), "previews", "images"),
+                );
+                mime = "image/jpeg";
+              } else buffer = await readFile(filename);
+            }
           } catch {
             return {
               content: [
                 {
                   type: "text",
-                  text: `无法视觉查看此图片；仍可直接引用素材。不要重复查看。assetId=${asset.id}, url=${asset.url}`,
+                  text: `无法视觉查看这些图片；仍可直接引用素材。不要重复查看。${items.map((i) => `assetId=${i.asset.id}, url=${i.asset.url}`).join("; ")}`,
                 },
               ],
               details: {},
@@ -846,8 +887,24 @@ async function execute(
           signal?.throwIfAborted();
           return {
             content: [
+              ...(items.length > 1
+                ? [
+                    {
+                      type: "text" as const,
+                      text:
+                        "Contact sheet tiles (number → asset): " +
+                        items
+                          .map(
+                            (i, n) =>
+                              `${n + 1}=${i.asset.id} (${i.asset.width}×${i.asset.height})`,
+                          )
+                          .join("; ") +
+                        ". Tiles are scaled to fit; use the original URL in the page.",
+                    },
+                  ]
+                : []),
               {
-                type: "image",
+                type: "image" as const,
                 data: buffer.toString("base64"),
                 mimeType: mime,
               },

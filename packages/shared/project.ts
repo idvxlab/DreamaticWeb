@@ -29,7 +29,14 @@ export interface Asset {
   mime: string;
   width?: number;
   height?: number;
+  /** Document page/slide that contained this extracted medium. */
+  page?: number;
+  /** Nearby document text by layout proximity; not a description of image content. */
+  context?: string;
+  /** Deterministic import signals; flat/frame-only media are not standalone content. */
+  flags?: AssetFlag[];
 }
+export type AssetFlag = "flat" | "frame-only" | "fragment" | "page-background";
 export interface Source {
   id: string;
   name: string;

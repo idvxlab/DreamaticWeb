@@ -65,16 +65,23 @@ export async function persistExtraction(
     tables,
   );
   if (source.assets.length) {
-    // Canonical Markdown directly names every usable original/extracted media URL.
+    // Canonical Markdown directly names every original/extracted media URL.
+    // Page/nearby text are layout proximity only; flags are deterministic pixel/layout signals.
     reading.markdown +=
       "\n\n## Media assets\n\n" +
       source.assets
         .map(
           (a) =>
-            `- [${a.name.replace(/[\[\]\n\r]/g, " ")}](${a.url}) · ${a.type} · ${a.mime} · id:${a.id}`,
+            `- [${a.name.replace(/[\[\]\n\r]/g, " ")}](${a.url}) · ${a.type} · ${a.mime} · id:${a.id}` +
+            (a.width && a.height ? ` · ${a.width}×${a.height}` : "") +
+            (a.page ? ` · page:${a.page}` : "") +
+            (a.context ? ` · nearby:${JSON.stringify(a.context)}` : "") +
+            (a.flags?.length ? ` · flags:${a.flags.join(",")}` : ""),
         )
         .join("\n") +
-      "\n";
+      (source.assets.some((a) => a.flags?.length || a.context)
+        ? "\n\nnearby = text next to the image on the page, not its visual content. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page.\n"
+        : "\n");
   }
   reading.markdown += mediaAssociations;
   if (

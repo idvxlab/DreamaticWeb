@@ -18,7 +18,13 @@ import { persistExtraction, readCanonicalSource } from "./source-content.js";
 import { DATA, projectDir } from "./store.js";
 import { fetchPublic } from "./network.js";
 import type { Source, Asset } from "../../../packages/shared/project.js";
-export const PARSER_VERSION = "markdown-media-v6";
+import {
+  annotate,
+  imageSignals,
+  mediaLayout,
+  type MediaLayout,
+} from "./media-layout.js";
+export const PARSER_VERSION = "markdown-media-v7";
 export const DOCUMENT_MEDIA_LIMIT = 200;
 export const DOCUMENT_MEDIA_BYTES = 80 * 1024 * 1024;
 export const sourceFingerprint = (buffer: Buffer) =>
@@ -141,6 +147,7 @@ export async function extract(
     provenance: "upload:" + name,
   };
   let structured: StructuredExtraction | undefined;
+  let layout: Map<string, MediaLayout> | undefined;
   const mediaLimit = options.mediaLimit ?? DOCUMENT_MEDIA_LIMIT;
   if (!Number.isInteger(mediaLimit) || mediaLimit < 1 || mediaLimit > 1000)
     throw new Error("文档媒体数量上限无效");
@@ -161,6 +168,13 @@ export async function extract(
       return;
     }
     const imported = await asset(data, filename, projectId);
+    if (imported.type === "image")
+      try {
+        const flags = await imageSignals(data);
+        if (flags.length) imported.flags = flags;
+      } catch {
+        /* Undecodable images keep no signal rather than a guessed one. */
+      }
     s.assets.push(imported);
     mediaHashes.set(digest, imported);
     mediaBytes += data.length;
@@ -258,6 +272,7 @@ export async function extract(
         pdfParserConfig: { maxTimeMs: 30000 },
       });
       options.onParsed?.(parsed);
+      layout = mediaLayout(parsed.content);
       structured = structureDocument(parsed.content);
       s.tables = structured.tables;
       if (ext === "pdf" && process.env.DREAMATIC_PDF_ENHANCE === "true") {
@@ -314,6 +329,7 @@ export async function extract(
       `文档媒体达到数量或总大小上限（${mediaLimit} 个去重素材 / 80 MiB），另有 ${skippedMedia} 项未导入；请拆分资料。`,
     );
   s.assets = [...new Map(s.assets.map((a) => [a.id, a])).values()];
+  if (layout) for (const a of s.assets) annotate(a, layout.get(a.name));
   if (projectId) {
     const dir = path.join(projectDir(projectId), "uploads");
     await mkdir(dir, { recursive: true });
