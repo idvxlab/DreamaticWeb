@@ -66,7 +66,7 @@ const roleNames = {
 };
 const strings = Type.Array(Type.String());
 /** Reasoning cap for the Designer turn that writes a page after plan_page (only lowers a configured cap). */
-export const WRITING_THINKING_BUDGET = 2048;
+export const WRITING_THINKING_BUDGET = 4096;
 const intentParams = Type.Object({
   goal: Type.String(),
   audience: Type.String(),

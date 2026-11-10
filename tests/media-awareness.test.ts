@@ -559,7 +559,7 @@ test("plan_page takes the reasoning turn; the writing turn gets the lower budget
       4,
       "2 upstream + plan + page",
     );
-    assert.deepEqual(budgets, [undefined, 2048]);
+    assert.deepEqual(budgets, [undefined, 4096]);
     const issue = p.versions[0].checks!.issues.find(
       (i) => i.code === "design_plan_missing",
     );
