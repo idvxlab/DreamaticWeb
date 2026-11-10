@@ -32,7 +32,7 @@ const args = process.argv.slice(2);
 const arg = (name: string) => args[args.indexOf(name) + 1];
 if (args.includes("--help") || !args.includes("--live")) {
   console.log(
-    "Usage: node --import tsx scripts/experiment-skills.ts --live --source company.pdf --output workspace/experiments/NAME [--only baseline|default|designer-NAME] [--request TEXT] [--minutes 15]\nUses environment DREAMATIC_* profiles. Baseline runs ingestion + all roles; later entries reuse identical brief/facts in separate visible projects. Each condition runs once, no automatic retries. No credentials are saved.",
+    "Usage: node --import tsx scripts/experiment-skills.ts --live --source company.pdf --output workspace/experiments/NAME [--only baseline|default|designer-NAME] [--request TEXT] [--minutes 15] [--thinking-budget N]\nUses environment DREAMATIC_* profiles. Baseline runs ingestion + all roles; later entries reuse identical brief/facts in separate visible projects. Each condition runs once, no automatic retries. No credentials are saved.",
   );
   process.exit(args.includes("--help") ? 0 : 1);
 }
@@ -46,6 +46,14 @@ const minutes = args.includes("--minutes") ? Number(arg("--minutes")) : 15;
 if (!(minutes > 0 && minutes <= 30))
   throw new Error("Experimental deadline must be 0–30 minutes per condition");
 const config = runtimeConfig();
+// Experiment-only reasoning cap for this process; settings.json is not modified.
+if (args.includes("--thinking-budget")) {
+  const budget = Number(arg("--thinking-budget"));
+  if (!(budget >= 256 && budget <= 16000))
+    throw new Error("--thinking-budget must be 256-16000");
+  for (const profile of Object.values(config.models))
+    if (profile) profile.thinking = { format: "qwen", budget };
+}
 if (config.mode !== "live" || !config.models.reasoning.apiKey)
   throw new Error("Live DREAMATIC model profile is required");
 const profiles = Object.values(config.models).filter(Boolean);
