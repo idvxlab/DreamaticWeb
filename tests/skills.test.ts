@@ -469,3 +469,48 @@ test("native discovery reloads additions/invalid frontmatter, selected reference
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("showcase routing follows user wording, not Orchestrator defaults, and stays within the body budget", async () => {
+  const library = new SkillLibrary();
+  try {
+    const { skills } = await library.catalog();
+    const route = (text: string, brief?: unknown) =>
+      selectSkills("designer", { text, editing: false, brief }, skills);
+    const showcase = route(
+      "用上传资料生成公司的产品宣传页，视觉成熟、酷炫、惊艳，整页有编排的主题动效",
+    );
+    assert.deepEqual(showcase, [
+      "designer-landing-page",
+      "designer-impeccable",
+      "designer-motion-design",
+    ]);
+    assert.deepEqual(route("生成产品宣传页，不要动画，简洁即可"), [
+      "designer-landing-page",
+      "designer-visual-design",
+    ]);
+    // Inferred taste in designDefaults never raises ambition; user-stated design does.
+    assert.deepEqual(
+      route("根据资料做公司介绍网站", {
+        goal: "公司介绍",
+        design: [],
+        designDefaults: ["科技感、炫酷动效"],
+      }),
+      ["designer-web-architecture", "designer-visual-design"],
+    );
+    assert.ok(
+      route("根据资料做公司介绍网站", {
+        design: ["首屏要有明显的主题动效"],
+      }).includes("designer-motion-design"),
+    );
+    const worst = route("产品宣传页，炫酷动效，带菜单交互和筛选");
+    assert.equal(worst.length, 4);
+    const prepared = await library.prepare("designer", worst);
+    assert.ok(prepared.characters < SKILL_BODY_CHARACTER_LIMIT);
+    assert.ok(
+      prepared.references.some((r) => r.endsWith("page-narrative.md")),
+      "the page narrative method is preloaded with motion",
+    );
+  } finally {
+    library.close();
+  }
+});

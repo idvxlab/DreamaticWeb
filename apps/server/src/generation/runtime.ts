@@ -69,8 +69,20 @@ const intentParams = Type.Object({
   audience: Type.String(),
   content: strings,
   features: strings,
-  design: strings,
-  constraints: strings,
+  design: Type.Array(Type.String(), {
+    description:
+      "Only design requirements the user explicitly stated or answered; empty when none",
+  }),
+  designDefaults: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "Your inferred, overridable suggestions for unstated design choices; never a style, palette or layout the user did not ask for",
+    }),
+  ),
+  constraints: Type.Array(Type.String(), {
+    description:
+      "Only hard requirements the user stated or the host rules imply",
+  }),
 });
 const factsParams = Type.Object({
   summary: Type.String(),

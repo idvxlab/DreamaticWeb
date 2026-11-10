@@ -57,9 +57,15 @@ const categories: [string, RegExp][] = [
   ],
   [
     "designer-landing-page",
-    /落地页|营销|品牌介绍|产品(?:官网|首页)|\blanding\b|\bcampaign\b|marketing/i,
+    /落地页|营销|宣传|推广|品牌介绍|产品(?:官网|首页|介绍|展示|发布)|发布会|\blanding\b|\bcampaign\b|marketing|promotion(?:al)?\b|product launch/i,
   ],
 ];
+/** User wording that asks for an expressive showcase rather than a plain informational page. */
+const EXPRESSIVE =
+  /炫酷|酷炫|惊艳|高级感|质感|大气|沉浸|视觉冲击|设计感|氛围|有冲击力|\b(?:stunning|striking|immersive|premium|bold|award|cinematic|wow)\b/i;
+/** Explicit motion or animation requests. */
+const MOTION =
+  /动效|动画|动起来|转场|氛围动|滚动(?:叙事|动)|\b(?:motion|animat(?:e|ed|ion|ions)|transition|scroll[- ]driven|parallax)\b/i;
 export function positiveRequirements(text: string) {
   return text
     .replace(/(?:但是|但要|但需|but\s+)/gi, "，需要")
@@ -132,7 +138,20 @@ export function selectSkills(
     } else {
       const match = categories.find(([, pattern]) => pattern.test(combined));
       chosen.add(match?.[0] || "designer-web-architecture");
-      chosen.add("designer-visual-design");
+      // Only what the user asked for (request text and user-stated design) raises
+      // ambition; Orchestrator's designDefaults never do.
+      const brief = (context.brief || {}) as {
+        design?: unknown;
+        features?: unknown;
+      };
+      const pinned =
+        local +
+        "\n" +
+        positiveRequirements(JSON.stringify([brief.design, brief.features]));
+      const expressive = EXPRESSIVE.test(pinned);
+      // A committed visual world replaces the generic visual method; motion gets its own method.
+      chosen.add(expressive ? "designer-impeccable" : "designer-visual-design");
+      if (MOTION.test(pinned)) chosen.add("designer-motion-design");
       if (
         /多页|分层|信息密集|\bmulti[- ]?page\b|hierarchy|complex site/i.test(
           combined,

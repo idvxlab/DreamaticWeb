@@ -46,7 +46,8 @@
     "existing single-document runtime rather than framework scaffolding or unprovided libraries",
     "external visual evaluation instead of extra production review agents",
     "no initial waiting greeting or forced review-table response",
-    "declare scoped core references for same-turn native preloading; other references stay on demand"
+    "declare scoped core references for same-turn native preloading; other references stay on demand",
+    "2026-11-10: added local references/page-narrative.md (one real subject changing state across sections, native single-document recipes) as a core reference; scene-patterns.md (ambient) became conditional. Not upstream content."
   ],
   "capabilityBoundary": "Native inline CSS/JavaScript, dynamic Canvas/WebGL and Web Animations; external libraries/assets require actual host support. No assurance that a library-specific upstream implementation is reproduced identically.",
   "evidenceBoundary": "Discovery, scoped reads, selection and native runtime recipes can be tested locally. Actual model-generated visual quality and first-pass reliability require subsequent live experiments.",
@@ -57,7 +58,7 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "65a8cac6e0d2efd06147ee484715ac19011db20d16d0c377c9dc6d14ff111307"
+      "sha256": "0f5dedcca795831a813416c5eca1e0af446677454f41730e3421cba0c14d7223"
     },
     {
       "path": "references/choreography.md",
@@ -66,6 +67,10 @@
     {
       "path": "references/interactive-patterns.md",
       "sha256": "dac86388c2d8fcdfc2f194b4f8877caedcdc010df9ce29d27dfc99d08cf8c60e"
+    },
+    {
+      "path": "references/page-narrative.md",
+      "sha256": "88a7e67c5313dc48f64b8f9ae3f666fd5602ae89664e265b39ec8321ee685116"
     },
     {
       "path": "references/personality.md",

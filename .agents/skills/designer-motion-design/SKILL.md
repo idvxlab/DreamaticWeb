@@ -21,7 +21,7 @@ Lead with the focal element, support it with follow-through and give the composi
 
 Use position, rotation, scale and opacity intentionally; controlled masks, light or canvas can supply a material the brief needs. A significant state change should not rely only on a barely visible fade. For an immersive presentation, the focal transformation needs perceptible scale and a clear narrative, not only hover feedback.
 
-Use [choreography](references/choreography.md) for multiple elements, [scene and ambient patterns](references/scene-patterns.md) for a persistent composition, and [interactive patterns](references/interactive-patterns.md) for response and interruption. These are conditional references, not a list to load in full.
+For a whole page, follow [page narrative](references/page-narrative.md): one real subject changes state across sections, built with native recipes that run in this single document. Use [choreography](references/choreography.md) for multiple elements, [scene and ambient patterns](references/scene-patterns.md) only for supporting ambient life, and [interactive patterns](references/interactive-patterns.md) for response and interruption. Conditional references are not a list to load in full.
 
 ## Finish coherently
 
@@ -31,4 +31,4 @@ The result should express the selected personality and story in actual playback.
 
 ## Required references
 
-Apply these core methods before implementing this Skill: [choreography](references/choreography.md), [scene patterns](references/scene-patterns.md). Other linked references support specific techniques and remain conditional.
+Apply these core methods before implementing this Skill: [page narrative](references/page-narrative.md), [choreography](references/choreography.md). Other linked references support specific techniques and remain conditional.

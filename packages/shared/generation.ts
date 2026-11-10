@@ -4,7 +4,10 @@ export const intentSchema = z.object({
   audience: z.string().min(1).max(2000),
   content: z.array(z.string().max(4000)).max(60),
   features: z.array(z.string().max(2000)).max(40),
+  /** Design requirements the user actually stated or answered. */
   design: z.array(z.string().max(2000)).max(40),
+  /** Orchestrator's inferred suggestions; Designer may replace them. Older briefs have none. */
+  designDefaults: z.array(z.string().max(2000)).max(40).optional(),
   constraints: z.array(z.string().max(2000)).max(40),
 });
 export type Intent = z.infer<typeof intentSchema>;
