@@ -35,6 +35,7 @@ import {
   factsMarkdown,
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
+import { inlineSkillAssets } from "./skill-assets.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
@@ -358,6 +359,8 @@ async function execute(
       format: source.format,
       assets: source.assets.filter(usableAsset),
     }));
+    // Skills actually preloaded per role; only these may supply skill:// page assets.
+    const loadedSkills: Partial<Record<Role, string[]>> = {};
     async function roleRun(
       role: Role,
       input: string,
@@ -381,6 +384,7 @@ async function execute(
         library && names.length
           ? await library.prepare(role, names, { selectedOnly })
           : { prompt: "", names: [], characters: 0, references: [] };
+      loadedSkills[role] = prepared.names;
       const skillMs = Math.round(performance.now() - skillStart);
       metrics.skillCharacters += prepared.characters;
       metrics.skillLoads += prepared.names.length;
@@ -789,6 +793,18 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
+      if (library)
+        html = (
+          await inlineSkillAssets(html, (reference) =>
+            library.assetText(
+              "designer",
+              loadedSkills.designer || [],
+              reference,
+            ),
+          )
+        ).html;
+      else if (html.includes("skill://"))
+        throw new Error("当前运行没有可用的 Skill 资源");
       const report = await validatePage(p, html, { rejectUnusableMedia: true });
       if (!report.valid)
         throw new Error(
@@ -821,7 +837,16 @@ async function execute(
     const large = current.length > 100000;
     const $ = cheerio.load(current);
     const pageContext = large
-      ? `Large page; use page_read for needed sections.\n${$("style")
+      ? `Large page; use page_read for needed sections.${
+          $("style[data-skill-asset]").length
+            ? `\nInlined Skill assets (do not edit; reference them again only in a redesign): ${$(
+                "style[data-skill-asset]",
+              )
+                .toArray()
+                .map((e) => $(e).attr("data-skill-asset"))
+                .join(", ")}`
+            : ""
+        }\n${$("style:not([data-skill-asset])")
           .toArray()
           .map((e) => $(e).toString())
           .join("\n")

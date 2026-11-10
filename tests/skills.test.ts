@@ -83,7 +83,7 @@ test("required references are scoped, budgeted, cached and invalidate the select
 test("published Pi loader discovers portable Skills; Codex and Claude paths resolve the same resources", async () => {
   const pi = loadSkillsFromDir({ dir: SKILLS_ROOT, source: "test" });
   assert.equal(pi.diagnostics.length, 0);
-  assert.equal(pi.skills.length, 18);
+  assert.equal(pi.skills.length, 19);
   const alias = path.resolve(".claude/skills");
   assert.equal(await realpath(alias), await realpath(SKILLS_ROOT));
   const claudeLayout = loadSkillsFromDir({
@@ -264,7 +264,12 @@ test("adapted Skills carry intact licenses/provenance and every linked reference
         throw error;
       }
       adapted++;
-      assert.match(manifest.archiveSha256, /^[a-f0-9]{64}$/);
+      // Archived ports pin an archive hash; ports from a public repository pin its commit.
+      assert.ok(
+        /^[a-f0-9]{64}$/.test(manifest.archiveSha256 || "") ||
+          /^[a-f0-9]{40}$/.test(manifest.commit || ""),
+        skill.name + " pins its upstream",
+      );
       for (const file of manifest.files) {
         const bytes = await readFile(path.join(skill.baseDir, file.path));
         assert.equal(
@@ -289,7 +294,7 @@ test("adapted Skills carry intact licenses/provenance and every linked reference
         assert.ok(!result.isError, skill.name + "/" + ref[1]);
       }
     }
-    assert.equal(adapted, 8);
+    assert.equal(adapted, 9);
   } finally {
     library.close();
   }
@@ -563,6 +568,65 @@ test("site type follows the user's words, and automatic routing drops low-priori
       library.prepare("designer", names, { selectedOnly: true }),
       /字符预算/,
       "an explicit selection is never silently reduced",
+    );
+  } finally {
+    library.close();
+  }
+});
+
+test("skill:// assets inline only from loaded Skills' assets folders, once, without breaking the script", async () => {
+  const { inlineSkillAssets } =
+    await import("../apps/server/src/generation/skill-assets.js");
+  const library = new SkillLibrary();
+  try {
+    const load = (names: string[]) => (ref: string) =>
+      library.assetText("designer", names, ref);
+    const page =
+      '<html><head><link rel="stylesheet" href="skill://designer-taste/assets/taste.css"><link rel="stylesheet" href="skill://designer-taste/assets/taste.css"></head><body><h1>x</h1><script src="skill://designer-taste/assets/taste.js"></script></body></html>';
+    const { html, assets } = await inlineSkillAssets(
+      page,
+      load(["designer-taste"]),
+    );
+    assert.deepEqual(assets, [
+      "designer-taste/assets/taste.css",
+      "designer-taste/assets/taste.js",
+    ]);
+    assert.equal(
+      (html.match(/data-skill-asset="designer-taste:taste.css"/g) || []).length,
+      1,
+    );
+    assert.doesNotMatch(html, /skill:\/\//);
+    assert.equal(
+      (html.match(/<\/script>/g) || []).length,
+      1,
+      "kit code cannot close its script early",
+    );
+    await assert.rejects(
+      inlineSkillAssets(page, load(["designer-impeccable"])),
+      /已加载/,
+    );
+    for (const bad of [
+      "skill://designer-taste/SKILL.md",
+      "skill://designer-taste/assets/../SKILL.md",
+      "skill://designer-taste/references/kit.md",
+    ])
+      await assert.rejects(
+        inlineSkillAssets(
+          `<html><head><link rel="stylesheet" href="${bad}"></head></html>`,
+          load(["designer-taste"]),
+        ),
+      );
+    await assert.rejects(
+      inlineSkillAssets(
+        '<html><body><img src="skill://designer-taste/assets/taste.css"></body></html>',
+        load(["designer-taste"]),
+      ),
+      /只能用于/,
+    );
+    assert.equal(
+      (await inlineSkillAssets("<html><body>plain</body></html>", load([])))
+        .assets.length,
+      0,
     );
   } finally {
     library.close();

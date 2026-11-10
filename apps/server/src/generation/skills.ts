@@ -14,6 +14,7 @@ import { hash } from "./artifacts.js";
 export const SKILLS_ROOT = path.resolve(".agents/skills");
 export const SKILL_BODY_CHARACTER_LIMIT = 24000;
 export const SKILL_REFERENCE_BYTE_LIMIT = 48000;
+export const SKILL_ASSET_BYTE_LIMIT = 512 * 1024;
 
 /** Portable Markdown declares only the references essential to this Skill. */
 function requiredReferences(body: string) {
@@ -247,6 +248,45 @@ export class SkillLibrary {
     }
     if (!this.watcher) this.dirty = true;
     return { skills: this.loaded, diagnostics: this.diagnostics };
+  }
+  /**
+   * Text of a stylesheet or script a Skill ships under its own assets/ folder,
+   * for the host to inline into a page. Only Skills loaded for this stage, only
+   * .css/.js under assets/, realpath-contained and size-limited; never Markdown,
+   * scripts elsewhere or original uploads.
+   */
+  async assetText(role: Role, names: readonly string[], reference: string) {
+    const match =
+      /^([a-z0-9]+(?:-[a-z0-9]+)*)\/(assets\/[a-z0-9._/-]+\.(?:css|js))$/i.exec(
+        reference,
+      );
+    if (!match || reference.includes(".."))
+      throw new Error("Skill 资源引用格式无效：" + reference);
+    const entry = (await this.catalog()).skills.find(
+      (s) =>
+        s.name === match[1] &&
+        roleFor(s.name) === role &&
+        names.includes(s.name),
+    );
+    if (!entry)
+      throw new Error("只能引用本阶段已加载 Skill 的资源：" + reference);
+    const resolved = await realpath(path.join(entry.baseDir, match[2])).catch(
+      () => {
+        throw new Error("Skill 资源不存在：" + reference);
+      },
+    );
+    if (!resolved.startsWith(path.join(entry.baseDir, "assets") + path.sep))
+      throw new Error("Skill 资源必须位于其 assets 目录：" + reference);
+    const file = await stat(resolved, { bigint: true });
+    if (file.size > BigInt(SKILL_ASSET_BYTE_LIMIT))
+      throw new Error("Skill 资源超过 512 KB：" + reference);
+    const stamp = [file.ino, file.size, file.mtimeNs, file.ctimeNs].join(":");
+    const hit = this.buffers.get(resolved);
+    if (hit?.stamp === stamp) return hit.buffer.toString("utf8");
+    const buffer = await readFile(resolved);
+    this.io.reads++;
+    this.buffers.set(resolved, { stamp, buffer });
+    return buffer.toString("utf8");
   }
   async list() {
     return (await this.catalog()).skills.map((s) => ({

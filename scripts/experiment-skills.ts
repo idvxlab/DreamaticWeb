@@ -78,6 +78,7 @@ const variants = [
   "designer-motion-design",
   "designer-web-animation-design",
   "designer-3d-transforms",
+  "designer-taste",
 ];
 const only = args.includes("--only") ? arg("--only") : undefined;
 if (only && !variants.includes(only))

@@ -1,0 +1,122 @@
+{
+  "upstreamName": "taste-skill",
+  "repository": "https://github.com/Leonxlnx/taste-skill",
+  "commit": "f6b76575f949707b4e3c37cd86cb44b0b98643e8",
+  "license": {
+    "spdx": "MIT",
+    "local": "LICENSE",
+    "sha256": "4575a543ab88dad12ccea7d97e563d0bce5b448b06072e65d3264497dad326df"
+  },
+  "sources": [
+    {
+      "path": "skills/taste-skill/SKILL.md",
+      "sha256": "0c7a5852a5217be79cab422c6d58329b776f0c25bd6da8a7a01707ce75be6206"
+    },
+    {
+      "path": "skills/taste-skill/references/system.md",
+      "sha256": "f6bfbdb36b49c4584b4fd10ff24e9e97098bd93d09da3e08e8424500ee641d01"
+    },
+    {
+      "path": "skills/taste-skill/assets/system.css",
+      "sha256": "2facb5c5537a3bd44514eacc98715b04f6f19ca9ace11a92d35903941511e71c"
+    },
+    {
+      "path": "skills/taste-skill/assets/ui/cards.css",
+      "sha256": "2ed4b9d5c9b6b80c6d579683f36208d44515d63f93c780aa32703276f5c38bea"
+    },
+    {
+      "path": "skills/taste-skill/assets/layout/layout.css",
+      "sha256": "8ae1ad2d798118433554f067d8e012bbce5646c868d154a1087284c5d32f2ac3"
+    },
+    {
+      "path": "skills/taste-skill/assets/layout/hero-product.html",
+      "sha256": "3d713641005f08f2fb0ce3848806ce980eca7ba9101dcea99763d41799807017"
+    },
+    {
+      "path": "skills/taste-skill/assets/motion/motion.css",
+      "sha256": "948bfb7192c908934206ef5776ac28bdd8c3499483d7347cbb24e7b6fb5c6810"
+    },
+    {
+      "path": "skills/taste-skill/assets/motion/motion.js",
+      "sha256": "e4453f1ac91d81002c5a75dccc1263285267999a8bb2453278ab63232e7062cc"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/lib.js",
+      "sha256": "22c172166ded3c0ea70925e9a04c37baac291ca6fa9b5a0e4c487a52acf69220"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/moments.js",
+      "sha256": "5c38a832b7e7b4e561c4336c75628e36915dab6f1b64ffa7af50b6b1f49766da"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/pinned-chapters/moment.js",
+      "sha256": "d5e8df0c1237018ca191962ff9cb73a1da2bf88e9c3ae2d451de0276b258c7ec"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/pinned-chapters/moment.css",
+      "sha256": "cc4494a4de79c8fa687f9fe78cc65fa35efe259a263c01537a18820c0dcb44bd"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/photo-chapters/moment.js",
+      "sha256": "2d3034063bad94629c52280ba0d4425e862a581bea8d4539a19310552793533f"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/photo-chapters/moment.css",
+      "sha256": "645b83991a49fdc2b7cdd6b73d07e1802607cd78afc4b66d3628cc2bf5152672"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/picture-develops/moment.js",
+      "sha256": "dbb1d080df3b2ed139850f863ae3b5ac25d5191f1c1fb7092591bb6a404910c4"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/picture-develops/moment.css",
+      "sha256": "953f260d8501a9b3fb621cbd0dbf99512457ed41365bfe1c8d74814d5af6968e"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/counter-rolls/moment.js",
+      "sha256": "3eaca0dc3ae3c16cbe71c724d439a06af7f0359306bfcaab413a1a1a715fcdd9"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/counter-rolls/moment.css",
+      "sha256": "e18f8e2ab62fcc7870d35d708e8681d5eb48997dee0a1f598a9da878e6c7a00f"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/headline-arrives/moment.js",
+      "sha256": "be7776664db23472503cb19b9f817181f68a4bf04f40417dd3e5c1c22d75e0e0"
+    },
+    {
+      "path": "skills/taste-skill/assets/moments/headline-arrives/moment.css",
+      "sha256": "e280dd29ac51b5b8a539ef46cf9ca2022dde04ba7aaf67d60b0d1bdccbf43f0c"
+    }
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "4575a543ab88dad12ccea7d97e563d0bce5b448b06072e65d3264497dad326df"
+    },
+    {
+      "path": "SKILL.md",
+      "sha256": "727cfaf97472788c666d00bdbf2cfb004ab7e3be0e32c025cf8b2a4941523b07"
+    },
+    {
+      "path": "references/kit.md",
+      "sha256": "6110f072467dbc2dd069d142c89e81ae4873b1dd58f4ebd684ee2cae090dd754"
+    },
+    {
+      "path": "assets/taste.css",
+      "sha256": "4a9e701b6212369d02c32776c43db5aefe7c3aa079ab133aeb19b40b877bb3bf"
+    },
+    {
+      "path": "assets/taste.js",
+      "sha256": "1377952c013e43040fd15a3db3df5e5e58bf75877e9490f87b679e952ba78223"
+    }
+  ],
+  "build": "node scripts/build-taste-kit.mjs <checkout>/skills/taste-skill",
+  "adaptations": [
+    "single-document kit: system.css, cards.css, layout.css, motion.css and five moments concatenated into assets/taste.css; motion.js and the five moments bundled into assets/taste.js without dynamic import()",
+    "system.js, layout.js, ui.js, effects, scenes, photo search, dealers and checker scripts omitted: they need module loading, network or a local browser",
+    "remote Google fonts removed; system font stacks",
+    "house rules, kind decision and product page rules condensed from SKILL.md and sections.md; kit markup written from system.md, hero-product.html and moment headers",
+    "the host inlines skill:// references; pages set data-tone themselves because system.js is not included"
+  ]
+}

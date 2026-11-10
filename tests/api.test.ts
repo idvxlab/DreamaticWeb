@@ -318,7 +318,7 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       (await (await request(`/projects/${p.id}`)).json()).sources.length,
       2,
     );
-    assert.equal((await (await request("/skills")).json()).length, 18);
+    assert.equal((await (await request("/skills")).json()).length, 19);
     assert.equal(
       (await (await request("/health")).json()).generationAvailable,
       true,
