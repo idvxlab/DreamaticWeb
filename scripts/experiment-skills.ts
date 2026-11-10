@@ -156,7 +156,11 @@ try {
           { recursive: true, mode: constants.COPYFILE_FICLONE },
         );
       for (const source of p.sources) {
-        for (const asset of source.assets) asset.url = replace(asset.url);
+        for (const asset of source.assets) {
+          asset.url = replace(asset.url);
+          if (asset.transparent)
+            asset.transparent.url = replace(asset.transparent.url);
+        }
         const md = replace(
           await readFile(
             path.join(

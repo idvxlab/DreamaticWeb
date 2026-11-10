@@ -18,13 +18,14 @@ import { persistExtraction, readCanonicalSource } from "./source-content.js";
 import { DATA, projectDir } from "./store.js";
 import { fetchPublic } from "./network.js";
 import type { Source, Asset } from "../../../packages/shared/project.js";
+import { transparentVariant } from "./media-cutout.js";
 import {
   annotate,
   imageSignals,
   mediaLayout,
   type MediaLayout,
 } from "./media-layout.js";
-export const PARSER_VERSION = "markdown-media-v7";
+export const PARSER_VERSION = "markdown-media-v8";
 export const DOCUMENT_MEDIA_LIMIT = 200;
 export const DOCUMENT_MEDIA_BYTES = 80 * 1024 * 1024;
 export const sourceFingerprint = (buffer: Buffer) =>
@@ -172,6 +173,21 @@ export async function extract(
       try {
         const flags = await imageSignals(data);
         if (flags.length) imported.flags = flags;
+        else {
+          const cutout = await transparentVariant(data);
+          if (cutout) {
+            const variant = await asset(
+              cutout.buffer,
+              filename + ".transparent.png",
+              projectId,
+            );
+            imported.transparent = {
+              url: variant.url,
+              width: variant.width,
+              height: variant.height,
+            };
+          }
+        }
       } catch {
         /* Undecodable images keep no signal rather than a guessed one. */
       }

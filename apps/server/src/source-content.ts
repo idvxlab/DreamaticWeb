@@ -76,11 +76,12 @@ export async function persistExtraction(
             (a.width && a.height ? ` · ${a.width}×${a.height}` : "") +
             (a.page ? ` · page:${a.page}` : "") +
             (a.context ? ` · nearby:${JSON.stringify(a.context)}` : "") +
-            (a.flags?.length ? ` · flags:${a.flags.join(",")}` : ""),
+            (a.flags?.length ? ` · flags:${a.flags.join(",")}` : "") +
+            (a.transparent ? ` · transparent:${a.transparent.url}` : ""),
         )
         .join("\n") +
-      (source.assets.some((a) => a.flags?.length || a.context)
-        ? "\n\nnearby = text next to the image on the page, not its visual content. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page.\n"
+      (source.assets.some((a) => a.flags?.length || a.context || a.transparent)
+        ? "\n\nnearby = text next to the image on the page, not its visual content. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page. transparent = program-made PNG of the same image with its light backdrop removed.\n"
         : "\n");
   }
   reading.markdown += mediaAssociations;

@@ -35,6 +35,8 @@ export interface Asset {
   context?: string;
   /** Deterministic import signals; flat/frame-only media are not standalone content. */
   flags?: AssetFlag[];
+  /** Program-made PNG of a light-backdrop image with that backdrop removed; the original stays unchanged. */
+  transparent?: { url: string; width?: number; height?: number };
 }
 export type AssetFlag = "flat" | "frame-only" | "fragment" | "page-background";
 export interface Source {

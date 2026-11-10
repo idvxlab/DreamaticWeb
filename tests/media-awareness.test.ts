@@ -496,3 +496,94 @@ test("contentOutline is written before the page and unimplemented sections are r
     await removeProject(p.id);
   }
 });
+
+test("light-backdrop images get a transparent variant; edge-to-edge photos and enclosed white areas are kept", async () => {
+  const { transparentVariant } =
+    await import("../apps/server/src/media-cutout.js");
+  const product = await png(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><defs><radialGradient id="g"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e4e4e4"/></radialGradient></defs><rect width="400" height="300" fill="url(#g)"/><ellipse cx="200" cy="150" rx="150" ry="22" fill="#111"/><circle cx="200" cy="150" r="14" fill="#fff"/></svg>`,
+  );
+  const cut = await transparentVariant(product);
+  assert.ok(cut, "light even backdrop is removed");
+  const { data, info } = await sharp(cut!.buffer)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const alpha = (x: number, y: number) => data[(y * info.width + x) * 4 + 3];
+  assert.equal(alpha(5, 5), 0, "corner backdrop is transparent");
+  assert.equal(alpha(80, 150), 255, "subject stays opaque");
+  assert.equal(
+    alpha(200, 150),
+    255,
+    "enclosed white hub is not part of the backdrop",
+  );
+  const photo = await sharp({
+    create: {
+      width: 300,
+      height: 200,
+      channels: 3,
+      background: "#808080",
+      noise: { type: "gaussian", mean: 120, sigma: 50 },
+    },
+  })
+    .png()
+    .toBuffer();
+  assert.equal(
+    await transparentVariant(photo),
+    null,
+    "a photo that bleeds to the edge is left alone",
+  );
+});
+
+test("pages may use an asset's transparent variant, which is listed in canonical Markdown", async () => {
+  const p = await create();
+  try {
+    const source = await ingest(
+      await png(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#c33"/></svg>`,
+      ),
+      "a.png",
+      p.id,
+    );
+    const variant = await ingest(
+      await png(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#3c3"/></svg>`,
+      ),
+      "b.png",
+      p.id,
+    );
+    source.assets[0].transparent = { url: variant.assets[0].url };
+    p.sources.push(source);
+    const ok = await validatePage(
+      p,
+      `<html><body><h1>T</h1><img alt="x" src="${variant.assets[0].url}"></body></html>`,
+      { rejectUnusableMedia: true },
+    );
+    assert.equal(ok.valid, true, ok.issues.map((i) => i.message).join("; "));
+    const doc = {
+      id: "s",
+      name: "d.pdf",
+      format: "pdf",
+      text: "Body",
+      tables: [],
+      warnings: [],
+      provenance: "t",
+      assets: [
+        {
+          id: "a1",
+          name: "p.png",
+          type: "image",
+          url: "/assets/x/a1.png",
+          mime: "image/png",
+          transparent: { url: "/assets/x/t1.png" },
+        },
+      ],
+    } as never;
+    await persistExtraction(doc);
+    assert.match(
+      (doc as { markdown: string }).markdown,
+      /id:a1 · transparent:\/assets\/x\/t1\.png/,
+    );
+  } finally {
+    await removeProject(p.id);
+  }
+});
