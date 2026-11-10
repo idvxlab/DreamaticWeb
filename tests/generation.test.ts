@@ -381,6 +381,116 @@ test("real Pi stages: first generation 3 calls, selected-fact edit 1, duplicate 
   }
 });
 
+test("prepared PDF hands verified availability to Orchestrator and canonical facts to Analyst in three calls", async () => {
+  const p = await create();
+  try {
+    // Prepared-source fixture; real PDF parsing and model behavior are checked separately.
+    const source = await persistExtraction(
+      {
+        id: crypto.randomUUID(),
+        name: "institution.pdf",
+        format: "pdf",
+        text: "课程亮点：交互设计实践。团队资料：林老师负责课程。",
+        assets: [],
+        tables: [],
+        warnings: [],
+        provenance: "test fixture",
+      },
+      p.id,
+    );
+    p.sources.push(source);
+    const canonical = await readCanonicalSource(p.id, source);
+    source.markdown = "STALE DISPLAY PREVIEW";
+    const order: string[] = [];
+    const streamFn: StreamFn = (model, context) => {
+      const system = getCurrentSystemMessage(context.messages)!;
+      const tools = (system.toolsAdded || []).map((t) => t.name);
+      const input = context.messages
+        .filter((m) => m.role === "user")
+        .map((m) =>
+          typeof m.content === "string"
+            ? m.content
+            : m.content.map((c) => (c.type === "text" ? c.text : "")).join(""),
+        )
+        .join("\n");
+      assert.doesNotMatch(input, /STALE DISPLAY PREVIEW/);
+      if (tools.includes("submit_intent")) {
+        order.push("orchestrator");
+        const inventory = JSON.parse(
+          input.split("# Source inventory\n")[1].split("\n\n# User answers")[0],
+        );
+        assert.deepEqual(inventory, [
+          {
+            id: source.id,
+            name: source.name,
+            format: "pdf",
+            canonicalMarkdown: {
+              status: "ready",
+              characters: canonical.markdown.length,
+            },
+          },
+        ]);
+        assert.equal(input.includes(canonical.markdown), false);
+        assert.ok(
+          tools.includes("ask_user"),
+          "genuine clarification stays available",
+        );
+        return answer(model, "submit_intent", {
+          ...brief,
+          content: ["从上传资料中分析课程亮点、团队资料"],
+        });
+      }
+      if (tools.includes("submit_facts")) {
+        order.push("analyst");
+        assert.ok(input.includes(canonical.markdown));
+        assert.match(input, /分析课程亮点、团队资料/);
+        return answer(model, "submit_facts", {
+          summary: "课程与团队",
+          facts: [
+            {
+              id: "course",
+              text: "交互设计实践",
+              sourceId: source.id,
+              assetIds: [],
+            },
+          ],
+          limitations: [],
+        });
+      }
+      order.push("designer");
+      assert.match(input, /交互设计实践/);
+      return answer(model, "submit_page", { html, usedFactIds: ["course"] });
+    };
+    await runProject(
+      p,
+      requestSchema.parse({
+        text: "分析改机构课程亮点、团队资料，生成一个酷炫的介绍界面。",
+      }),
+      save,
+      () => {},
+      { config, skills: false, streamFn },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.deepEqual(order, ["orchestrator", "analyst", "designer"]);
+    assert.equal(p.generation!.metrics!.modelCalls, 3);
+    assert.equal(p.questions?.length || 0, 0);
+
+    source.content!.readingComplete = false;
+    await runProject(
+      p,
+      requestSchema.parse({ text: "重新分析课程亮点" }),
+      save,
+      () => {},
+      { config, skills: false, streamFn },
+    );
+    assert.equal(p.status, "error");
+    assert.match(p.error!, /integrity check failed/);
+    assert.equal(order.length, 3, "incomplete sources fail before model calls");
+  } finally {
+    await removeProject(p.id);
+  }
+});
+
 test("critical questions suspend Pi and resume in order; cancellation preserves pages and releases the project lock", async () => {
   const p = await create();
   try {
