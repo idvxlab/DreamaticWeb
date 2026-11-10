@@ -6,6 +6,14 @@ import type { Asset, AssetFlag } from "../../../packages/shared/project.js";
 export const UNUSABLE_FLAGS: readonly AssetFlag[] = ["flat", "frame-only"];
 export const usableAsset = (a: Asset) =>
   !a.flags?.some((f) => UNUSABLE_FLAGS.includes(f));
+/** Brochure page backdrops and slices of composites stay stored but are not offered as page media. */
+export const OFFERED_EXCLUDED_FLAGS: readonly AssetFlag[] = [
+  ...UNUSABLE_FLAGS,
+  "page-background",
+  "fragment",
+];
+export const offeredAsset = (a: Asset) =>
+  !a.flags?.some((f) => OFFERED_EXCLUDED_FLAGS.includes(f));
 
 type Box = { x: number; y: number; width: number; height: number };
 export type MediaLayout = {

@@ -22,6 +22,18 @@ export const modelProfileSchema = z.object({
     }, "模型调用 URL 必须是不包含凭据的 HTTP/HTTPS 地址"),
   model: z.string().trim().max(200),
   vision: z.boolean().default(true),
+  /**
+   * Explicit reasoning control for an OpenAI-compatible endpoint that serves a
+   * hybrid-thinking model. Reasoning and the answer share the output limit, so
+   * an uncapped reasoning phase can consume the whole response. Off when unset;
+   * the host never guesses it from the model name.
+   */
+  thinking: z
+    .object({
+      format: z.enum(["qwen"]),
+      budget: z.number().int().min(256).max(16000),
+    })
+    .optional(),
   apiKey: z.string().max(4096).optional(),
   clearApiKey: z.boolean().optional(),
 });

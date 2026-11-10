@@ -43,7 +43,7 @@ import {
   contactSheet,
   CONTACT_SHEET_LIMIT,
 } from "../image-preview.js";
-import { recallFactAssets, usableAsset } from "../media-layout.js";
+import { offeredAsset, recallFactAssets } from "../media-layout.js";
 import {
   designerContext,
   DESIGNER_CONTEXT_VERSION,
@@ -357,7 +357,7 @@ async function execute(
       id: source.id,
       name: source.name,
       format: source.format,
-      assets: source.assets.filter(usableAsset),
+      assets: source.assets.filter(offeredAsset),
     }));
     // Skills actually preloaded per role; only these may supply skill:// page assets.
     const loadedSkills: Partial<Record<Role, string[]>> = {};
@@ -715,7 +715,7 @@ async function execute(
                   throw new Error("事实素材不属于其资料");
                 // Flat tiles and empty frames are never content; drop them without another round.
                 fact.assetIds = fact.assetIds.filter((id) =>
-                  source?.assets.some((a) => a.id === id && usableAsset(a)),
+                  source?.assets.some((a) => a.id === id && offeredAsset(a)),
                 );
               }
               // Add same-source images whose printed label names exactly one fact.

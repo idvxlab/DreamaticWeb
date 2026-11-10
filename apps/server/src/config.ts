@@ -30,6 +30,18 @@ function envProfile(prefix: string): ModelProfile {
       (prefix === "DREAMATIC" ? process.env.OPENAI_API_KEY : "") ||
       "",
     vision: process.env[prefix + "_VISION"] !== "false",
+    ...(process.env[prefix + "_THINKING_FORMAT"] === "qwen" &&
+    Number(process.env[prefix + "_THINKING_BUDGET"]) >= 256
+      ? {
+          thinking: {
+            format: "qwen" as const,
+            budget: Math.min(
+              16000,
+              Math.floor(Number(process.env[prefix + "_THINKING_BUDGET"])),
+            ),
+          },
+        }
+      : {}),
   };
 }
 function initial(): RuntimeConfig {

@@ -194,3 +194,45 @@ test("stateless reasoning tool continuation reproduces legacy 400 and preserves 
     }
   }
 });
+
+test("an explicit qwen thinking cap reaches the endpoint; without it nothing is sent", async () => {
+  const { modelRuntime } =
+    await import("../apps/server/src/generation/model.js");
+  const server = await modelServer(() => ({
+    name: "submit_answer",
+    args: { answer: "ok" },
+  }));
+  try {
+    for (const thinking of [
+      undefined,
+      { format: "qwen" as const, budget: 4096 },
+    ]) {
+      const runtime = modelRuntime({
+        mode: "openai-compatible",
+        baseUrl: server.baseUrl,
+        model: "qwen-test",
+        apiKey: "test",
+        vision: false,
+        ...(thinking ? { thinking } : {}),
+      });
+      const stream = runtime.streamFn(
+        runtime.model,
+        { messages: [{ role: "user", content: "hi", timestamp: Date.now() }] },
+        runtime.thinkingLevel === "off"
+          ? {}
+          : { reasoning: runtime.thinkingLevel },
+      );
+      for await (const _ of stream as AsyncIterable<unknown>);
+      const body = server.requests.at(-1);
+      if (thinking) {
+        assert.equal(body.enable_thinking, true);
+        assert.equal(body.thinking_budget, 4096);
+      } else {
+        assert.equal(body.enable_thinking, undefined);
+        assert.equal(body.thinking_budget, undefined);
+      }
+    }
+  } finally {
+    await server.close();
+  }
+});

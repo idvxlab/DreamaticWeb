@@ -24,13 +24,14 @@ export function modelRuntime(profile: ModelProfile) {
   // This also lets Pi preserve encrypted reasoning across stateless Responses tool turns.
   const known =
     api === "openai-responses" ? openaiCatalog.get(profile.model) : undefined;
+  const thinking = api === "openai-completions" ? profile.thinking : undefined;
   const model: Model<Api> = {
     id: profile.model,
     name: profile.model,
     provider: "dreamatic",
     api,
     baseUrl: profile.baseUrl,
-    reasoning: known?.reasoning ?? false,
+    reasoning: known?.reasoning ?? Boolean(thinking),
     thinkingLevelMap: known?.thinkingLevelMap,
     input: profile.vision ? ["text", "image"] : ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -43,6 +44,13 @@ export function modelRuntime(profile: ModelProfile) {
             supportsDeveloperRole: false,
             supportsReasoningEffort: false,
             supportsStrictMode: false,
+            // Public Pi compat: enable_thinking plus a top-level thinking_budget cap.
+            ...(thinking
+              ? {
+                  thinkingFormat: thinking.format,
+                  thinkingTokenBudgetField: "thinking_budget" as const,
+                }
+              : {}),
           },
         }
       : {}),
@@ -66,9 +74,22 @@ export function modelRuntime(profile: ModelProfile) {
           : openAICompletionsApi(),
     }),
   );
+  const stream = models.streamSimple.bind(models);
   return {
     model,
-    thinkingLevel: getSupportedThinkingLevels(model)[0] || "off",
-    streamFn: models.streamSimple.bind(models),
+    // A configured cap uses the "low" level with its budget set to the profile's value.
+    thinkingLevel: thinking
+      ? ("low" as const)
+      : getSupportedThinkingLevels(model)[0] || "off",
+    streamFn: (thinking
+      ? (m, context, options) =>
+          stream(m, context, {
+            ...options,
+            thinkingBudgets: {
+              ...options?.thinkingBudgets,
+              low: thinking.budget,
+            },
+          })
+      : stream) as typeof stream,
   };
 }

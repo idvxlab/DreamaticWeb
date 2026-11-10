@@ -14,7 +14,7 @@ Say plainly what is sold, show the real thing on every screen and look made for 
 3. **One section per screen** at 1440×900: the hero alone on the first screen; every section one or two screens tall; no next heading peeking in.
 4. **Equal left and right content edges** (`.wrap` everywhere).
 5. **One entrance and one or two moments per page.** The hero enters once (`data-enter`); one moment, two on a long page, each in its own section. No tilt, carousels, timed tabs, or effects on cards.
-6. **Real material leads.** The client's own photographs, renders and drawings, large, exactly as supplied.
+6. **Real material leads.** The client's own photographs, renders and drawings, large, exactly as supplied; never a generic stock scene used as mood.
 7. **Colour from the subject.** The interface stays 90–95% neutral; one accent at most, taken from the product or brand; dark pages and dark heroes only when the subject is technical hardware or software.
 8. **Words people read are 16px or more**; sentence case; labels 13px at 500, never tracked capitals; no text baked into pictures.
 
