@@ -540,9 +540,18 @@ async function execute(
       state.intentPolicy !== intentPolicy
     ) {
       let value: Intent | undefined, question: Clarification | undefined;
+      const sourceInventory = documents.map(({ source, document }) => ({
+        id: source.id,
+        name: source.name,
+        format: source.format,
+        canonicalMarkdown: {
+          status: "ready",
+          characters: document.markdown.length,
+        },
+      }));
       await roleRun(
         "orchestrator",
-        `# Request\n${request.text}\n\n# Existing brief\n${intent?.markdown || "None"}\n\n# Source inventory\n${JSON.stringify(catalog.map(({ assets: _, ...s }) => s))}\n\n# User answers\n${JSON.stringify(p.questions?.filter((q) => q.answeredAt).map((q) => ({ question: q.title, answer: q.answer })) || [])}`,
+        `# Request\n${request.text}\n\n# Existing brief\n${intent?.markdown || "None"}\n\n# Source inventory\n${JSON.stringify(sourceInventory)}\n\n# User answers\n${JSON.stringify(p.questions?.filter((q) => q.answeredAt).map((q) => ({ question: q.title, answer: q.answer })) || [])}`,
         [
           tool(
             "submit_intent",
