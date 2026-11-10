@@ -439,3 +439,60 @@ test("recall adds an image only when its printed label names exactly one fact of
   ];
   assert.equal(recallFactAssets(full, sources), 0, "schema limit respected");
 });
+
+test("contentOutline is written before the page and unimplemented sections are recorded, not rejected", async () => {
+  const p = await create();
+  try {
+    const streamFn: StreamFn = (model, context) => {
+      const sys = getCurrentSystemMessage(context.messages)!;
+      const prompt =
+        typeof sys.content === "string"
+          ? sys.content
+          : sys.content.map((c) => c.text).join("\n");
+      if (prompt.includes("# Orchestrator"))
+        return answer(model, "submit_intent", {
+          goal: "展示",
+          audience: "访客",
+          content: ["产品"],
+          features: [],
+          design: [],
+          constraints: [],
+        });
+      if (prompt.includes("# Analyst"))
+        return answer(model, "submit_facts", {
+          summary: "s",
+          facts: [],
+          limitations: [],
+        });
+      return answer(model, "submit_page", {
+        contentOutline: [
+          {
+            id: "offer",
+            purpose: "先明白提供什么",
+            content: "主张",
+            form: "大标题与主体图",
+          },
+          { id: "proof", purpose: "相信性能", content: "参数", form: "对比表" },
+        ],
+        html: '<html><body><h1 id="offer">P</h1></body></html>',
+        usedFactIds: [],
+      });
+    };
+    await runProject(
+      p,
+      requestSchema.parse({ text: "生成展示页" }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.generation!.metrics!.modelCalls, 3);
+    const issue = p.versions[0].checks!.issues.find(
+      (i) => i.code === "outline_missing",
+    );
+    assert.match(issue!.message, /proof/);
+    assert.doesNotMatch(issue!.message, /offer/);
+  } finally {
+    await removeProject(p.id);
+  }
+});

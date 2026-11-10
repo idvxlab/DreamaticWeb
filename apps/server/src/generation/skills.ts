@@ -136,7 +136,10 @@ export function selectSkills(
         if (match) chosen.add(match[0]);
       }
     } else {
-      const match = categories.find(([, pattern]) => pattern.test(combined));
+      // The user's own words decide the site type; the brief only fills a gap.
+      const match =
+        categories.find(([, pattern]) => pattern.test(local)) ||
+        categories.find(([, pattern]) => pattern.test(combined));
       chosen.add(match?.[0] || "designer-web-architecture");
       // Only what the user asked for (request text and user-stated design) raises
       // ambition; Orchestrator's designDefaults never do.
@@ -363,8 +366,9 @@ export class SkillLibrary {
     const catalog = (await this.catalog()).skills.filter(
       (s) => roleFor(s.name) === role,
     );
-    const blocks = [];
+    const blocks: string[] = [];
     const references: string[] = [];
+    const loaded: string[] = [];
     let characters = 0;
     for (const name of names) {
       const skill = catalog.find((s) => s.name === name);
@@ -376,14 +380,13 @@ export class SkillLibrary {
         .filter((c) => c.type === "text")
         .map((c) => c.text)
         .join("\n");
-      characters += body.length;
-      if (characters > SKILL_BODY_CHARACTER_LIMIT)
-        throw new Error(
-          `选定 Skills 正文超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
-        );
-      blocks.push(
-        `<skill name="${name}" location="${skill.filePath}">\n${body}\n</skill>`,
-      );
+      const unit = {
+        characters: body.length,
+        blocks: [
+          `<skill name="${name}" location="${skill.filePath}">\n${body}\n</skill>`,
+        ],
+        references: [] as string[],
+      };
       const raw = this.buffers.get(skill.filePath)!.buffer.toString("utf8");
       for (const reference of requiredReferences(raw)) {
         const filename = path.resolve(skill.baseDir, reference);
@@ -395,22 +398,32 @@ export class SkillLibrary {
           .filter((c) => c.type === "text")
           .map((c) => c.text)
           .join("\n");
-        characters += content.length;
-        if (characters > SKILL_BODY_CHARACTER_LIMIT)
-          throw new Error(
-            `选定 Skills 和核心参考超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
-          );
-        references.push(`${name}/${reference}`);
-        blocks.push(
+        unit.characters += content.length;
+        unit.references.push(`${name}/${reference}`);
+        unit.blocks.push(
           `<skill-reference skill="${name}" location="${filename}">\n${content}\n</skill-reference>`,
         );
       }
+      if (characters + unit.characters > SKILL_BODY_CHARACTER_LIMIT) {
+        // Explicit selections are the user's exact set; automatic routing keeps
+        // its higher-priority entries and leaves the rest instead of failing.
+        // An entry that cannot fit even alone is a library error, not a routing choice.
+        if (options.selectedOnly || !loaded.length)
+          throw new Error(
+            `选定 Skills 和核心参考超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
+          );
+        continue;
+      }
+      characters += unit.characters;
+      loaded.push(name);
+      references.push(...unit.references);
+      blocks.push(...unit.blocks);
     }
     return {
-      prompt: names.length
-        ? `${formatSkillsForPrompt(options.selectedOnly ? catalog.filter((s) => names.includes(s.name)) : catalog, "read")}\n\nSelected skills and their required references are loaded below; apply them without reading them again. For other linked references, use read with the absolute Skill location's directory plus the relative reference path. ${options.selectedOnly ? "Only these selected Skills and their references are available." : "Read other relevant references only when needed."}\n${blocks.join("\n\n")}`
+      prompt: loaded.length
+        ? `${formatSkillsForPrompt(options.selectedOnly ? catalog.filter((s) => loaded.includes(s.name)) : catalog, "read")}\n\nSelected skills and their required references are loaded below; apply them without reading them again. For other linked references, use read with the absolute Skill location's directory plus the relative reference path. ${options.selectedOnly ? "Only these selected Skills and their references are available." : "Read other relevant references only when needed."}\n${blocks.join("\n\n")}`
         : "",
-      names,
+      names: loaded,
       characters,
       references,
     };

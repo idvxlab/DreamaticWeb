@@ -32,7 +32,7 @@ const args = process.argv.slice(2);
 const arg = (name: string) => args[args.indexOf(name) + 1];
 if (args.includes("--help") || !args.includes("--live")) {
   console.log(
-    "Usage: node --import tsx scripts/experiment-skills.ts --live --source company.pdf --output workspace/experiments/NAME [--only baseline|designer-NAME] [--request TEXT] [--minutes 15]\nUses environment DREAMATIC_* profiles. Baseline runs ingestion + all roles; later entries reuse identical brief/facts in separate visible projects. Each condition runs once, no automatic retries. No credentials are saved.",
+    "Usage: node --import tsx scripts/experiment-skills.ts --live --source company.pdf --output workspace/experiments/NAME [--only baseline|default|designer-NAME] [--request TEXT] [--minutes 15]\nUses environment DREAMATIC_* profiles. Baseline runs ingestion + all roles; later entries reuse identical brief/facts in separate visible projects. Each condition runs once, no automatic retries. No credentials are saved.",
   );
   process.exit(args.includes("--help") ? 0 : 1);
 }
@@ -68,6 +68,8 @@ await initStore();
 const library = new SkillLibrary();
 const variants = [
   "baseline",
+  // Reuses the baseline's brief/facts with default routing: a Designer-only rerun.
+  "default",
   "designer-awwwards",
   "designer-frontend-design",
   "designer-impeccable",
@@ -216,7 +218,8 @@ try {
     p.title = `Skill 实验 · ${variant}`;
     p.titleEdited = true;
     const text =
-      (variant === "baseline" ? "" : `/skill:${variant}\n`) + request;
+      (["baseline", "default"].includes(variant) ? "" : `/skill:${variant}\n`) +
+      request;
     p.messages.push({ role: "user", text, time: new Date().toISOString() });
     await save(p);
     const trace: unknown[] = [];

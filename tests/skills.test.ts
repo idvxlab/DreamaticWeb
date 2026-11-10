@@ -217,8 +217,17 @@ test("24k body ceiling permits larger inputs, rejects excess and keeps the 48k f
       large.characters > 18000 && large.characters < SKILL_BODY_CHARACTER_LIMIT,
     );
     assert.match(large.prompt, /END-OF-BODY/);
+    // Automatic routing keeps the higher-priority entry; an explicit set is never reduced.
+    const fitted = await library.prepare("designer", [
+      "designer-large",
+      "designer-extra",
+    ]);
+    assert.deepEqual(fitted.names, ["designer-large"]);
     await assert.rejects(
-      () => library.prepare("designer", ["designer-large", "designer-extra"]),
+      () =>
+        library.prepare("designer", ["designer-large", "designer-extra"], {
+          selectedOnly: true,
+        }),
       /24000.*预算/,
     );
     await mkdir(path.join(root, "designer-large/references"));
@@ -509,6 +518,51 @@ test("showcase routing follows user wording, not Orchestrator defaults, and stay
     assert.ok(
       prepared.references.some((r) => r.endsWith("page-narrative.md")),
       "the page narrative method is preloaded with motion",
+    );
+  } finally {
+    library.close();
+  }
+});
+
+test("site type follows the user's words, and automatic routing drops low-priority entries instead of exceeding the budget", async () => {
+  const library = new SkillLibrary();
+  try {
+    const { skills } = await library.catalog();
+    const brief = {
+      goal: "展示公司",
+      content: ["case studies of customized propellers"],
+    };
+    assert.equal(
+      selectSkills(
+        "designer",
+        { text: "用资料生成产品宣传页，酷炫动效", editing: false, brief },
+        skills,
+      )[0],
+      "designer-landing-page",
+      "a brief mention of case studies does not turn a promotional page into a portfolio",
+    );
+    const names = [
+      "designer-portfolio",
+      "designer-impeccable",
+      "designer-motion-design",
+      "designer-impeccable-overdrive",
+      "designer-interaction-design",
+    ];
+    const fitted = await library.prepare("designer", names);
+    assert.ok(fitted.characters <= SKILL_BODY_CHARACTER_LIMIT);
+    assert.deepEqual(
+      fitted.names.slice(0, 3),
+      names.slice(0, 3),
+      "higher priority entries are kept",
+    );
+    assert.ok(fitted.names.length < names.length);
+    assert.ok(
+      fitted.references.every((r) => fitted.names.includes(r.split("/")[0])),
+    );
+    await assert.rejects(
+      library.prepare("designer", names, { selectedOnly: true }),
+      /字符预算/,
+      "an explicit selection is never silently reduced",
     );
   } finally {
     library.close();

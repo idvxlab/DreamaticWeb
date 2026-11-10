@@ -774,6 +774,7 @@ async function execute(
       html: string,
       operations: number,
       usedFactIds?: string[],
+      contentOutline?: { id: string }[],
     ) {
       if (usedFactIds?.some((id) => !analysis.facts.some((f) => f.id === id)))
         throw new Error("页面引用了无效的事实 ID");
@@ -794,6 +795,18 @@ async function execute(
           "页面结构需要修正：" +
             JSON.stringify(report.issues.filter((i) => i.severity === "error")),
         );
+      // Record, never reject: planned sections that the code did not implement.
+      const $page = cheerio.load(report.html);
+      const missing = (contentOutline || [])
+        .map((section) => section.id.replace(/^#/, ""))
+        .filter((id) => !$page(`[id="${id.replaceAll('"', "")}"]`).length);
+      if (missing.length)
+        report.issues.push({
+          severity: "warning",
+          code: "outline_missing",
+          message:
+            "Content outline sections not found in page: " + missing.join(", "),
+        });
       accepted = {
         html: report.html,
         checks: pageChecks(p, report.html, report.issues),
@@ -968,10 +981,33 @@ async function execute(
           "submit_page",
           "Submit complete responsive inline HTML and finish",
           Type.Object({
+            // Listed first so the content organization is written before the code.
+            contentOutline: Type.Optional(
+              Type.Array(
+                Type.Object({
+                  id: Type.String({
+                    description: "id of the section element in html",
+                  }),
+                  purpose: Type.String({
+                    description:
+                      "What the reader should understand, feel or do after this section",
+                  }),
+                  content: Type.String({
+                    description: "Key message, fact IDs and media used",
+                  }),
+                  form: Type.String({
+                    description:
+                      "Composition and visual treatment that serve that purpose",
+                  }),
+                }),
+                { maxItems: 12 },
+              ),
+            ),
             html: Type.String({ minLength: 20, maxLength: 2500000 }),
             usedFactIds: Type.Array(Type.String()),
           }),
-          async ({ html, usedFactIds }) => accept(html, 0, usedFactIds),
+          async ({ html, usedFactIds, contentOutline }) =>
+            accept(html, 0, usedFactIds, contentOutline),
           true,
         ),
       );
