@@ -28,7 +28,7 @@ The host replaces both `skill://` references with the kit's text. Choose all 16 
 ## Menu for designPlan
 
 - Ground: light (`--p-bg` near the pictures' white or warm studio tone) or dark (`data-tone="dark"`), chosen from the pictures' backdrops; one inverse band may contrast.
-- Hero: `hero--product` (product whole, words above), `hero--split` (words left, picture right), `hero--film` (one full-bleed photograph), `hero--statement` (type-led, picture below), `hero--editorial`.
+- Hero: `hero--product` (product whole, words above), `hero--split` (words left, picture right), `hero--photo` (one photograph or the brochure's own scene over the whole first screen, words on its calm side), `hero--film` (a film poster in a framed screen), `hero--statement` (type-led, picture below), `hero--editorial`.
 - Radius `data-radius`: sharp | soft | round. Buttons `data-buttons`: solid | pill | tonal | arrow | block.
 - Type voice: tight grotesk (system sans, weight 600–700), or a light large display (weight 300–400, wide tracking off); numbers set large in `.t-stat`.
 - Moments (one or two): `product-close-up`, `pinned-chapters`, `photo-chapters`, `giant-type-pass`, `window-parallax`, `picture-develops`, `counter-rolls`, `headline-arrives`.
@@ -44,7 +44,7 @@ The host replaces both `skill://` references with the kit's text. Choose all 16 
 <main id="top"> …sections… </main>
 ```
 
-Four to six one-word nav items, one primary button.
+Four to six one-word nav items, one primary button. The logo is the client's logo image exactly as supplied (no filter, no recolouring); without a usable one, the company name as a text wordmark. Never draw a logo or use emoji as icons; an icon is a simple inline SVG line glyph, or none.
 
 ## Hero (product)
 
@@ -60,7 +60,19 @@ Four to six one-word nav items, one primary button.
 </section>
 ```
 
-Other heroes in the kit: `hero--split` (words left, picture right), `hero--film` (one full-bleed photograph), `hero--statement` (type-led), `hero--editorial`. Optional proof under the hero words: `<dl class="hero__facts"><div><dt>额定拉力</dt><dd>110 kg</dd></div>…</dl>` (three or four).
+Hero over a whole photograph or scene (`data-calm` names its empty side: left, right or top; `data-tone` says whether that side is dark or light; `--ly-pos` crops to the subject; nothing is laid over the picture):
+
+```html
+<section class="hero hero--photo" data-calm="left" data-box="none" data-tone="dark" data-enter aria-labelledby="hero-h">
+  <img class="hero__bg" src="SCENE_URL" alt="…" style="--ly-pos:60% 40%">
+  <div class="wrap"><div class="hero-text"><div class="hero__text">
+    <h1 id="hero-h">…</h1><p class="hero__lead">…</p>
+    <div class="btn-row"><a class="btn btn--primary" href="#products">…</a></div>
+  </div></div></div>
+</section>
+```
+
+Other heroes in the kit: `hero--split` (words left, picture right), `hero--film` (a film poster in a framed screen), `hero--statement` (type-led), `hero--editorial`. Optional proof under the stage, as the last child of `.hero__in`: `<dl class="hero__facts"><div><dt>额定拉力</dt><dd>110 kg</dd></div>…</dl>` (three or four).
 
 ## Sections
 
@@ -79,6 +91,43 @@ Other heroes in the kit: `hero--split` (words left, picture right), `hero--film`
 ```
 
 `.grid` has 12 columns: `span-N` sets width, `start-N` the first column. `.section-head` heads every section; `.muted` greys a heading's second half. `.btn-row` holds at most two buttons; `.btn--xl` once, in the closing band. `.card` for linked items; `.rows` for specs, prices and lists.
+
+## Product page blocks
+
+Choose per content, and vary them: a page is not one block repeated.
+
+- Several comparable models → `.range` then one `.spec-table`.
+- A flagship, or two or three products that each deserve a look → one `.feature` per product (alternate with `.feature--flip`); its specs in its own `.rows`.
+- A flagship as `.feature` and the rest as `.range` is often the best mix.
+- Cases → one `.case` each, all the same shape. Process steps or services with pictures → `.range` with a name and one line.
+
+```html
+<div class="range-group"><h3>旋翼桨</h3><ul class="range">
+  <li class="range__item"><figure class="range__media"><img src="…" alt="…"></figure>
+    <div class="range__body"><h3>DH-RF54</h3><p>54 in · 2 blades</p>
+      <dl class="range__figures"><div><dt>额定拉力</dt><dd>50 kg</dd></div>…three…</dl></div></li>…
+</ul></div>
+<div class="spec-table-wrap"><table class="spec-table"><thead><tr><th>参数</th><th>DH-RF54</th>…</tr></thead><tbody><tr><th>直径</th><td>54 in</td>…</tr>…</tbody></table></div>
+<p class="spec-common">Shared by every model: …</p>
+
+<article class="feature"><figure class="feature__media"><img src="…" alt="…"></figure>
+  <div class="feature__body"><h3>DH-Y800A</h3><p>One line on what it is for.</p>
+    <dl class="figures"><div><dt>额定推力</dt><dd>63 kgf</dd></div>…three…</dl><ul class="rows">…</ul></div></article>
+
+<article class="case"><div class="case__body"><p class="case__tag">案例 01 · 分布式电推进</p><h3>…</h3><p>Need, then solution, in two or three lines.</p>
+    <dl class="figures">…three…</dl></div>
+  <div class="case__media"><figure><img src="DRAWING" alt="…"></figure><figure><img src="CHART" alt="…"></figure></div></article>
+```
+
+- A range or a case uses one kind of picture per frame row; a product's odd photograph goes to the hero or a `.feature` (`data-fit="cover"` on its `.feature__media` for an edge-to-edge photograph).
+- The same three figures in the same order in every card or case; complete specifications once in `.spec-table`; values all models share once in `.spec-common`.
+- Group by product family; a family of one is a `.feature`, never a lone card. Nothing but products in a `.range`. Do not restyle the frames or their pictures: the host sizes them. Set `--range-bg`, `--feature-bg` and `--panel-bg` to the pictures' own backdrop (white drawings: #fff) so no picture shows as a box in a box.
+
+A drawing or a chart: `<figure class="figure-panel"><img src="…" alt="…"></figure>` beside its text, never full width; the panel is light and caps its height.
+
+Write these blocks, not cards, image boxes or chart frames of your own.
+
+A dark band or a dark closing on a light page: add `ground-inverse` to the section or footer (`<footer class="footer closing ground-inverse">`). It switches ground, text, lines and buttons together; never paint a band's background yourself, or its buttons keep the light page's colours and vanish.
 
 ## Moments (one or two per page, each its own section)
 
@@ -129,7 +178,7 @@ Product close-up — one product photograph holds while the view moves in on its
 Giant type pass — two to four words set very large with a photograph passing through the letters: `<section class="section" data-moment="giant-type-pass" data-moment-opts='{"image":"PHOTO_URL"}'><div class="container"><h2 class="mo-gt__type">两到四个<br>字</h2><div class="mo-gt__row"><p>One line.</p></div></div></section>`.
 Window parallax — one wide photograph moves slower than the page inside a band frame: `<figure class="frame frame--photo mo-wp" data-moment="window-parallax" style="aspect-ratio:16/7"><img src="…" alt="…"></figure>`.
 
-Write each moment's final state in HTML; the kit animates it and shows the finished state without script or under reduced motion.
+Write each moment's final state in HTML; the kit animates it and shows the finished state without script or under reduced motion. Never script a moment's elements yourself (no second counter, reveal or parallax on them).
 
 ## Closing
 

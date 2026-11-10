@@ -112,19 +112,19 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "e894c73899b74f4b34e36354122fb564eba7aded167f30caf0b298cd89963d9c"
+      "sha256": "d8cf1bde425aaa5dc42b016b62e7c3e2507963f4cb2ff7ccd23d55f42e31e1ba"
     },
     {
       "path": "references/kit.md",
-      "sha256": "b4f10d1e10727e6e94ded1414f1cfc2a130aac7c421bcd10ceb505511f5a8f56"
+      "sha256": "af344bf9adc5cea9f1fc02e0e3c5c9aa2eeb4355694f2340b96ee34649d45a76"
     },
     {
       "path": "assets/taste.css",
-      "sha256": "ccb3af2ab74487fe6b703a8082328fe0e32a217e1f04c0e91583a2da6b0a89cc"
+      "sha256": "4b08e13f3eb70c24fb21a49386ef5ced431fe67d7b998e6f68803f0ffef1f992"
     },
     {
       "path": "assets/taste.js",
-      "sha256": "c4033a79bb97f289ee2c2c5f0ada40466e16992665e7af683af4a7aecc73796a"
+      "sha256": "07fbbd691c730362d81af76cb6985624eb570b1b9526d349bf2975546de15bac"
     }
   ],
   "build": "node scripts/build-taste-kit.mjs <checkout>/skills/taste-skill",
@@ -136,7 +136,10 @@
     "the host inlines skill:// references; pages set data-tone themselves because system.js is not included",
     "the bundled loader leaves pinned-chapters and photo-chapters static unless they sit at main > section > block, so a deviating structure never collapses to an empty screen",
     "window-parallax and giant-type-pass bundled; product-close-up added locally on the upstream moment lib; image-led page rules, imagePlan and designPlan added to the entry; transparent cut-outs removed by decision",
-    "sections are content-sized instead of fixed at one or two screens (upstream needs its browser checker for that); the hero keeps at least one screen"
+    "sections are content-sized instead of fixed at one or two screens (upstream needs its browser checker for that); the hero keeps at least one screen",
+    "host layer appended last: a button row nested in the hero head and facts after the stage keep their places; .spec-card (product picture and rows, one media frame) and .figure-panel (drawings and charts at half width) added",
+    ".range (product lineup with count-based columns and a centred last row), .spec-table (models as columns) and host.js (range frame ratio from its pictures) added to the host layer; the product-page rules point to them",
+    ".feature (one product per section, alternating), .case (one shape for every case: words and figures beside a drawing and a measured chart) and shared .figures added; kit.md gives a product-page block menu that varies the blocks"
   ],
   "local": [
     {
@@ -146,6 +149,14 @@
     {
       "path": "scripts/taste-kit/product-close-up.css",
       "note": "local moment styles"
+    },
+    {
+      "path": "scripts/taste-kit/host.css",
+      "note": "local host layer: tolerant hero-product placement, .spec-card and .figure-panel"
+    },
+    {
+      "path": "scripts/taste-kit/host.js",
+      "note": "local host script: .range frames take the median proportion of their pictures"
     }
   ]
 }

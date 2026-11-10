@@ -42,6 +42,8 @@ const FIXED = "main > :is(section, .section), footer.closing {\n  position: rela
 if (!css.includes(FIXED)) throw new Error("upstream section height rule changed");
 css = css.replace(FIXED, "main > :is(section, .section), footer.closing {\n  position: relative; box-sizing: border-box;");
 css += "\n/* host: content-sized sections; the hero keeps at least one screen */\nmain > :is(section, .section).hero { min-height: 100vh; min-height: 100svh; }\nmain > :is(section, .section) > :is(.wrap, .container), footer.closing > .wrap { height: auto; }\n";
+// Host layer last: tolerant hero placement, product card and drawing/chart panel.
+css += "\n/* local: host */\n" + (await local("host", "css"));
 
 // Scripts: motion.js is a plain script; moments are ES modules, bundled without dynamic import().
 // motion.js starts itself on DOMContentLoaded; its exports are only for the upstream module API.
@@ -118,8 +120,11 @@ ${moments}
 ${loader}
 })();
 `;
+// Host script last, in its own scope: range frames follow their pictures' proportion.
+const hostJs = await local("host", "js");
+const jsAll = js + "(function () {\n" + hostJs + "\n})();\n";
 await mkdir(out, { recursive: true });
 await writeFile(path.join(out, "taste.css"), css);
 // An inline <script> ends at the first "</script": keep upstream comments from closing it.
-await writeFile(path.join(out, "taste.js"), js.replace(/<\/(script)/gi, "<\\/$1"));
-console.log(JSON.stringify({ css: css.length, js: js.length, cssSha: sha(css), jsSha: sha(js), moments: [...MOMENTS, ...LOCAL] }));
+await writeFile(path.join(out, "taste.js"), jsAll.replace(/<\/(script)/gi, "<\\/$1"));
+console.log(JSON.stringify({ css: css.length, js: jsAll.length, cssSha: sha(css), jsSha: sha(jsAll), moments: [...MOMENTS, ...LOCAL] }));
