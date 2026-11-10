@@ -25,7 +25,7 @@ import {
   mediaLayout,
   type MediaLayout,
 } from "./media-layout.js";
-export const PARSER_VERSION = "markdown-media-v8";
+export const PARSER_VERSION = "markdown-media-v9";
 export const DOCUMENT_MEDIA_LIMIT = 200;
 export const DOCUMENT_MEDIA_BYTES = 80 * 1024 * 1024;
 export const sourceFingerprint = (buffer: Buffer) =>
@@ -185,6 +185,8 @@ export async function extract(
               url: variant.url,
               width: variant.width,
               height: variant.height,
+              ink: cutout.ink,
+              ...(cutout.lineArt ? { lineArt: true } : {}),
             };
           }
         }

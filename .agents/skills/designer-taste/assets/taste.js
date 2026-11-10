@@ -1098,12 +1098,22 @@ return function (root, opts, lib) {
 
 // Static loader adapted from moments/moments.js: same mount(root, opts, lib) contract, no import().
 const html = document.documentElement;
+const STRUCTURE = { "pinned-chapters": ".mo-pc__grid", "photo-chapters": ".mo-ph" };
 const libApi = { reduced, phone, still, stillWhy, inCard, coarse, clamp, lerp, ease, scrub, once, split, lines, fontsReady };
 function mount(el) {
   if (el.__momentMounted) return;
   el.__momentMounted = true;
   const id = el.dataset.moment, mod = M[id];
   if (!mod) { el.dataset.momentFailed = "not in kit"; el.classList.add("mo-safe", "is-done"); return; }
+  // The scroll moments' CSS needs main > section > block. With any other structure the
+  // stage would collapse to nothing, so the section stays in its readable static state.
+  const block = STRUCTURE[id];
+  if (block && !(el.parentElement && el.parentElement.tagName === "MAIN" && [...el.children].some((c) => c.matches(block)))) {
+    el.dataset.momentFailed = "structure: main > [data-moment] > " + block;
+    el.classList.add("mo-safe", "is-done");
+    console.warn("designer-taste: " + id + " needs main > section > " + block + "; shown static");
+    return;
+  }
   let opts = {};
   try { opts = JSON.parse(el.dataset.momentOpts || "{}"); } catch {}
   const card = inCard(el);

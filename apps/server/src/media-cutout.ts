@@ -100,7 +100,22 @@ export async function transparentVariant(buffer: Buffer) {
       out[p * 4 + 3] = Math.min(255, Math.round((d / 48) * 255));
     }
   }
+  // What remains decides which grounds it can stand on: mean luminance of the
+  // kept pixels, and how much of the frame they cover (thin line art covers little).
+  let sum = 0,
+    kept = 0;
+  for (let p = 0; p < w * h; p++)
+    if (out[p * 4 + 3] > 128) {
+      sum +=
+        0.2126 * out[p * 4] + 0.7152 * out[p * 4 + 1] + 0.0722 * out[p * 4 + 2];
+      kept++;
+    }
+  const mean = kept ? sum / kept : 255;
+  const ink: "dark" | "light" | "mixed" =
+    mean < 110 ? "dark" : mean > 170 ? "light" : "mixed";
   return {
+    ink,
+    lineArt: 1 - share < 0.2 && ink !== "light",
     buffer: await sharp(out, { raw: { width: w, height: h, channels: 4 } })
       .png({ compressionLevel: 9 })
       .toBuffer(),

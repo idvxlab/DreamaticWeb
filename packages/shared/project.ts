@@ -36,7 +36,15 @@ export interface Asset {
   /** Deterministic import signals; flat/frame-only media are not standalone content. */
   flags?: AssetFlag[];
   /** Program-made PNG of a light-backdrop image with that backdrop removed; the original stays unchanged. */
-  transparent?: { url: string; width?: number; height?: number };
+  transparent?: {
+    url: string;
+    width?: number;
+    height?: number;
+    /** Tone of what remains: a dark subject needs a light ground (line art may be inverted). */
+    ink?: "dark" | "light" | "mixed";
+    /** Thin strokes covering little of the frame, such as a dimension drawing. */
+    lineArt?: boolean;
+  };
 }
 export type AssetFlag = "flat" | "frame-only" | "fragment" | "page-background";
 export interface Source {

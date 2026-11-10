@@ -77,7 +77,12 @@ export async function persistExtraction(
             (a.page ? ` · page:${a.page}` : "") +
             (a.context ? ` · nearby:${JSON.stringify(a.context)}` : "") +
             (a.flags?.length ? ` · flags:${a.flags.join(",")}` : "") +
-            (a.transparent ? ` · transparent:${a.transparent.url}` : ""),
+            (a.transparent
+              ? ` · transparent:${a.transparent.url}` +
+                (a.transparent.ink
+                  ? ` (${a.transparent.ink} ink${a.transparent.lineArt ? ", line art" : ""})`
+                  : "")
+              : ""),
         )
         .join("\n") +
       (source.assets.some((a) => a.flags?.length || a.context || a.transparent)

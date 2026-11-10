@@ -74,6 +74,8 @@ Other heroes in the kit: `hero--split` (words left, picture right), `hero--film`
 
 ## Moments (one or two per page, each its own section)
 
+Copy a moment's markup exactly: the section is a direct child of `<main>` and its block (`.container mo-pc__grid`, `.container mo-ph`) is the section's direct child, with no `.wrap` or extra wrapper between them and no classes added to the moment's own elements. A moment whose structure differs is shown static. Scroll moments are for photographs and renders with real content; a drawing goes on a light panel.
+
 Pinned chapters — one section holds while 2–4 steps change one shared visual (product to product, design to test):
 
 ```html

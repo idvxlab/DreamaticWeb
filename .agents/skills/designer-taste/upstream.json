@@ -100,7 +100,7 @@
     },
     {
       "path": "references/kit.md",
-      "sha256": "6110f072467dbc2dd069d142c89e81ae4873b1dd58f4ebd684ee2cae090dd754"
+      "sha256": "3530fdd6bdd518560ed44d7b9b67cca9a729471a24b2bd031430e284cc976d50"
     },
     {
       "path": "assets/taste.css",
@@ -108,7 +108,7 @@
     },
     {
       "path": "assets/taste.js",
-      "sha256": "1377952c013e43040fd15a3db3df5e5e58bf75877e9490f87b679e952ba78223"
+      "sha256": "789ce60999f27ef8cbd703e6e3b7b7a1a4c0d932f2ea4e51de8af24e706366ad"
     }
   ],
   "build": "node scripts/build-taste-kit.mjs <checkout>/skills/taste-skill",
@@ -117,6 +117,7 @@
     "system.js, layout.js, ui.js, effects, scenes, photo search, dealers and checker scripts omitted: they need module loading, network or a local browser",
     "remote Google fonts removed; system font stacks",
     "house rules, kind decision and product page rules condensed from SKILL.md and sections.md; kit markup written from system.md, hero-product.html and moment headers",
-    "the host inlines skill:// references; pages set data-tone themselves because system.js is not included"
+    "the host inlines skill:// references; pages set data-tone themselves because system.js is not included",
+    "the bundled loader leaves pinned-chapters and photo-chapters static unless they sit at main > section > block, so a deviating structure never collapses to an empty screen"
   ]
 }

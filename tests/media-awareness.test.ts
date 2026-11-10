@@ -516,6 +516,11 @@ test("light-backdrop images get a transparent variant; edge-to-edge photos and e
     255,
     "enclosed white hub is not part of the backdrop",
   );
+  assert.equal(
+    cut!.ink,
+    "dark",
+    "a dark subject is reported so it is not put on a dark ground",
+  );
   const photo = await sharp({
     create: {
       width: 300,
