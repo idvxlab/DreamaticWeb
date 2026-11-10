@@ -65,6 +65,8 @@ const roleNames = {
   designer: "正在设计并生成页面",
 };
 const strings = Type.Array(Type.String());
+/** Reasoning cap for the Designer turn that writes a page after plan_page (only lowers a configured cap). */
+export const WRITING_THINKING_BUDGET = 2048;
 const intentParams = Type.Object({
   goal: Type.String(),
   audience: Type.String(),
@@ -359,6 +361,14 @@ async function execute(
       format: source.format,
       assets: source.assets.filter(offeredAsset),
     }));
+    // A recorded Designer plan; once present, the writing turn reasons less.
+    let plan:
+      | {
+          imagePlan?: { assetId: string }[];
+          designPlan?: { moments: string[] };
+          contentOutline?: { id: string }[];
+        }
+      | undefined;
     // Skills actually preloaded per role; only these may supply skill:// page assets.
     const loadedSkills: Partial<Record<Role, string[]>> = {};
     async function roleRun(
@@ -429,7 +439,20 @@ async function execute(
         },
         streamFn: (model, context, opts) => {
           metrics.modelCalls++;
-          return (options.streamFn || runtime.streamFn)(model, context, opts);
+          const writing = role === "designer" && plan !== undefined;
+          return (options.streamFn || runtime.streamFn)(
+            model,
+            context,
+            writing
+              ? {
+                  ...opts,
+                  thinkingBudgets: {
+                    ...opts?.thinkingBudgets,
+                    low: WRITING_THINKING_BUDGET,
+                  },
+                }
+              : opts,
+          );
         },
         onResponse: (response) => {
           responseStatus = response.status;
@@ -1030,72 +1053,86 @@ async function execute(
           true,
         ),
       );
-    else
+    else {
+      const planFields = {
+        imagePlan: Type.Optional(
+          Type.Array(
+            Type.Object({
+              assetId: Type.String(),
+              shows: Type.String({
+                description: "What the image actually shows",
+              }),
+              role: Type.String({
+                description:
+                  "hero subject, detail, proof, use, process or brand",
+              }),
+              placement: Type.String({
+                description: "Section id and why it belongs there",
+              }),
+            }),
+            { maxItems: 24 },
+          ),
+        ),
+        designPlan: Type.Optional(
+          Type.Object({
+            ground: Type.String({
+              description: "Ground and accent, and which image decided them",
+            }),
+            hero: Type.String({
+              description: "Hero layout and its subject",
+            }),
+            type: Type.String({ description: "Type voice" }),
+            moments: Type.Array(Type.String(), {
+              description: "The one or two signature moments, by kit id",
+              maxItems: 3,
+            }),
+            reason: Type.String({
+              description: "Why this design fits this client and these images",
+            }),
+          }),
+        ),
+        contentOutline: Type.Optional(
+          Type.Array(
+            Type.Object({
+              id: Type.String({
+                description: "id of the section element in html",
+              }),
+              purpose: Type.String({
+                description:
+                  "What the reader should understand, feel or do after this section",
+              }),
+              content: Type.String({
+                description: "Key message, fact IDs and media used",
+              }),
+              form: Type.String({
+                description:
+                  "Composition and visual treatment that serve that purpose",
+              }),
+            }),
+            { maxItems: 12 },
+          ),
+        ),
+      };
+      // Round one of create/redesign: decide images, design and content with the
+      // full response budget for reasoning; round two writes only the page.
+      tools.push(
+        tool(
+          "plan_page",
+          "Record the image plan, design plan and content outline before writing the page; the next turn submits the page",
+          Type.Object(planFields),
+          async (args) => {
+            if (accepted) throw new Error("页面已经提交");
+            plan = args;
+            return "Plan recorded. In your next turn call submit_page with the complete HTML that carries out this plan; do not restate the plan.";
+          },
+        ),
+      );
       tools.push(
         tool(
           "submit_page",
           "Submit complete responsive inline HTML and finish",
           Type.Object({
-            // Listed first: images are understood and the design decided before the code.
-            imagePlan: Type.Optional(
-              Type.Array(
-                Type.Object({
-                  assetId: Type.String(),
-                  shows: Type.String({
-                    description: "What the image actually shows",
-                  }),
-                  role: Type.String({
-                    description:
-                      "hero subject, detail, proof, use, process or brand",
-                  }),
-                  placement: Type.String({
-                    description: "Section id and why it belongs there",
-                  }),
-                }),
-                { maxItems: 24 },
-              ),
-            ),
-            designPlan: Type.Optional(
-              Type.Object({
-                ground: Type.String({
-                  description:
-                    "Ground and accent, and which image decided them",
-                }),
-                hero: Type.String({
-                  description: "Hero layout and its subject",
-                }),
-                type: Type.String({ description: "Type voice" }),
-                moments: Type.Array(Type.String(), {
-                  description: "The one or two signature moments, by kit id",
-                  maxItems: 3,
-                }),
-                reason: Type.String({
-                  description:
-                    "Why this design fits this client and these images",
-                }),
-              }),
-            ),
-            contentOutline: Type.Optional(
-              Type.Array(
-                Type.Object({
-                  id: Type.String({
-                    description: "id of the section element in html",
-                  }),
-                  purpose: Type.String({
-                    description:
-                      "What the reader should understand, feel or do after this section",
-                  }),
-                  content: Type.String({
-                    description: "Key message, fact IDs and media used",
-                  }),
-                  form: Type.String({
-                    description:
-                      "Composition and visual treatment that serve that purpose",
-                  }),
-                }),
-                { maxItems: 12 },
-              ),
-            ),
+            ...planFields,
             html: Type.String({ minLength: 20, maxLength: 2500000 }),
             usedFactIds: Type.Array(Type.String()),
           }),
@@ -1106,13 +1143,20 @@ async function execute(
             imagePlan,
             designPlan,
           }) =>
-            accept(html, 0, usedFactIds, contentOutline, {
-              imagePlan,
-              designPlan,
-            }),
+            accept(
+              html,
+              0,
+              usedFactIds,
+              contentOutline ?? plan?.contentOutline,
+              {
+                imagePlan: imagePlan ?? plan?.imagePlan,
+                designPlan: designPlan ?? plan?.designPlan,
+              },
+            ),
           true,
         ),
       );
+    }
     await roleRun(
       "designer",
       `# Fact application\nReport usedFactIds in the terminal tool: IDs actually represented in the resulting page, including preserved content. ${request.updateFacts ? "EXACT selection update: use every selected fact and remove content relying on deselected facts. Preserve unrelated design and components. Empty selection means remove all fact-derived content, not use all facts." : "Preserve existing fact associations when editing; report changed associations accurately."}\n# Previously applied fact IDs\n${JSON.stringify(existingPage?.appliedFactIds || [])}\n# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${designerContext(chosen, catalog, selected ? factsMarkdown(chosen) : facts!.markdown)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,

@@ -5,13 +5,13 @@ description: Build a company, product or hardware website the way a good studio 
 
 # Ship the page a good company would ship
 
-Say plainly what is sold, show the real thing on every screen and look made for this client, not from a template and not like an art piece. Build on the kit in `assets/`: it supplies the grid, spacing, type scale, buttons, nav, cards, rows, hero layouts, the hover and entrance layer and five scroll moments. Write markup and a short page stylesheet for this client; never rewrite what the kit already provides, and never add a second grid, spacing scale, button, card or radius style.
+Say plainly what is sold, show the real thing on every screen and look made for this client, not from a template. Build on the kit in `assets/` (grid, spacing, type, buttons, nav, cards, rows, heroes, hover and entrance layer, scroll moments). Write markup and a short page stylesheet; never rewrite what the kit provides or add a second grid, button, card or radius style.
 
 ## House rules
 
 1. **No caption or description under any image.** The image carries its alt text only.
 2. **Every visual renders**, never an empty ground or a box where a picture should be.
-3. **One section per screen** at 1440×900: the hero alone on the first screen; every section one or two screens tall; no next heading peeking in.
+3. **Sections sized by their content** at 1440: the hero alone on the first screen; every other section as tall as its content with generous spacing; never a fixed height that content can overflow.
 4. **Equal left and right content edges** (`.wrap` everywhere).
 5. **One entrance and one or two moments per page.** The hero enters once (`data-enter`); one moment, two on a long page, each in its own section. No tilt, carousels, timed tabs, or effects on cards.
 6. **Real material leads.** The client's own photographs, renders and drawings, large, exactly as supplied; never a generic stock scene used as mood.
@@ -42,7 +42,7 @@ Hardware and technical products (propellers, drones, devices) are **tech/product
 
 ## Building with the kit
 
-Follow [kit markup](references/kit.md): include the kit, set the palette on `:root`, then compose from its blocks. Keep the page's own CSS short: palette tokens, picture crops and one or two client-specific details.
+Follow [kit markup](references/kit.md): include the kit, set the palette on `:root`, then compose from its blocks. Keep the page's own CSS short.
 
 ## Required references
 

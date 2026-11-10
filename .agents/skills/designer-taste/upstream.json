@@ -112,7 +112,7 @@
     },
     {
       "path": "SKILL.md",
-      "sha256": "75e463e4c9756176a79b797bd6c039feac87b53d0f1a06714232a41d6c6f9f64"
+      "sha256": "e894c73899b74f4b34e36354122fb564eba7aded167f30caf0b298cd89963d9c"
     },
     {
       "path": "references/kit.md",
@@ -120,7 +120,7 @@
     },
     {
       "path": "assets/taste.css",
-      "sha256": "7ac9876f22a21c33521213a2ac2e8e495532c1e14f6aac39cb16324a62a1b0a2"
+      "sha256": "ccb3af2ab74487fe6b703a8082328fe0e32a217e1f04c0e91583a2da6b0a89cc"
     },
     {
       "path": "assets/taste.js",
@@ -135,7 +135,8 @@
     "house rules, kind decision and product page rules condensed from SKILL.md and sections.md; kit markup written from system.md, hero-product.html and moment headers",
     "the host inlines skill:// references; pages set data-tone themselves because system.js is not included",
     "the bundled loader leaves pinned-chapters and photo-chapters static unless they sit at main > section > block, so a deviating structure never collapses to an empty screen",
-    "window-parallax and giant-type-pass bundled; product-close-up added locally on the upstream moment lib; image-led page rules, imagePlan and designPlan added to the entry; transparent cut-outs removed by decision"
+    "window-parallax and giant-type-pass bundled; product-close-up added locally on the upstream moment lib; image-led page rules, imagePlan and designPlan added to the entry; transparent cut-outs removed by decision",
+    "sections are content-sized instead of fixed at one or two screens (upstream needs its browser checker for that); the hero keeps at least one screen"
   ],
   "local": [
     {

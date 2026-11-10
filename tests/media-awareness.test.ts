@@ -496,3 +496,75 @@ test("contentOutline is written before the page and unimplemented sections are r
     await removeProject(p.id);
   }
 });
+
+test("plan_page takes the reasoning turn; the writing turn gets the lower budget and the plan still drives checks", async () => {
+  const p = await create();
+  try {
+    const budgets: (number | undefined)[] = [];
+    let planned = false;
+    const streamFn: StreamFn = (model, context, opts) => {
+      const sys = getCurrentSystemMessage(context.messages)!;
+      const prompt =
+        typeof sys.content === "string"
+          ? sys.content
+          : sys.content.map((c) => c.text).join("\n");
+      if (prompt.includes("# Orchestrator"))
+        return answer(model, "submit_intent", {
+          goal: "展示",
+          audience: "访客",
+          content: ["产品"],
+          features: [],
+          design: [],
+          constraints: [],
+        });
+      if (prompt.includes("# Analyst"))
+        return answer(model, "submit_facts", {
+          summary: "s",
+          facts: [],
+          limitations: [],
+        });
+      budgets.push(
+        (opts as { thinkingBudgets?: { low?: number } })?.thinkingBudgets?.low,
+      );
+      if (!planned) {
+        planned = true;
+        return answer(model, "plan_page", {
+          designPlan: {
+            ground: "light",
+            hero: "product",
+            type: "sans",
+            moments: ["product-close-up"],
+            reason: "r",
+          },
+          contentOutline: [
+            { id: "offer", purpose: "p", content: "c", form: "f" },
+          ],
+        });
+      }
+      return answer(model, "submit_page", {
+        html: '<html><body><h1 id="offer">P</h1></body></html>',
+        usedFactIds: [],
+      });
+    };
+    await runProject(
+      p,
+      requestSchema.parse({ text: "生成展示页" }),
+      save,
+      () => {},
+      { config, streamFn },
+    );
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(
+      p.generation!.metrics!.modelCalls,
+      4,
+      "2 upstream + plan + page",
+    );
+    assert.deepEqual(budgets, [undefined, 2048]);
+    const issue = p.versions[0].checks!.issues.find(
+      (i) => i.code === "design_plan_missing",
+    );
+    assert.match(issue!.message, /product-close-up/);
+  } finally {
+    await removeProject(p.id);
+  }
+});

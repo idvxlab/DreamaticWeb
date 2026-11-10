@@ -223,7 +223,6 @@ p { text-wrap: pretty; }
    section keeps at least its screens and grows past them rather than overlap the next. */
 main > :is(section, .section), footer.closing {
   position: relative; box-sizing: border-box;
-  height: calc(var(--h, 1) * 100vh); height: calc(var(--h, 1) * 100svh);
   padding: var(--padt) 0 calc(var(--padb) + var(--bar));
 }
 main > :is(section, .section) > :is(.wrap, .container), footer.closing > .wrap { position: relative; z-index: 1; height: 100%; }
@@ -2745,3 +2744,7 @@ main > [data-moment="product-close-up"].is-live > .mo-cu__stage { position: stic
 [data-moment="product-close-up"].is-live .mo-cu__notes > li { opacity: 0; transform: translateY(12px); transition: opacity .5s ease, transform .5s ease; }
 [data-moment="product-close-up"].is-live .mo-cu__notes > li.is-on { opacity: 1; transform: none; }
 @media (max-width: 1023px) { [data-moment="product-close-up"] .mo-cu__stage { grid-template-columns: 1fr; } }
+
+/* host: content-sized sections; the hero keeps at least one screen */
+main > :is(section, .section).hero { min-height: 100vh; min-height: 100svh; }
+main > :is(section, .section) > :is(.wrap, .container), footer.closing > .wrap { height: auto; }

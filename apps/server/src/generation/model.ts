@@ -87,7 +87,11 @@ export function modelRuntime(profile: ModelProfile) {
             ...options,
             thinkingBudgets: {
               ...options?.thinkingBudgets,
-              low: thinking.budget,
+              // A caller may lower the profile's cap for one request, never raise it.
+              low: Math.min(
+                thinking.budget,
+                options?.thinkingBudgets?.low ?? thinking.budget,
+              ),
             },
           })
       : stream) as typeof stream,

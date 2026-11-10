@@ -35,6 +35,13 @@ for (const p of cssParts) css += `\n/* ${p} */\n` + (await read(p));
 for (const id of LOCAL) css += `\n/* local: ${id} */\n` + (await local(id, "css"));
 // Remote fonts are blocked by the page policy; the kit's own system font stacks remain.
 css = css.replace(/@import[^;]+;/g, "");
+// Upstream fixes every section at exactly one or two screens and relies on its own
+// browser checker to make content fit. This host has no render loop, so sections
+// size to their content (the hero keeps at least one screen) instead of overflowing.
+const FIXED = "main > :is(section, .section), footer.closing {\n  position: relative; box-sizing: border-box;\n  height: calc(var(--h, 1) * 100vh); height: calc(var(--h, 1) * 100svh);";
+if (!css.includes(FIXED)) throw new Error("upstream section height rule changed");
+css = css.replace(FIXED, "main > :is(section, .section), footer.closing {\n  position: relative; box-sizing: border-box;");
+css += "\n/* host: content-sized sections; the hero keeps at least one screen */\nmain > :is(section, .section).hero { min-height: 100vh; min-height: 100svh; }\nmain > :is(section, .section) > :is(.wrap, .container), footer.closing > .wrap { height: auto; }\n";
 
 // Scripts: motion.js is a plain script; moments are ES modules, bundled without dynamic import().
 // motion.js starts itself on DOMContentLoaded; its exports are only for the upstream module API.
