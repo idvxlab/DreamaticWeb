@@ -87,7 +87,11 @@ test("document load/save cycles keep metadata out of canvas and preserve CSS, bo
         });
       }
       e.destroy();
-      return { html, cycles };
+      return {
+        html,
+        preview: w.serializePreviewDocument(html),
+        cycles,
+      };
     });
     for (const cycle of output.cycles)
       assert.deepEqual(cycle, {
@@ -103,6 +107,8 @@ test("document load/save cycles keep metadata out of canvas and preserve CSS, bo
         marker: "original",
         description: "A precise description",
       });
+    assert.doesNotMatch(output.html, /data-dreamatic-preview-navigation/);
+    assert.match(output.preview, /data-dreamatic-preview-navigation/);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setContent(output.html);

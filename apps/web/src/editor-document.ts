@@ -95,3 +95,39 @@ export function serializeEditorDocument(input: {
     doc.body.insertAdjacentHTML("beforeend", script);
   return "<!doctype html>" + doc.documentElement.outerHTML;
 }
+
+
+
+export function serializePreviewDocument(html: string) {
+  // Kept inside the function: tests evaluate this function in a page context.
+  const previewNavigationScript = `(() => {
+    document.addEventListener("click", (event) => {
+      if (event.defaultPrevented) return;
+      const origin = event.target;
+      const anchor = origin instanceof Element
+        ? origin.closest('a[href^="#"]')
+        : null;
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") || "";
+      event.preventDefault();
+      if (!href || href === "#") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      let id;
+      try {
+        id = decodeURIComponent(href.slice(1));
+      } catch {
+        return;
+      }
+      const target = document.getElementById(id) || document.getElementsByName(id)[0];
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  })();`;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const script = doc.createElement("script");
+  script.dataset.dreamaticPreviewNavigation = "";
+  script.textContent = previewNavigationScript;
+  doc.body.append(script);
+  return "<!doctype html>" + doc.documentElement.outerHTML;
+}

@@ -445,6 +445,7 @@ function App() {
             .map((p) => (
               <div key={p.id} className="project-entry">
                 <button
+                  title={p.title}
                   className={
                     "project-item " + (project?.id === p.id ? "selected" : "")
                   }

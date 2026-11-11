@@ -198,6 +198,18 @@ a:focus-visible {
   flex: 1;
   overflow: auto;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #5f6653 #24261f;
+}
+.project-list::-webkit-scrollbar {
+  width: 7px;
+}
+.project-list::-webkit-scrollbar-track {
+  background: #24261f;
+}
+.project-list::-webkit-scrollbar-thumb {
+  background: #5f6653;
+  border-radius: 999px;
 }
 .project-item {
   display: flex;
@@ -226,15 +238,21 @@ a:focus-visible {
   background: #3a3e31;
 }
 .project-item > span:nth-child(2) {
+  flex: 1;
   min-width: 0;
 }
 .project-item strong {
-  display: block;
+  /* Two lines: experiment names differ at the end, so a one-line ellipsis hides them. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   font-size: 10px;
+  line-height: 1.4;
   overflow: hidden;
-  max-width: 121px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-weight: 500;
 }
 .project-item small {
@@ -1490,6 +1508,13 @@ a:focus-visible {
   padding: 0 10px;
   margin-left: 6px;
 }
+.editor-animation-note {
+  max-width: 260px;
+  margin-left: 5px;
+  color: #6e785f;
+  font-size: 9px;
+  line-height: 1.35;
+}
 .editor-workspace {
   display: flex;
   flex: 1;
@@ -1630,6 +1655,56 @@ a:focus-visible {
 .gjs-field input,
 .gjs-field select {
   font-size: 10px !important;
+}
+.gjs-field-arrows {
+  width: 16px !important;
+  height: 20px !important;
+  right: 2px !important;
+}
+.gjs-field-arrow-u,
+.gjs-field-arrow-d {
+  left: 0 !important;
+  width: 16px !important;
+  height: 10px !important;
+  border: 0 !important;
+}
+.gjs-field-arrow-u {
+  top: 0 !important;
+}
+.gjs-field-arrow-d {
+  bottom: 0 !important;
+}
+.gjs-field-arrow-u::after,
+.gjs-field-arrow-d::after {
+  position: absolute;
+  left: 5px;
+  content: "";
+  border-right: 3px solid transparent;
+  border-left: 3px solid transparent;
+}
+.gjs-field-arrow-u::after {
+  top: 3px;
+  border-bottom: 4px solid var(--gjs-arrow-color);
+}
+.gjs-field-arrow-d::after {
+  bottom: 3px;
+  border-top: 4px solid var(--gjs-arrow-color);
+}
+.asset-manager-hint,
+.asset-manager-empty {
+  margin: 0;
+  padding: 11px 14px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #59664c;
+}
+.asset-manager-hint {
+  border-bottom: 1px solid #d8e0cc;
+  background: #edf2e4;
+}
+.asset-manager-empty {
+  width: 100%;
+  text-align: center;
 }
 .gjs-block {
   width: 42% !important;
@@ -2504,9 +2579,6 @@ a:focus-visible {
   width: calc(100% - 27px);
   flex: 1;
   min-width: 0;
-}
-.project-entry .project-item strong {
-  max-width: 115px;
 }
 .project-actions {
   flex-shrink: 0;

@@ -8,6 +8,7 @@ import { parseEditorCss } from "./editor-css";
 import {
   parseEditorDocument,
   serializeEditorDocument,
+  serializePreviewDocument,
 } from "./editor-document";
 import { blockCard } from "./block-cards";
 import { EDITOR_CSP } from "../../../packages/shared/html-policy";
@@ -27,6 +28,155 @@ import {
   Tablet,
   Smartphone,
 } from "lucide-react";
+
+type Translate = (value: string) => string;
+
+const westernFonts = [
+  "Arial, Helvetica, sans-serif",
+  "Arial Black, Gadget, sans-serif",
+  "Brush Script MT, sans-serif",
+  "Comic Sans MS, cursive, sans-serif",
+  "Courier New, Courier, monospace",
+  "Georgia, serif",
+  "Helvetica, sans-serif",
+  "Impact, Charcoal, sans-serif",
+  "Lucida Sans Unicode, Lucida Grande, sans-serif",
+  "Tahoma, Geneva, sans-serif",
+  "Times New Roman, Times, serif",
+  "Trebuchet MS, Helvetica, sans-serif",
+  "Verdana, Geneva, sans-serif",
+].map((font) => ({ id: font, label: font.split(",")[0] }));
+
+const fontOptions = [
+  {
+    id: '"PingFang SC", "Hiragino Sans GB", sans-serif',
+    label: "苹方",
+  },
+  { id: '"Microsoft YaHei", sans-serif', label: "微软雅黑" },
+  {
+    id: '"Noto Sans SC", "Source Han Sans SC", sans-serif',
+    label: "思源黑体",
+  },
+  { id: '"Songti SC", "Noto Serif SC", serif', label: "宋体" },
+  ...westernFonts,
+];
+
+function stylePropertyOverrides(t: Translate) {
+  const sides = (prefix: "padding" | "margin") =>
+    ["上", "右", "下", "左"].map((label, index) => ({
+      property: `${prefix}-${["top", "right", "bottom", "left"][index]}`,
+      label: t(label),
+    }));
+  return {
+    layout: [
+      ["display", "显示方式"],
+      ["flex-direction", "排列方向"],
+      ["justify-content", "主轴对齐"],
+      ["align-items", "交叉轴对齐"],
+      ["gap", "间距"],
+      ["width", "宽度"],
+      ["height", "高度"],
+      ["min-height", "最小高度"],
+      ["padding", "内边距"],
+      ["margin", "外边距"],
+    ].map(([property, label]) => ({
+      property,
+      label: t(label),
+      ...(["padding", "margin"].includes(property)
+        ? { properties: sides(property as "padding" | "margin") }
+        : {}),
+    })),
+    typography: [
+      { property: "font-family", label: t("字体"), options: fontOptions },
+      ...[
+        ["font-size", "字号"],
+        ["font-weight", "字重"],
+        ["line-height", "行高"],
+        ["letter-spacing", "字间距"],
+        ["color", "文字颜色"],
+        ["text-align", "对齐方式"],
+      ].map(([property, label]) => ({ property, label: t(label) })),
+    ],
+    appearance: [
+      { property: "background-color", label: t("背景色") },
+      {
+        property: "border",
+        label: t("边框"),
+        properties: [
+          { property: "border-width", label: t("粗细") },
+          { property: "border-style", label: t("样式") },
+          { property: "border-color", label: t("颜色") },
+        ],
+      },
+      {
+        property: "border-radius",
+        label: t("圆角"),
+        properties: [
+          ["border-top-left-radius", "左上"],
+          ["border-top-right-radius", "右上"],
+          ["border-bottom-right-radius", "右下"],
+          ["border-bottom-left-radius", "左下"],
+        ].map(([property, label]) => ({ property, label: t(label) })),
+      },
+      {
+        property: "box-shadow",
+        label: t("阴影"),
+        properties: [
+          ["box-shadow-h", "水平偏移"],
+          ["box-shadow-v", "垂直偏移"],
+          ["box-shadow-blur", "模糊"],
+          ["box-shadow-spread", "扩散"],
+          ["box-shadow-color", "颜色"],
+          ["box-shadow-type", "类型"],
+        ].map(([property, label]) => ({ property, label: t(label) })),
+      },
+      { property: "opacity", label: t("不透明度") },
+    ],
+  };
+}
+
+function updateStyleManagerLanguage(e: GrapesEditor, t: Translate) {
+  const definitions = stylePropertyOverrides(t);
+  const updateProperties = (models: any, overrides: any[]) => {
+    models?.forEach((model: any) => {
+      const property = model.get("property") || model.get("id");
+      const override = overrides.find(
+        (item) => item.property === property || item.id === property,
+      );
+      if (!override) return;
+      model.set("label", override.label);
+      if (override.options && typeof model.setOptions === "function")
+        model.setOptions(override.options);
+      if (override.properties && typeof model.getProperties === "function")
+        updateProperties(model.getProperties(), override.properties);
+    });
+  };
+  e.StyleManager.getSectors({ array: true }).forEach((sector: any) => {
+    const id = sector.get("id") as keyof typeof definitions;
+    const sectorName = {
+      layout: "布局",
+      typography: "文字",
+      appearance: "外观",
+    }[id];
+    if (sectorName) sector.set("name", t(sectorName));
+    updateProperties(sector.getProperties(), definitions[id] || []);
+  });
+}
+
+const editorOnlyRevealCss = `
+.section-reveal,
+[data-reveal],
+.reveal,
+.fade-in,
+.fade-up,
+[style*="opacity:0"],
+[style*="opacity: 0"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  animation: none !important;
+  transition: none !important;
+}`;
 interface Props {
   projectId: string;
   assets: Asset[];
@@ -78,6 +228,16 @@ export default function Editor({
           content: EDITOR_CSP,
         },
       },
+      // Editor-only: script-driven reveals stay visible in the design canvas.
+      // The head model is never serialized by getHtml()/getCss().
+      {
+        tagName: "style",
+        attributes: {
+          id: "dreamatic-editor-reveal-style",
+          "data-dreamatic-editor-only": "",
+        },
+        components: editorOnlyRevealCss,
+      },
     ]);
   };
   const bodyAttributes = useRef<Record<string, string>>({});
@@ -94,6 +254,8 @@ export default function Editor({
     [openError, setOpenError] = useState("");
   const callbacks = useRef({ onSave, onDirty, onDraft });
   callbacks.current = { onSave, onDirty, onDraft };
+  const translate = useRef(t);
+  translate.current = t;
   useEffect(() => {
     if (!host.current) return;
     const mountIds = ["blocks", "styles", "layers", "selectors", "traits"];
@@ -109,6 +271,9 @@ export default function Editor({
       panels: { defaults: [] },
       assetManager: {
         upload: false,
+        embedAsBase64: false,
+        showUrlInput: false,
+        noAssets: `<p class="asset-manager-empty">${t("项目里还没有图片素材")}</p>`,
         assets: assets
           .filter((a) => a.type === "image")
           .map((a) => ({ src: a.url, name: a.name })),
@@ -139,6 +304,7 @@ export default function Editor({
         appendTo: "#styles",
         sectors: [
           {
+            id: "layout",
             name: t("布局"),
             open: true,
             buildProps: [
@@ -153,8 +319,10 @@ export default function Editor({
               "padding",
               "margin",
             ],
+            properties: stylePropertyOverrides(t).layout as any,
           },
           {
+            id: "typography",
             name: t("文字"),
             open: true,
             buildProps: [
@@ -166,8 +334,10 @@ export default function Editor({
               "color",
               "text-align",
             ],
+            properties: stylePropertyOverrides(t).typography as any,
           },
           {
+            id: "appearance",
             name: t("外观"),
             open: true,
             buildProps: [
@@ -177,18 +347,15 @@ export default function Editor({
               "box-shadow",
               "opacity",
             ],
+            properties: stylePropertyOverrides(t).appearance as any,
           },
         ],
       },
       layerManager: { appendTo: "#layers" },
-      selectorManager: { appendTo: "#selectors" },
+      selectorManager: { appendTo: "#selectors", componentFirst: true },
       traitManager: { appendTo: "#traits" },
     });
     editor.current = e;
-    e.on("canvas:frame:load", ({ el }: { el: HTMLIFrameElement }) => {
-      el.setAttribute("sandbox", "allow-same-origin");
-      el.setAttribute("title", t("网页设计画布"));
-    });
     const secureFrame = () => {
       const frame = e.Canvas.getFrameEl();
       if (!frame) return;
@@ -204,6 +371,11 @@ export default function Editor({
         doc.head.prepend(meta);
       }
     };
+    e.on("canvas:frame:load", ({ el }: { el: HTMLIFrameElement }) => {
+      el.setAttribute("sandbox", "allow-same-origin");
+      el.setAttribute("title", translate.current("网页设计画布"));
+      secureFrame();
+    });
     e.on("canvas:frame:load:body", secureFrame);
     e.on("update", secureFrame);
     e.on("load", () => {
@@ -212,6 +384,64 @@ export default function Editor({
         .getElementById("selectors")
         ?.replaceChildren(e.SelectorManager.render([]));
     });
+    e.on("asset:open", () => {
+      const container = e.AssetManager.getContainer() as
+        HTMLElement | undefined;
+      if (!container) return;
+      let hint = container.querySelector<HTMLElement>(".asset-manager-hint");
+      if (!hint) {
+        hint = document.createElement("p");
+        hint.className = "asset-manager-hint";
+        container.prepend(hint);
+      }
+      hint.textContent = translate.current(
+        "只能选择项目中的图片；新图片请先作为资料上传。",
+      );
+    });
+    let colorAnchor: HTMLElement | null = null;
+    const placeColorPicker = () => {
+      requestAnimationFrame(() => {
+        const picker = document.querySelector<HTMLElement>(
+          ".sp-container:not(.sp-hidden)",
+        );
+        if (!picker || !colorAnchor?.isConnected) return;
+        const anchor = colorAnchor.getBoundingClientRect();
+        const width = picker.offsetWidth;
+        const height = picker.offsetHeight;
+        const gap = 6;
+        const left = Math.min(
+          Math.max(8, anchor.right - width),
+          Math.max(8, window.innerWidth - width - 8),
+        );
+        const preferredTop =
+          anchor.bottom + gap + height <= window.innerHeight
+            ? anchor.bottom + gap
+            : anchor.top - height - gap;
+        const top = Math.min(
+          Math.max(8, preferredTop),
+          Math.max(8, window.innerHeight - height - 8),
+        );
+        Object.assign(picker.style, {
+          position: "fixed",
+          left: `${left}px`,
+          top: `${top}px`,
+        });
+      });
+    };
+    const captureColorAnchor = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest<HTMLElement>(".gjs-field-color-picker");
+      if (!anchor) return;
+      colorAnchor = anchor;
+      placeColorPicker();
+    };
+    const inspector = host.current
+      ?.closest(".design-editor")
+      ?.querySelector(".inspector");
+    document.addEventListener("click", captureColorAnchor, true);
+    inspector?.addEventListener("scroll", placeColorPicker);
+    window.addEventListener("resize", placeColorPicker);
     const blocks = [
       [
         "text",
@@ -262,6 +492,7 @@ export default function Editor({
       e.BlockManager.add(String(id), {
         ...blockCard(String(id), String(label), t),
         content: content as any,
+        ...(id === "image" ? { activate: true, select: true } : {}),
       }),
     );
     e.on("update", () => {
@@ -272,6 +503,9 @@ export default function Editor({
       callbacks.current.onDirty(dirty);
     });
     return () => {
+      document.removeEventListener("click", captureColorAnchor, true);
+      inspector?.removeEventListener("scroll", placeColorPicker);
+      window.removeEventListener("resize", placeColorPicker);
       e.destroy();
       editor.current = null;
       mountIds.forEach((id) => document.getElementById(id)?.replaceChildren());
@@ -312,10 +546,8 @@ export default function Editor({
       const block = e.BlockManager.get(id);
       if (block) block.set(blockCard(id, t(label), t));
     }
-    e.StyleManager.getSectors().forEach(
-      (sector: { set: (key: string, value: string) => void }, index: number) =>
-        sector.set("name", t(["布局", "文字", "外观"][index] || "")),
-    );
+    updateStyleManagerLanguage(e, t);
+    e.AssetManager.getConfig().noAssets = `<p class="asset-manager-empty">${t("项目里还没有图片素材")}</p>`;
     e.Canvas.getFrameEl()?.setAttribute("title", t("网页设计画布"));
   }, [language]);
   useEffect(() => {
@@ -414,6 +646,9 @@ export default function Editor({
           <ExternalLink size={13} />
           {opening ? t("打开中…") : t("打开")}
         </button>
+        <span className="editor-animation-note">
+          {t("设计视图不运行动画脚本，动画请在“预览”中查看")}
+        </span>
         <div className="device-switch">
           {[
             [Monitor, "Desktop"],
@@ -496,7 +731,7 @@ export default function Editor({
           <iframe
             title="网页交互预览"
             sandbox="allow-scripts"
-            srcDoc={getHtml()}
+            srcDoc={serializePreviewDocument(getHtml())}
             style={{
               border: 0,
               height: "100%",
