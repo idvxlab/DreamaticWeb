@@ -5,4 +5,5 @@
 3. **Uppercase display.** Headlines and section openers in the condensed display face, uppercase for Latin, wide tracking, tight leading; small labels and nav in uppercase micro caps. The stylesheet sets these.
 4. **Ghost pills.** One action per band: a white 1px outline pill with an uppercase label; never a filled or coloured button.
 5. **White-ground illustrations stay small.** A mascot or character art on white sits small on a plate beside its brand, or is left out; when such pictures lead the page, night is the wrong look.
-6. **Drawings are plates.** Drawings, charts and white-ground renders sit on cool-white plates (the kit's frames with this style's `--range-bg` and `--panel-bg`) at full legibility, never on black and never filtered. Data stays at reading size.
+6. **Plates hold pictures only.** The light plate (`--panel-bg`) is for drawings, charts and white-ground pictures; words, cards and brand blocks stay on the black ground in white and grey.
+7. **Drawings are plates.** Drawings, charts and white-ground renders sit on cool-white plates (the kit's frames with this style's `--range-bg` and `--panel-bg`) at full legibility, never on black and never filtered. Data stays at reading size.
