@@ -1,0 +1,94 @@
+/* designer-compose: balanced compositions of words and pictures. Each block adapts to what it holds
+   (how many pictures, whether a side is empty, how tall the words are), so a row is never half
+   empty and the two sides of a split stay comparable. Works alone or on top of a page kit, whose
+   spacing and colours it inherits. */
+:root {
+  --cx-gap: var(--gutter, clamp(16px, 3vw, 40px));
+  --cx-radius: var(--r-lg, 14px);
+  --cx-panel: var(--panel-bg, color-mix(in oklab, currentColor 6%, transparent));
+  --cx-muted: var(--muted, var(--p-muted, color-mix(in oklab, currentColor 62%, transparent)));
+  --cx-line: var(--line, color-mix(in oklab, currentColor 14%, transparent));
+}
+:where([class^="cx-"], [class*=" cx-"]) { box-sizing: border-box; }
+:where(.cx-split, .cx-gallery, .cx-cards, .cx-timeline, .cx-facts, .cx-figure, .cx-band) { margin-block: 0; }
+:where(.cx-split, .cx-gallery, .cx-cards, .cx-timeline, .cx-facts) img { display: block; max-width: 100%; }
+
+/* ---- split: words beside a picture (or two). The picture never grows taller than the words
+   need (compose.js sets --cx-media-h from the words' height); a side left empty folds the split
+   into one readable column. */
+.cx-split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--cx-gap); align-items: center; }
+.cx-split--flip { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+.cx-split--flip > .cx-media { order: -1; }
+.cx-split--even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.cx-split > .cx-text { min-width: min(22rem, 100%); display: flex; flex-direction: column; gap: var(--s-4, 16px); }
+.cx-split > .cx-text > * { margin: 0; }
+.cx-split > .cx-text :is(p, li) { max-width: 64ch; }
+.cx-split > .cx-media { margin: 0; display: grid; gap: var(--s-3, 12px); justify-items: center; }
+.cx-split > .cx-media img {
+  width: auto; max-width: 100%; height: auto; max-height: var(--cx-media-h, min(70svh, 560px));
+  object-fit: contain; border-radius: var(--cx-radius);
+}
+.cx-split > .cx-media img[data-kind="photo"] { width: 100%; object-fit: cover; aspect-ratio: auto; }
+.cx-split > .cx-media:has(> :nth-child(2)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cx-split > .cx-media figcaption, .cx-figure figcaption { font-size: var(--t-small, 14px); color: var(--cx-muted); justify-self: start; }
+/* no picture (or an empty frame): one column of words, not a half row */
+.cx-split:not(:has(> .cx-media img, > .cx-media svg, > .cx-media video)) { grid-template-columns: minmax(0, 1fr); }
+.cx-split:not(:has(> .cx-media img, > .cx-media svg, > .cx-media video)) > .cx-media { display: none; }
+.cx-split:not(:has(> .cx-text > *)) { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 899px) {
+  .cx-split, .cx-split--flip, .cx-split--even { grid-template-columns: minmax(0, 1fr); }
+  .cx-split--flip > .cx-media { order: 0; }
+}
+
+/* ---- gallery: pictures as one even set; the column count follows how many there are, the last
+   row is centred, every frame in a row has the same height */
+.cx-gallery { --cols: 3; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--cx-gap); padding: 0; list-style: none; }
+.cx-gallery:has(> :only-child) { --cols: 1; }
+.cx-gallery:has(> :nth-child(2):last-child), .cx-gallery:has(> :nth-child(4):last-child) { --cols: 2; }
+.cx-gallery:has(> :nth-child(7)) { --cols: 4; }
+.cx-gallery > * { flex: 0 0 calc((100% - (var(--cols) - 1) * var(--cx-gap)) / var(--cols)); min-width: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-2, 8px); }
+.cx-gallery > * > :is(img, figure > img) { width: 100%; aspect-ratio: var(--cx-ratio, 4 / 3); object-fit: cover; border-radius: var(--cx-radius); background: var(--cx-panel); }
+.cx-gallery img:not([data-kind="photo"]) { object-fit: contain !important; }
+.cx-gallery:has(> :only-child) > * > img { aspect-ratio: auto; max-height: min(70svh, 640px); object-fit: contain; }
+.cx-gallery figcaption, .cx-gallery p { margin: 0; font-size: var(--t-small, 14px); color: var(--cx-muted); }
+@media (max-width: 899px) { .cx-gallery { --cols: 2 !important; } }
+@media (max-width: 559px) { .cx-gallery { --cols: 1 !important; } }
+
+/* ---- cards: items of words (services, features, findings) in even columns; the last row centred */
+.cx-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--cx-gap); padding: 0; list-style: none; }
+.cx-cards > * { flex: 1 1 16rem; max-width: calc((100% - 2 * var(--cx-gap)) / 3); min-width: min(16rem, 100%); margin: 0;
+  padding: var(--s-5, 20px); border: 1px solid var(--cx-line); border-radius: var(--cx-radius); display: flex; flex-direction: column; gap: var(--s-3, 12px); }
+.cx-cards:has(> :nth-child(4):last-child) > * { max-width: calc((100% - var(--cx-gap)) / 2); }
+.cx-cards > * > * { margin: 0; }
+.cx-cards > * > img { width: 48px; height: 48px; object-fit: contain; }
+@media (max-width: 899px) { .cx-cards > * { max-width: none !important; } }
+
+/* ---- timeline: up to five steps run across the width; more stand as two columns down the page */
+.cx-timeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--cx-gap); padding: 0; list-style: none; border-top: 1px solid var(--cx-line); }
+.cx-timeline > li { padding-top: var(--s-5, 20px); display: flex; flex-direction: column; gap: var(--s-2, 8px); min-width: 0; }
+.cx-timeline > li > * { margin: 0; }
+.cx-timeline > li > :is(time, .cx-when) { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--p-accent, var(--accent, currentColor)); }
+.cx-timeline > li > img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--cx-radius); background: var(--cx-panel); }
+.cx-timeline > li > img:not([data-kind="photo"]) { object-fit: contain; }
+.cx-timeline:has(> li:nth-child(6)) { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 0; column-gap: calc(var(--cx-gap) * 2); }
+.cx-timeline:has(> li:nth-child(6)) > li { border-top: 1px solid var(--cx-line); }
+@media (max-width: 899px) {
+  .cx-timeline, .cx-timeline:has(> li:nth-child(6)) { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); border-top: 0; }
+  .cx-timeline > li { border-top: 1px solid var(--cx-line); }
+}
+
+/* ---- facts: key figures in one even row */
+.cx-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--cx-gap); margin: 0; }
+.cx-facts > div { display: flex; flex-direction: column-reverse; gap: 4px; }
+.cx-facts dd { margin: 0; font-weight: 600; font-size: clamp(24px, 3vw, 40px); line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cx-facts dt { font-size: var(--t-small, 14px); color: var(--cx-muted); }
+
+/* ---- figure: one drawing, chart or table image with its caption, centred at reading width
+   (never alone on half a row, never stretched across the page) */
+.cx-figure { margin-inline: auto; max-width: min(100%, 880px); display: grid; gap: var(--s-3, 12px); }
+.cx-figure > img { width: 100%; height: auto; max-height: 80svh; object-fit: contain; background: var(--cx-panel); border-radius: var(--cx-radius); }
+
+/* ---- band: one wide photograph across the content width, words optionally over its calm part */
+.cx-band { position: relative; border-radius: var(--cx-radius); overflow: hidden; }
+.cx-band > img { width: 100%; height: auto; max-height: 72svh; object-fit: cover; display: block; }
+.cx-band > .cx-over { position: absolute; inset: auto var(--s-6, 24px) var(--s-6, 24px) var(--s-6, 24px); max-width: 40ch; }

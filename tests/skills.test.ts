@@ -83,7 +83,7 @@ test("required references are scoped, budgeted, cached and invalidate the select
 test("published Pi loader discovers portable Skills; Codex and Claude paths resolve the same resources", async () => {
   const pi = loadSkillsFromDir({ dir: SKILLS_ROOT, source: "test" });
   assert.equal(pi.diagnostics.length, 0);
-  assert.equal(pi.skills.length, 24);
+  assert.equal(pi.skills.length, 25);
   const alias = path.resolve(".claude/skills");
   assert.equal(await realpath(alias), await realpath(SKILLS_ROOT));
   const claudeLayout = loadSkillsFromDir({
@@ -334,23 +334,26 @@ test("deterministic routing composes complementary skills and keeps edits narrow
   }
   assert.deepEqual(
     route("KPI dashboard with helpful navigation and native disclosure"),
-    ["designer-dashboard", "designer-visual-design"],
+    ["designer-dashboard", "designer-compose", "designer-visual-design"],
   );
   assert.deepEqual(route("为这篇论文做一个介绍页。"), [
     "designer-editorial",
-    "designer-visual-design",
+    "designer-compose",
     "designer-web-architecture",
     "designer-interaction-design",
   ]);
   assert.deepEqual(route("根据研究报告制作介绍网页"), [
     "designer-editorial",
-    "designer-visual-design",
+    "designer-compose",
     "designer-web-architecture",
     "designer-interaction-design",
   ]);
-  assert.deepEqual(route("为公司产品制作宣传页"), ["designer-taste"]);
+  assert.deepEqual(route("为公司产品制作宣传页"), [
+    "designer-taste",
+    "designer-compose",
+  ]);
   // Company, product and campaign pages, and pages of unstated type, are built on the page kit.
-  assert.deepEqual(route("创建网站"), ["designer-taste"]);
+  assert.deepEqual(route("创建网站"), ["designer-taste", "designer-compose"]);
   assert.deepEqual(route("/skill:designer-editorial 修改章节", true), [
     "designer-editorial",
   ]);
@@ -505,24 +508,32 @@ test("showcase routing follows user wording, not Orchestrator defaults, and stay
       "用上传资料生成公司的产品宣传页，视觉成熟、酷炫、惊艳，整页有编排的主题动效",
     );
     // Showcase pages are built on the page kit, whose moments carry the motion.
-    assert.deepEqual(showcase, ["designer-taste"]);
-    assert.deepEqual(route("生成产品宣传页，不要动画，简洁即可"), ["designer-taste"]);
+    assert.deepEqual(showcase, ["designer-taste", "designer-compose"]);
+    assert.deepEqual(route("生成产品宣传页，不要动画，简洁即可"), [
+      "designer-taste",
+      "designer-compose",
+    ]);
     assert.deepEqual(
       route("根据资料做公司介绍网站", {
         goal: "公司介绍",
         design: [],
         designDefaults: ["科技感、炫酷动效"],
       }),
-      ["designer-taste"],
+      ["designer-taste", "designer-compose"],
     );
     // Subject Skills still follow the user's wording, and ambition rises only from it.
     assert.deepEqual(route("作品集展示", { designDefaults: ["炫酷动效"] }), [
       "designer-portfolio",
+      "designer-compose",
       "designer-visual-design",
     ]);
     assert.ok(route("作品集展示，炫酷动效").includes("designer-motion-design"));
     const worst = route("产品宣传页，炫酷动效，带菜单交互和筛选");
-    assert.deepEqual(worst, ["designer-taste", "designer-interaction-design"]);
+    assert.deepEqual(worst, [
+      "designer-taste",
+      "designer-compose",
+      "designer-interaction-design",
+    ]);
     const prepared = await library.prepare("designer", worst);
     assert.ok(prepared.characters < SKILL_BODY_CHARACTER_LIMIT);
     assert.ok(

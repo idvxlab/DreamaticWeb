@@ -64,6 +64,8 @@ const categories: [string, RegExp][] = [
 /** The page kit that new company, product, campaign and institution pages are built on. */
 const PAGE_KIT = "designer-taste";
 const PAGE_KIT_SITES = ["designer-landing-page", "designer-saas-website"];
+/** Balanced word-and-picture compositions, layered on every new page whatever its subject Skill. */
+const COMPOSE = "designer-compose";
 /** User wording that asks for an expressive showcase rather than a plain informational page. */
 const EXPRESSIVE =
   /炫酷|酷炫|惊艳|高级感|质感|大气|沉浸|视觉冲击|设计感|氛围|有冲击力|\b(?:stunning|striking|immersive|premium|bold|award|cinematic|wow)\b/i;
@@ -150,6 +152,7 @@ export function selectSkills(
       // their subject Skills.
       if (!match || PAGE_KIT_SITES.includes(match[0])) {
         chosen.add(PAGE_KIT);
+        chosen.add(COMPOSE);
         if (
           /多页|分层|信息密集|\bmulti[- ]?page\b|hierarchy|complex site/i.test(
             combined,
@@ -165,6 +168,7 @@ export function selectSkills(
         return [...chosen].filter((name) => exists(name));
       }
       chosen.add(match[0]);
+      chosen.add(COMPOSE);
       // Only what the user asked for (request text and user-stated design) raises
       // ambition; Orchestrator's designDefaults never do.
       const brief = (context.brief || {}) as {
@@ -177,7 +181,9 @@ export function selectSkills(
         positiveRequirements(JSON.stringify([brief.design, brief.features]));
       const expressive = EXPRESSIVE.test(pinned);
       // A committed visual world replaces the generic visual method; motion gets its own method.
-      chosen.add(expressive ? "designer-impeccable" : "designer-visual-design");
+      // An editorial page reads by its own typography; the slot goes to its reading structure.
+      if (expressive) chosen.add("designer-impeccable");
+      else if (match[0] !== "designer-editorial") chosen.add("designer-visual-design");
       if (MOTION.test(pinned)) chosen.add("designer-motion-design");
       // Research and long-form editorial pages need a reading architecture and honest
       // document interactions (anchors, figures, captions and disclosures), not only a
