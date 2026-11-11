@@ -1,0 +1,39 @@
+/* designer-style-showroom: one complete look over the designer-taste kit's blocks (from a DJI site
+   analysis). Scoped to html[data-style="showroom"]. */
+html[data-style="showroom"] {
+  --font-display: -apple-system, "Helvetica Neue", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-text: -apple-system, "Helvetica Neue", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --display-weight: 600; --display-tracking: -0.03em; --caption: #8c8c8c;
+}
+html[data-style="showroom"] *, html[data-style="showroom"] *::before, html[data-style="showroom"] *::after { box-shadow: none !important; }
+html[data-style="showroom"] body { letter-spacing: -0.02em; }
+html[data-style="showroom"] :is(h1, h2) { font-weight: 600; letter-spacing: -0.03em; }
+html[data-style="showroom"] h3 { font-weight: 400; letter-spacing: -0.03em; }
+html[data-style="showroom"] .section-head { text-align: center; margin-inline: auto; }
+html[data-style="showroom"] .section-head h2 { font-size: clamp(2rem, 2.8vw, 2.5rem); line-height: 1.2; }
+html[data-style="showroom"] .tier { margin: 0; font-size: 12px; color: var(--p-accent); letter-spacing: -0.01em; }
+html[data-style="showroom"] header.nav { background: #fff; border-bottom: 1px solid #f0f0f0; }
+html[data-style="showroom"] .nav__link { font-size: 14px; color: #303233; }
+/* pills: blue primary, ink outline secondary */
+html[data-style="showroom"] .btn { border-radius: 999px !important; font-weight: 400; font-size: 16px; min-height: 40px; padding: 0 20px; }
+html[data-style="showroom"] .btn--primary { background: var(--p-action); color: var(--p-action-ink); border: 0; }
+html[data-style="showroom"] .btn--secondary { background: transparent; color: var(--p-ink); border: 1px solid var(--p-ink); }
+html[data-style="showroom"] .hero--photo[data-tone="dark"] .btn--secondary { color: #fff; border-color: #fff; }
+/* square grey tiles with white gutters */
+html[data-style="showroom"] .range { --gutter: 16px; }
+html[data-style="showroom"] .range__item { border: 0; border-radius: 0; background: var(--range-bg); text-align: center; }
+html[data-style="showroom"] .range__media > img { inset: 6%; width: 88%; height: 88%; }
+html[data-style="showroom"] .range__body { border-top: 0; align-items: center; padding-bottom: var(--s-6); }
+html[data-style="showroom"] .range__body > h3 { font-size: 24px; font-weight: 400; }
+html[data-style="showroom"] .range__body > p { color: var(--caption); }
+html[data-style="showroom"] :is(.figures, .range__figures) { text-align: left; }
+html[data-style="showroom"] :is(.figures, .range__figures) dd { font-weight: 400; letter-spacing: -0.03em; }
+html[data-style="showroom"] .figures dd { font-size: 32px; }
+html[data-style="showroom"] :is(.figures, .range__figures) dt { color: var(--caption); }
+html[data-style="showroom"] .t-stat { font-weight: 400; letter-spacing: -0.03em; }
+html[data-style="showroom"] :is(.feature__media, .case__media > figure) { border-radius: 0; }
+html[data-style="showroom"] .figure-panel { border-radius: 0; }
+html[data-style="showroom"] .spec-table thead th { font-weight: 600; }
+html[data-style="showroom"] .spec-table td { font-weight: 400; }
+html[data-style="showroom"] .band-soft { background: #f7f9fa; }
+html[data-style="showroom"] .case { border-top-color: #e8e8e8; }

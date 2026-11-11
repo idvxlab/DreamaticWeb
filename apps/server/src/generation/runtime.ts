@@ -37,6 +37,7 @@ import {
 import { applyPagePatch } from "./page-patch.js";
 import { inlineSkillAssets } from "./skill-assets.js";
 import { guardPictures } from "../picture-guard.js";
+import { withStyle } from "./style-kit.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
@@ -367,12 +368,44 @@ async function execute(
     let plan:
       | {
           imagePlan?: { assetId: string }[];
-          designPlan?: { moments: string[] };
+          designPlan?: { moments: string[]; style?: string };
           contentOutline?: { id: string }[];
         }
       | undefined;
+    // A style kit the Designer chose in its plan (designer-style-<id>); the host supplies it.
+    let appliedStyle: string | undefined;
     // Skills actually preloaded per role; only these may supply skill:// page assets.
     const loadedSkills: Partial<Record<Role, string[]>> = {};
+    /**
+     * Style kits are not chosen by routing or by the user: a page kit lists them, the
+     * Designer may name one in its plan, and the host then supplies only that style's
+     * rules in the plan_page result (read before the writing turn, so no extra model
+     * call) and admits its stylesheet. Without a named style the kit keeps its own look.
+     */
+    async function supplyStyle(style: string | undefined) {
+      const id = /^\s*([a-z0-9]+(?:-[a-z0-9]+)*)/.exec(style || "")?.[1];
+      const loaded = loadedSkills.designer || [];
+      if (!id || !library || !loaded.includes("designer-taste")) return "";
+      const name = "designer-style-" + id;
+      if (loaded.includes(name)) {
+        appliedStyle = name;
+        return "";
+      }
+      const catalog = (await library.catalog()).skills;
+      if (!catalog.some((s) => s.name === name)) return "";
+      const prepared = await library.prepare("designer", [name], {
+        selectedOnly: true,
+      });
+      loaded.push(name);
+      loadedSkills.designer = loaded;
+      appliedStyle = name;
+      metrics.skillCharacters += prepared.characters;
+      metrics.skillLoads += 1;
+      event("designer", "已加载风格 " + name, "skill", {
+        skillCharacters: prepared.characters,
+      });
+      return `Style ${id} applies to this page. Follow it in the writing turn, together with the kit:\n${prepared.prompt}`;
+    }
     async function roleRun(
       role: Role,
       input: string,
@@ -822,6 +855,7 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
+      if (appliedStyle) html = withStyle(html, appliedStyle);
       if (library)
         html = (
           await inlineSkillAssets(html, (reference) =>
@@ -1118,7 +1152,7 @@ async function execute(
             style: Type.Optional(
               Type.String({
                 description:
-                  "The one visual style applied, by library id, and why (when a style library is loaded)",
+                  "When the loaded kit lists looks: the one chosen, id first ('kit' for the kit's own, or a style id such as 'industrial'), then why",
               }),
             ),
             moments: Type.Array(Type.String(), {
@@ -1162,7 +1196,12 @@ async function execute(
           async (args) => {
             if (accepted) throw new Error("页面已经提交");
             plan = args;
-            return "Plan recorded. In your next turn call submit_page with the complete HTML that carries out this plan; do not restate the plan.";
+            const supplied = await supplyStyle(args.designPlan?.style);
+            return (
+              "Plan recorded. " +
+              (supplied ? supplied + "\n\n" : "") +
+              "In your next turn call submit_page with the complete HTML that carries out this plan; do not restate the plan."
+            );
           },
         ),
       );

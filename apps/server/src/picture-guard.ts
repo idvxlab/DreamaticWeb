@@ -16,7 +16,8 @@ export function guardPictures(html: string) {
   const $ = cheerio.load(html);
   const kinds = WHOLE_PICTURE_KINDS.map((k) => `img[data-kind="${k}"]`).join(",");
   if (!$(kinds).length) return html;
-  const css = `:is(${kinds}){object-fit:contain!important;object-position:50% 50%!important}`;
+  // An opaque plate too, so a picture shown whole never lets a layer below show through its margins.
+  const css = `:is(${kinds}){object-fit:contain!important;object-position:50% 50%!important;background-color:var(--panel-bg,#fff)}`;
   const style = $("<style>").attr("data-host", MARK).text(css);
   if ($("head").length) $("head").append(style);
   else $.root().prepend(style);

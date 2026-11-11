@@ -1,6 +1,6 @@
 ---
 name: designer-style-soft
-description: A complete soft structural style for a page kit such as designer-taste — silver-white ground, massive bold grotesk, airy floating double-bezel cards with diffused shadows, pill buttons with a nested icon, a floating pill navigation and spring motion. Use with the kit when the user asks for this style or the subject is a premium consumer or lifestyle product with clean renders.
+description: A complete soft structural style for a page kit such as designer-taste — silver-white ground, massive bold grotesk, airy floating double-bezel cards with diffused shadows, pill buttons with a nested icon, a floating pill navigation and spring motion. Supplied by the host when the Designer's plan names it; for a premium consumer or lifestyle product with clean renders.
 ---
 
 # Soft structural style

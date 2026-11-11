@@ -27,6 +27,7 @@ The host replaces both `skill://` references with the kit's text. Choose all 16 
 
 ## Menu for designPlan
 
+- Look (decide it first, in `designPlan.style`): the kit's own look (`kit`), or one of these styles when it serves the pictures and the client better; the host then supplies that style's rules and stylesheet for the writing turn. `industrial`: drawings and data lead (engineering, components). `showroom`: several products as renders or studio shots. `night`: dark or sky scenes lead (aerospace, energy, games). `soft`: a premium consumer product with clean renders. A style the user names wins.
 - Ground: light (`--p-bg` near the pictures' white or warm studio tone) or dark (`data-tone="dark"`), chosen from the pictures' backdrops; one inverse band may contrast.
 - Hero: `hero--product` (product whole, words above), `hero--split` (words left, picture right), `hero--photo` (one photograph or the brochure's own scene over the whole first screen, words on its calm side), `hero--film` (a film poster in a framed screen), `hero--statement` (type-led, picture below), `hero--editorial`.
 - Radius `data-radius`: sharp | soft | round. Buttons `data-buttons`: solid | pill | tonal | arrow | block.
@@ -133,7 +134,7 @@ A dark band or a dark closing on a light page: add `ground-inverse` to the secti
 
 Copy a moment's markup exactly: the section is a direct child of `<main>` and its block (`.container mo-pc__grid`, `.container mo-ph`) is the section's direct child, with no `.wrap` or extra wrapper between them and no classes added to the moment's own elements. A moment whose structure differs is shown static. Scroll moments are for photographs and renders with real content; a drawing goes on a light panel.
 
-Pinned chapters — one section holds while 2–4 steps change one shared visual (product to product, design to test):
+Pinned chapters — one section holds while 2–4 steps change one shared visual (product to product, design to test). One photograph or render per step, in the step's own figure; the `.mo-pc__visuals` frame stays empty (the kit fills it). A case with a drawing and a chart is a `.case`, not a chapter:
 
 ```html
 <section class="section" data-moment="pinned-chapters">

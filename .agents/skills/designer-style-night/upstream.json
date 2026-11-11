@@ -1,0 +1,36 @@
+{
+  "upstreamName": "awesome-design-md",
+  "repository": "https://github.com/VoltAgent/awesome-design-md",
+  "commit": "fcc70284932276d085f01ef9f83edde90b1258cb",
+  "license": {
+    "spdx": "MIT",
+    "local": "LICENSE"
+  },
+  "sources": [
+    {
+      "path": "design-md/spacex/DESIGN.md"
+    }
+  ],
+  "adaptations": [
+    "the site analysis rewritten as one complete style over the designer-taste kit blocks: :root tokens, a scoped stylesheet and the look rules",
+    "system font stacks instead of the brand fonts; no brand names, logos or copy"
+  ],
+  "files": [
+    {
+      "path": "SKILL.md",
+      "sha256": "f11e62e13b7f178a0bcae86de543ce0f10652a2c35db84419ac61b2221b6b452"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "6d4bdc9a9cf30e7beb593475fdcdbf29f981ea6bd7923f202866145409f87b44"
+    },
+    {
+      "path": "references/look.md",
+      "sha256": "2fa278fa048ef1c1ef2252861112ca3187720b263c4321e056656d381e7732e4"
+    },
+    {
+      "path": "assets/night.css",
+      "sha256": "17bfb3dc7ae67c32319d49f523a37ebded4b2fc33f4fe221f48f136981909ccd"
+    }
+  ]
+}

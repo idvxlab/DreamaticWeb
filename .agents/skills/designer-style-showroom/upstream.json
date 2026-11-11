@@ -1,0 +1,36 @@
+{
+  "upstreamName": "awesome-design-md",
+  "repository": "https://github.com/VoltAgent/awesome-design-md",
+  "commit": "fcc70284932276d085f01ef9f83edde90b1258cb",
+  "license": {
+    "spdx": "MIT",
+    "local": "LICENSE"
+  },
+  "sources": [
+    {
+      "path": "design-md/dji/DESIGN.md"
+    }
+  ],
+  "adaptations": [
+    "the site analysis rewritten as one complete style over the designer-taste kit blocks: :root tokens, a scoped stylesheet and the look rules",
+    "system font stacks instead of the brand fonts; no brand names, logos or copy"
+  ],
+  "files": [
+    {
+      "path": "SKILL.md",
+      "sha256": "ab887383581ae9e762967455849e56ddb31254e0b81efc8c9214e59c8690a8c9"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "6d4bdc9a9cf30e7beb593475fdcdbf29f981ea6bd7923f202866145409f87b44"
+    },
+    {
+      "path": "references/look.md",
+      "sha256": "78cae6f3aa7dd2407d7208f1ff565cf359c7863035583f2a9d65e2890098dc75"
+    },
+    {
+      "path": "assets/showroom.css",
+      "sha256": "bd988dcc5c648c4ef3ce33af53233daed9460adba8c0e312d1a35db31a02149a"
+    }
+  ]
+}

@@ -160,3 +160,20 @@ main > :is(section, .section), footer.closing, header.nav { overflow-x: clip; }
    stack that pushes the hero over the next section */
 .hero__facts { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)) !important; }
 .hero__facts > * { grid-column: auto !important; }
+
+/* scroll moments that pin: their band never clips vertically, or the pinned stage scrolls away */
+main > [data-moment]:is(section, .section) { overflow-y: visible !important; }
+/* pinned chapters: the shared visuals frame shows only the steps' own pictures, one at a time, each on
+   an opaque ground so nothing below shows through a picture shown whole */
+[data-moment="pinned-chapters"].is-live .mo-pc__visuals > :not(.mo-pc__visual) { display: none !important; }
+[data-moment="pinned-chapters"].is-live .mo-pc__visual { background: var(--panel-bg, var(--p-bg, #fff)); }
+[data-moment="pinned-chapters"].is-live .mo-pc__visual:not(.is-on) { visibility: hidden; }
+[data-moment="pinned-chapters"].is-live .mo-pc__visual.is-past, [data-moment="pinned-chapters"].is-live .mo-pc__visual.is-on { visibility: visible; }
+/* a range item without a picture keeps the row even: a numbered panel in the same frame */
+.range { counter-reset: range-item; }
+.range > .range__item { counter-increment: range-item; }
+.range__item:not(:has(> .range__media))::before {
+  content: counter(range-item, decimal-leading-zero); display: grid; place-items: center;
+  aspect-ratio: var(--range-ratio, 16 / 9); background: var(--range-bg, var(--p-surface));
+  font: var(--display-weight, 600) clamp(2rem, 4vw, 3.5rem) / 1 var(--font-display); color: var(--p-muted);
+}

@@ -1,6 +1,6 @@
 ---
 name: designer-style-industrial
-description: A complete industrial print style for a page kit such as designer-taste — matte paper, carbon ink, one aviation red, giant uppercase grotesk, monospaced labels, visible hairline grids and square corners. Use with the kit when the user asks for this style or the subject is engineering, components or industrial hardware led by drawings and data.
+description: A complete industrial print style for a page kit such as designer-taste — matte paper, carbon ink, one aviation red, giant uppercase grotesk, monospaced labels, visible hairline grids and square corners. Supplied by the host when the Designer's plan names it; for pages where the subject is engineering, components or industrial hardware led by drawings and data.
 ---
 
 # Industrial print style

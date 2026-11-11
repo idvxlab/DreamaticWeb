@@ -1,0 +1,35 @@
+/* designer-style-night: one complete look over the designer-taste kit's blocks (from a SpaceX site
+   analysis). Scoped to html[data-style="night"]. */
+html[data-style="night"] {
+  --font-display: "DIN Alternate", "DIN Condensed", Bahnschrift, "Arial Narrow", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-text: -apple-system, "Helvetica Neue", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --display-weight: 700; --display-tracking: 0.02em; --hair: #3a3a3f;
+}
+html[data-style="night"] *, html[data-style="night"] *::before, html[data-style="night"] *::after { box-shadow: none !important; text-shadow: none !important; }
+html[data-style="night"] body { background: #000; color: #fff; }
+html[data-style="night"] :is(h1, h2) { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; line-height: 0.98; }
+html[data-style="night"] .hero h1 { font-size: clamp(3rem, 5.6vw, 5rem); }
+html[data-style="night"] .section-head h2 { font-size: clamp(2.25rem, 4vw, 3.75rem); }
+html[data-style="night"] h3 { font-family: var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; }
+html[data-style="night"] :is(.nav__link, .t-small, .figures dt, .range__figures dt, .spec-table thead th, .case__tag, .hero__facts dt, .rows__name) {
+  text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px;
+}
+html[data-style="night"] header.nav { background: rgb(0 0 0 / 0.55); border-bottom: 1px solid var(--hair); backdrop-filter: none; }
+/* ghost pills only */
+html[data-style="night"] .btn { border-radius: 32px !important; background: transparent !important; color: #fff !important; border: 1px solid #fff !important;
+  text-transform: uppercase; font-weight: 700; font-size: 13px; letter-spacing: 0.09em; padding: 14px 24px; }
+html[data-style="night"] .btn:hover { background: #fff !important; color: #000 !important; }
+/* drawings and white renders on cool-white plates */
+html[data-style="night"] .range__item { background: transparent; border: 0; }
+html[data-style="night"] .range__media { background: var(--range-bg); border-radius: 8px; overflow: hidden; }
+html[data-style="night"] .range__body { border-top: 0; padding-inline: 0; }
+html[data-style="night"] .range__body > p { color: var(--p-muted); }
+html[data-style="night"] :is(.feature__media, .case__media > figure, .figure-panel) { border-radius: 8px; }
+html[data-style="night"] :is(.figures, .range__figures) dd { font-family: var(--font-display); letter-spacing: 0.02em; }
+html[data-style="night"] .figures dd { font-size: 40px; }
+html[data-style="night"] .t-stat { font-family: var(--font-display); letter-spacing: 0.02em; }
+html[data-style="night"] .spec-table :is(th, td) { border-bottom-color: var(--hair); }
+html[data-style="night"] .spec-table th:first-child, html[data-style="night"] .spec-table td:first-child { background: #000; }
+html[data-style="night"] .case { border-top-color: var(--hair); }
+html[data-style="night"] .case:last-child { border-bottom-color: var(--hair); }
+html[data-style="night"] .rows > li { border-bottom-color: var(--hair); }
