@@ -27,6 +27,7 @@ The host replaces both `skill://` references with the kit's text. Choose all 16 
 
 ## Menu for designPlan
 
+- Blocks (decide first, in `designPlan.blocks`): `product` (this kit's range, feature and case blocks) for a product or hardware page, or `org` for an institution, school, studio, agency or service page (intro with facts, brands, timeline, offers, gallery, logos); the host supplies the org blocks for the writing turn.
 - Look (decide it first, in `designPlan.style`): the kit's own look (`kit`), or one of these styles when it serves the pictures and the client better; the host then supplies that style's rules and stylesheet for the writing turn. `industrial`: drawings and data lead (engineering, components). `showroom`: several products as renders or studio shots. `night`: dark or sky scenes lead (aerospace, energy, games). `soft`: a premium consumer product with clean renders. A style the user names wins.
 - Ground: light (`--p-bg` near the pictures' white or warm studio tone) or dark (`data-tone="dark"`), chosen from the pictures' backdrops; one inverse band may contrast.
 - Hero: `hero--product` (product whole, words above), `hero--split` (words left, picture right), `hero--photo` (one photograph or the brochure's own scene over the whole first screen, words on its calm side), `hero--film` (a film poster in a framed screen), `hero--statement` (type-led, picture below), `hero--editorial`.

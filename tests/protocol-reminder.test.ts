@@ -77,3 +77,32 @@ test("the reminder is never repeated: a second prose turn still fails the stage"
   assert.notEqual(p.status, "complete");
   assert.equal(reminders.length, 1);
 });
+
+test("block sets named in the plan are supplied for the writing turn and their stylesheet admitted", async () => {
+  const p = await create();
+  const source = await ingest(Buffer.from("# 机构\n\n课程介绍。"), "a.md", p.id);
+  p.sources.push(source);
+  await save(p);
+  let supplied = "";
+  const streamFn: StreamFn = (model, context) => {
+    const sys = getCurrentSystemMessage(context.messages)!;
+    const prompt = typeof sys.content === "string" ? sys.content : sys.content.map((c) => c.text).join("\n");
+    if (prompt.includes("# Orchestrator"))
+      return tool(model, "submit_intent", { goal: "介绍", audience: "访客", content: ["课程"], features: [], design: [], constraints: [] });
+    if (prompt.includes("# Analyst"))
+      return tool(model, "submit_facts", { summary: "s", facts: [{ id: "f", text: "课程介绍", sourceId: source.id, assetIds: [] }], limitations: [] });
+    const last = context.messages.at(-1)!;
+    if (last.role !== "toolResult")
+      return tool(model, "plan_page", { designPlan: { ground: "light", hero: "statement", type: "grotesk", moments: [], reason: "r", blocks: "org — an institution" } });
+    supplied = JSON.stringify(last.content);
+    return tool(model, "submit_page", {
+      usedFactIds: ["f"],
+      html: '<html><head><link rel="stylesheet" href="skill://designer-taste/assets/taste.css"><link rel="stylesheet" href="skill://designer-org/assets/org.css"></head><body><main><h1>机构</h1><p>课程介绍。</p></main></body></html>',
+    });
+  };
+  await runProject(p, requestSchema.parse({ text: "/skill:designer-taste 生成机构介绍页" }), save, () => {}, { config, streamFn });
+  assert.equal(p.status, "complete", p.error);
+  assert.match(supplied, /org blocks apply to this page/);
+  assert.match(p.versions.at(-1)!.html, /data-skill-asset="designer-org:org.css"/);
+  await removeProject(p.id).catch(() => {});
+});

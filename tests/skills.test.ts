@@ -83,7 +83,7 @@ test("required references are scoped, budgeted, cached and invalidate the select
 test("published Pi loader discovers portable Skills; Codex and Claude paths resolve the same resources", async () => {
   const pi = loadSkillsFromDir({ dir: SKILLS_ROOT, source: "test" });
   assert.equal(pi.diagnostics.length, 0);
-  assert.equal(pi.skills.length, 23);
+  assert.equal(pi.skills.length, 24);
   const alias = path.resolve(".claude/skills");
   assert.equal(await realpath(alias), await realpath(SKILLS_ROOT));
   const claudeLayout = loadSkillsFromDir({

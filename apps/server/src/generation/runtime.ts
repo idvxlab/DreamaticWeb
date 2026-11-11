@@ -371,7 +371,7 @@ async function execute(
     let plan:
       | {
           imagePlan?: { assetId: string }[];
-          designPlan?: { moments: string[]; style?: string };
+          designPlan?: { moments: string[]; style?: string; blocks?: string };
           contentOutline?: { id: string }[];
         }
       | undefined;
@@ -387,27 +387,43 @@ async function execute(
      */
     async function supplyStyle(style: string | undefined) {
       const id = /^\s*([a-z0-9]+(?:-[a-z0-9]+)*)/.exec(style || "")?.[1];
+      if (!id) return "";
+      const text = await supplyKitPart(
+        "designer-style-" + id,
+        `Style ${id} applies to this page`,
+      );
+      if (text !== undefined) appliedStyle = "designer-style-" + id;
+      return text || "";
+    }
+    /** The same for page blocks the plan names (designPlan.blocks: org → designer-org). */
+    async function supplyBlocks(blocks: string | undefined) {
+      const id = /^\s*([a-z0-9]+(?:-[a-z0-9]+)*)/.exec(blocks || "")?.[1];
+      if (!id || id === "product" || id === "kit") return "";
+      return (
+        (await supplyKitPart(
+          "designer-" + id,
+          `The ${id} blocks apply to this page in place of the product blocks`,
+        )) || ""
+      );
+    }
+    /** Load one more page-kit Skill for the writing turn; undefined when it does not apply. */
+    async function supplyKitPart(name: string, lead: string) {
       const loaded = loadedSkills.designer || [];
-      if (!id || !library || !loaded.includes("designer-taste")) return "";
-      const name = "designer-style-" + id;
-      if (loaded.includes(name)) {
-        appliedStyle = name;
-        return "";
-      }
+      if (!library || !loaded.includes("designer-taste")) return undefined;
+      if (loaded.includes(name)) return "";
       const catalog = (await library.catalog()).skills;
-      if (!catalog.some((s) => s.name === name)) return "";
+      if (!catalog.some((s) => s.name === name)) return undefined;
       const prepared = await library.prepare("designer", [name], {
         selectedOnly: true,
       });
       loaded.push(name);
       loadedSkills.designer = loaded;
-      appliedStyle = name;
       metrics.skillCharacters += prepared.characters;
       metrics.skillLoads += 1;
-      event("designer", "已加载风格 " + name, "skill", {
+      event("designer", "已加载 " + name, "skill", {
         skillCharacters: prepared.characters,
       });
-      return `Style ${id} applies to this page. Follow it in the writing turn, together with the kit:\n${prepared.prompt}`;
+      return `${lead}. Follow it in the writing turn, together with the kit:\n${prepared.prompt}`;
     }
     async function roleRun(
       role: Role,
@@ -1200,6 +1216,12 @@ async function execute(
               description: "Hero layout and its subject",
             }),
             type: Type.String({ description: "Type voice" }),
+            blocks: Type.Optional(
+              Type.String({
+                description:
+                  "When the loaded kit lists block sets: 'product' (the kit's own) or another set's id such as 'org', then why",
+              }),
+            ),
             style: Type.Optional(
               Type.String({
                 description:
@@ -1247,7 +1269,12 @@ async function execute(
           async (args) => {
             if (accepted) throw new Error("页面已经提交");
             plan = args;
-            const supplied = await supplyStyle(args.designPlan?.style);
+            const supplied = [
+              await supplyBlocks(args.designPlan?.blocks),
+              await supplyStyle(args.designPlan?.style),
+            ]
+              .filter(Boolean)
+              .join("\n\n");
             return (
               "Plan recorded. " +
               (supplied ? supplied + "\n\n" : "") +
