@@ -38,6 +38,7 @@ import { applyPagePatch } from "./page-patch.js";
 import { inlineSkillAssets } from "./skill-assets.js";
 import { guardPictures } from "../picture-guard.js";
 import { withStyle } from "./style-kit.js";
+import { lenientList } from "./lenient-json.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
@@ -138,12 +139,14 @@ function tool(
   parameters: AgentTool["parameters"],
   execute: (args: any) => Promise<unknown>,
   terminal = false,
+  prepareArguments?: AgentTool["prepareArguments"],
 ): AgentTool {
   return {
     name,
     label: name,
     description,
     parameters,
+    ...(prepareArguments ? { prepareArguments } : {}),
     executionMode: terminal ? "sequential" : "parallel",
     execute: async (_id, args, signal) => {
       signal?.throwIfAborted();
@@ -808,6 +811,15 @@ async function execute(
               return "Facts accepted";
             },
             true,
+            // A list sent as a JSON string (with stray quotes in its text) is read, not refused.
+            (args) => {
+              const raw = (args || {}) as Record<string, unknown>;
+              return {
+                ...raw,
+                facts: lenientList(raw.facts),
+                limitations: lenientList(raw.limitations),
+              } as never;
+            },
           ),
         ],
         () => Boolean(value),
@@ -1175,7 +1187,8 @@ async function execute(
                 description: "Section id and why it belongs there",
               }),
             }),
-            { maxItems: 24 },
+            // Image-rich brochures use 25-30 pictures on one page.
+            { maxItems: 40 },
           ),
         ),
         designPlan: Type.Optional(
