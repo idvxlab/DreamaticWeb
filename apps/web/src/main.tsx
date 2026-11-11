@@ -590,7 +590,11 @@ function App() {
               disabled={!current || dirty}
               onClick={() =>
                 void download(
-                  "/projects/" + project!.id + "/export?version=" + current!.id,
+                  "/projects/" +
+                    project!.id +
+                    "/export?format=zip&version=" +
+                    current!.id,
+                  "dreamatic-page.zip",
                 ).catch(handleError)
               }
             >

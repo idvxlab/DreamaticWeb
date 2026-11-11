@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { registerBrowserPreview } from "./browser-preview.js";
+import { inlinePageAssets, zipPage } from "./page-export.js";
 import { readSourceMarkdown } from "./source-content.js";
 import express from "express";
 import multer from "multer";
@@ -415,24 +416,14 @@ app.get("/api/projects/:id/export", async (req, res) => {
     ? p.versions.find((v) => v.id === req.query.version)
     : p.versions.at(-1);
   if (!v) return res.status(404).json({ error: "没有可导出的页面" });
-  let html = v.html;
-  const matches = [
-    ...new Set(
-      html.match(/\/assets\/[a-f\d-]{36}\/[a-f\d-]{36}\.[a-z\d]+/g) || [],
-    ),
-  ];
-  for (const url of matches) {
-    const file = path.basename(url);
-    try {
-      const b = await readFile(path.join(projectDir(p.id), "assets", file));
-      const { fileTypeFromBuffer } = await import("file-type");
-      const t = await fileTypeFromBuffer(b);
-      if (t)
-        html = html
-          .split(url)
-          .join("data:" + t.mime + ";base64," + b.toString("base64"));
-    } catch {}
+  if (req.query.format === "zip") {
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="dreamatic-page.zip"',
+    );
+    return res.type("application/zip").send(await zipPage(p.id, v.html));
   }
+  const html = await inlinePageAssets(p.id, v.html);
   res.setHeader(
     "Content-Disposition",
     'attachment; filename="dreamatic-page.html"',

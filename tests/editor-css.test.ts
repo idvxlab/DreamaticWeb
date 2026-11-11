@@ -193,3 +193,54 @@ test("editor round trips variable animation/transition/background shorthands wit
     await browser.close();
   }
 });
+
+test("editor keeps script-built rules, comma lists inside :is() and nested media", async () => {
+  const browser = await chromium.launch({
+    executablePath:
+      process.env.DREAMATIC_BROWSER_PATH ||
+      process.env.CHROME_PATH ||
+      chromium.executablePath(),
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<div id="editor"></div>');
+    await page.addScriptTag({
+      path: "node_modules/grapesjs/dist/grapes.min.js",
+    });
+    const source = await readFile("apps/web/src/editor-css.ts", "utf8");
+    await page.addScriptTag({
+      content: ts
+        .transpileModule(source, {
+          compilerOptions: {
+            module: ts.ModuleKind.None,
+            target: ts.ScriptTarget.ES2022,
+          },
+        })
+        .outputText.replace(/export /g, ""),
+    });
+    const css = await page.evaluate(() => {
+      const w = window as any;
+      const e = w.grapesjs.init({
+        container: "#editor",
+        storageManager: false,
+        keepUnusedStyles: true,
+        parser: { parserCss: w.parseEditorCss },
+      });
+      e.setComponents(
+        '<html><head><style>.mo-cr__col{height:1em;overflow:hidden}:is(.btn, .link):hover{color:red}@media (min-width:640px){.wrap :is(h1, h2){margin:0}@media (min-width:720px){.card{gap:3px}}}</style></head><body><p class="link">a</p><div class="wrap"><h1>t</h1></div></body></html>',
+      );
+      return e.getCss();
+    });
+    // Built by a page script at run time: no canvas component matches it.
+    assert.match(css, /\.mo-cr__col\{height:1em;overflow:hidden;?\}/);
+    assert.match(css, /:is\(\.btn, \.link\):hover\{color:red;?\}/);
+    assert.match(css, /@media \(min-width: ?640px\)\{\.wrap :is\(h1, h2\)\{margin:0;?\}/);
+    assert.match(
+      css,
+      /@media \(min-width: ?640px\) and \(min-width: ?720px\)\{\.card\{gap:3px;?\}/,
+    );
+  } finally {
+    await browser.close();
+  }
+});

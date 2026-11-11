@@ -4,7 +4,11 @@ export interface DocumentMetadata {
   title: string;
   lang: string;
   description: string;
+  /** Attributes the page sets on <html> (data-tone, data-type…), lang excluded. */
+  htmlAttributes?: Record<string, string>;
 }
+
+const SAFE_ATTRIBUTE = /^(id|class|style|lang|dir|title|role|aria-[\w-]+|data-[\w-]+)$/;
 
 function removeBodyMetadata(body: HTMLElement) {
   // Older saved documents may already contain head metadata inside the body.
@@ -23,6 +27,11 @@ export function parseEditorDocument(html: string) {
       doc.head
         .querySelector('meta[name="description"]')
         ?.getAttribute("content") || "",
+    htmlAttributes: Object.fromEntries(
+      Array.from(doc.documentElement.attributes)
+        .filter((a) => a.name !== "lang" && SAFE_ATTRIBUTE.test(a.name))
+        .map((a) => [a.name, a.value]),
+    ),
   };
   const scripts = Array.from(doc.querySelectorAll("script:not([src])"))
     // SVG (including foreignObject HTML) must not be lifted into an ordinary
@@ -67,6 +76,8 @@ export function serializeEditorDocument(input: {
 }) {
   const doc = document.implementation.createHTMLDocument(input.metadata.title);
   doc.documentElement.lang = input.metadata.lang;
+  for (const [name, value] of Object.entries(input.metadata.htmlAttributes || {}))
+    doc.documentElement.setAttribute(name, value);
   const charset = doc.createElement("meta");
   charset.setAttribute("charset", "utf-8");
   const policy = doc.createElement("meta");
@@ -125,6 +136,21 @@ export function serializePreviewDocument(html: string) {
     });
   })();`;
   const doc = new DOMParser().parseFromString(html, "text/html");
+  // The preview frame is sandboxed without same-origin, so its origin is opaque and
+  // img-src 'self' would block the project's /assets/ pictures: name the origin.
+  const origin = globalThis.location?.origin;
+  if (origin?.startsWith("http"))
+    doc
+      .querySelectorAll('meta[http-equiv="Content-Security-Policy" i]')
+      .forEach((meta) =>
+        meta.setAttribute(
+          "content",
+          (meta.getAttribute("content") || "").replace(
+            /((?:img|media)-src[^;]*?)'self'/g,
+            `$1'self' ${origin}`,
+          ),
+        ),
+      );
   const script = doc.createElement("script");
   script.dataset.dreamaticPreviewNavigation = "";
   script.textContent = previewNavigationScript;

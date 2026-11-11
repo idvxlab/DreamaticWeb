@@ -140,22 +140,34 @@ export function parseEditorCss(input: string): ParsedCssRule[] {
               singleAtRule: true,
             } as ParsedCssRule,
           ];
-        return [
-          {
-            selectors:
-              declaration.selectorText ||
-              (rule as CSSKeyframeRule).keyText ||
-              "",
-            style,
-            atRule,
-            params,
-          },
-        ];
+        const selectorText =
+          declaration.selectorText || (rule as CSSKeyframeRule).keyText || "";
+        // GrapesJS splits selector lists at every comma, so `:is(.a, .b)` would be cut
+        // into broken pieces. Keep such a list whole as one additional selector.
+        if (/\([^)]*,/.test(selectorText))
+          return [
+            {
+              selectors: [],
+              selectorsAdd: selectorText,
+              style,
+              // A node GrapesJS does not parse itself must carry its own at-rule fields.
+              ...(atRule ? { atRuleType: atRule } : {}),
+              ...(params ? { mediaText: params } : {}),
+            } as ParsedCssRule,
+          ];
+        return [{ selectors: selectorText, style, atRule, params }];
       }
       const group = rule as CSSGroupingRule;
-      return group.cssRules && match
-        ? parse(group.cssRules, match[1], match[2])
-        : [];
+      if (!group.cssRules || !match) return [];
+      // A media query nested in another one holds under both conditions.
+      if (
+        atRule === "media" &&
+        match[1] === "media" &&
+        params?.startsWith("(") &&
+        match[2].startsWith("(")
+      )
+        return parse(group.cssRules, "media", `${params} and ${match[2]}`);
+      return parse(group.cssRules, match[1], match[2]);
     });
   return parse(sheet.cssRules);
 }

@@ -1,3 +1,4 @@
+import AdmZip from "adm-zip";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -338,6 +339,18 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       await (await request(`/projects/${p.id}/export`)).text(),
       /data:image\/png;base64,/,
     );
+    const zipped = await request(`/projects/${p.id}/export?format=zip`);
+    assert.equal(zipped.headers.get("content-type"), "application/zip");
+    const archive = new AdmZip(Buffer.from(await zipped.arrayBuffer()));
+    const entries = archive.getEntries().map((entry) => entry.entryName);
+    assert.ok(entries.includes("dreamatic-page/index.html"));
+    const pictures = entries.filter((name) =>
+      /^dreamatic-page\/assets\/[a-f\d-]{36}\.png$/.test(name),
+    );
+    assert.ok(pictures.length > 0);
+    const page = archive.readAsText("dreamatic-page/index.html");
+    assert.ok(page.includes(`src="${pictures[0].slice("dreamatic-page/".length)}"`));
+    assert.doesNotMatch(page, /\/assets\/[a-f\d-]{36}\//);
 
     const baseVersionId = generated.versions.at(-1).id;
     const body = JSON.stringify({
