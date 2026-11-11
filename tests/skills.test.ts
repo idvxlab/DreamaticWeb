@@ -336,6 +336,19 @@ test("deterministic routing composes complementary skills and keeps edits narrow
     route("KPI dashboard with helpful navigation and native disclosure"),
     ["designer-dashboard", "designer-visual-design"],
   );
+  assert.deepEqual(route("为这篇论文做一个介绍页。"), [
+    "designer-editorial",
+    "designer-visual-design",
+    "designer-web-architecture",
+    "designer-interaction-design",
+  ]);
+  assert.deepEqual(route("根据研究报告制作介绍网页"), [
+    "designer-editorial",
+    "designer-visual-design",
+    "designer-web-architecture",
+    "designer-interaction-design",
+  ]);
+  assert.deepEqual(route("为公司产品制作宣传页"), ["designer-taste"]);
   // Company, product and campaign pages, and pages of unstated type, are built on the page kit.
   assert.deepEqual(route("创建网站"), ["designer-taste"]);
   assert.deepEqual(route("/skill:designer-editorial 修改章节", true), [

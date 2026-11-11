@@ -50,7 +50,7 @@ const categories: [string, RegExp][] = [
   ["designer-portfolio", /作品集|项目展示|\bportfolio\b|case stud(?:y|ies)/i],
   [
     "designer-editorial",
-    /出版|长文|文章|专题|博客|\beditorial\b|\bmagazine\b|\bblog\b|\barticle\b/i,
+    /论文|学术|研究(?:报告|解读|成果|介绍)|出版|长文|文章|专题|博客|\bpaper\b|\bresearch\b|\bacademic\b|\beditorial\b|\bmagazine\b|\bblog\b|\barticle\b/i,
   ],
   [
     "designer-saas-website",
@@ -179,6 +179,14 @@ export function selectSkills(
       // A committed visual world replaces the generic visual method; motion gets its own method.
       chosen.add(expressive ? "designer-impeccable" : "designer-visual-design");
       if (MOTION.test(pinned)) chosen.add("designer-motion-design");
+      // Research and long-form editorial pages need a reading architecture and honest
+      // document interactions (anchors, figures, captions and disclosures), not only a
+      // visual treatment. This restores the complementary small-Skill composition used
+      // before company/product requests moved onto the page kit.
+      if (match[0] === "designer-editorial") {
+        chosen.add("designer-web-architecture");
+        chosen.add("designer-interaction-design");
+      }
       if (
         /多页|分层|信息密集|\bmulti[- ]?page\b|hierarchy|complex site/i.test(
           combined,
