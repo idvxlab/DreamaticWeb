@@ -124,7 +124,7 @@ Choose per content, and vary them: a page is not one block repeated.
 - The same three figures in the same order in every card or case; complete specifications once in `.spec-table`; values all models share once in `.spec-common`.
 - Group by product family; a family of one is a `.feature`, never a lone card. Nothing but products in a `.range`. Do not restyle the frames or their pictures: the host sizes them. Set `--range-bg`, `--feature-bg` and `--panel-bg` to the pictures' own backdrop (white drawings: #fff) so no picture shows as a box in a box.
 
-A drawing or a chart: `<figure class="figure-panel"><img src="…" alt="…"></figure>` beside its text, never full width; the panel is light and caps its height.
+A drawing or a chart: `<figure class="figure-panel"><img src="…" alt="…"></figure>` beside its text (`span-6` next to the words' `span-5`), never alone on a row and never full width; the panel is light and caps its height.
 
 Write these blocks, not cards, image boxes or chart frames of your own.
 

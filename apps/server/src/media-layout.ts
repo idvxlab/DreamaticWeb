@@ -126,8 +126,21 @@ export function mediaLayout(nodes: OfficeContentNode[]) {
               .slice(0, 2);
             const context = clean(scored.map((s) => s.t.text).join(" / "));
             if (context) entry.context = context.slice(0, 48);
+            // Slices of one composite (edge to edge), or layers of one icon or badge: a small
+            // picture stacked over another (a glyph on a coloured disc). Either layer alone shows
+            // nothing the reader can use; a photograph carrying a small logo is too large to count.
+            const pageArea =
+              pageWidth && pageHeight ? pageWidth * pageHeight : 0;
+            const small = (box: Box) =>
+              pageArea > 0 &&
+              (box.width * box.height) / pageArea < ICON_LAYER_PAGE_SHARE;
             entry.fragment = images.some(
-              (other) => other !== image && other.box && touching(b, other.box),
+              (other) =>
+                other !== image &&
+                other.box &&
+                (touching(b, other.box) ||
+                  (stacked(other.box, b) && small(b)) ||
+                  (stacked(b, other.box) && small(other.box))),
             );
             if (pageWidth && pageHeight)
               entry.pageBackground =
@@ -140,6 +153,19 @@ export function mediaLayout(nodes: OfficeContentNode[]) {
   };
   visit(nodes);
   return result;
+}
+
+/** An icon-scale picture covers at most this share of its page. */
+const ICON_LAYER_PAGE_SHARE = 0.06;
+/** `inner` lies (almost) wholly within `outer`: one layer stacked over another. */
+function stacked(inner: Box, outer: Box) {
+  const w =
+    Math.min(inner.x + inner.width, outer.x + outer.width) -
+    Math.max(inner.x, outer.x);
+  const h =
+    Math.min(inner.y + inner.height, outer.y + outer.height) -
+    Math.max(inner.y, outer.y);
+  return w > 0 && h > 0 && (w * h) / (inner.width * inner.height) >= 0.8;
 }
 
 /** Edge-to-edge neighbours sharing most of a side: slices of one composite picture. */

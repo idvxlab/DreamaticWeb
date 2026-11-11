@@ -2797,7 +2797,7 @@ main > :is(section, .section) > :is(.wrap, .container), footer.closing > .wrap {
 }
 .figure-panel > img { width: 100%; height: auto; max-height: min(560px, 62vh); object-fit: contain; }
 @media (min-width: 1024px) {
-  .wrap > .figure-panel, .section > .figure-panel, .grid > .figure-panel:not([class*="span-"]) { max-width: 50%; }
+  .wrap > .figure-panel, .section > .figure-panel, .grid > .figure-panel:not([class*="span-"]) { max-width: 50%; margin-inline: auto; }
 }
 
 /* ---------------------------------------------------------------- product range (host)

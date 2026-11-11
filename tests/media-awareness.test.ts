@@ -129,6 +129,25 @@ test("layout gives page, nearby printed text, composite slices and page-sized ba
   );
 });
 
+test("layers of one icon (a glyph on a disc) are fragments; a photograph carrying a small logo is not", () => {
+  const layout = mediaLayout([
+    {
+      type: "page",
+      metadata: { pageNumber: 25, pageWidth: 1000, pageHeight: 700 },
+      children: [
+        { type: "image", metadata: { attachmentName: "disc.png" }, bounds: { x: 100, y: 100, width: 80, height: 80 } },
+        { type: "image", metadata: { attachmentName: "glyph.png" }, bounds: { x: 115, y: 115, width: 50, height: 50 } },
+        { type: "image", metadata: { attachmentName: "photo.png" }, bounds: { x: 400, y: 100, width: 500, height: 400 } },
+        { type: "image", metadata: { attachmentName: "logo.png" }, bounds: { x: 820, y: 420, width: 60, height: 60 } },
+      ],
+    },
+  ] as unknown as OfficeContentNode[]);
+  assert.equal(layout.get("disc.png")!.fragment, true);
+  assert.equal(layout.get("glyph.png")!.fragment, true);
+  assert.equal(layout.get("photo.png")!.fragment, false, "too large to be an icon layer");
+  assert.equal(layout.get("logo.png")!.fragment, false, "sits on a photograph, not on an icon");
+});
+
 test("canonical Markdown lists page, nearby text and flags without claiming visual content", async () => {
   const source = {
     id: "s",
