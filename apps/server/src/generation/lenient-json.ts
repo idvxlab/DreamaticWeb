@@ -18,6 +18,70 @@ export function lenientList(value: unknown): unknown {
   return value;
 }
 
+/** End (exclusive) of the bracketed JSON value starting at `start`, skipping string contents. */
+function valueEnd(text: string, start: number) {
+  let depth = 0,
+    inString = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (c === "\\") i++;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === "[" || c === "{") depth++;
+    else if (c === "]" || c === "}") if (--depth === 0) return i + 1;
+  }
+  return -1;
+}
+
+const parseList = (text: string) => {
+  for (const candidate of [text, repairContentQuotes(text)])
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+  return undefined;
+};
+
+/**
+ * The same slip, one step further: the string also carries the arguments that follow the list
+ * (`[...], "limitations": [...]}`). The leading list is the field's value; a later field it
+ * swallowed is recovered from the rest, unless that field was also sent on its own.
+ */
+export function lenientArgs(
+  raw: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> {
+  const out = { ...raw };
+  for (const key of keys) {
+    const value = out[key];
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (!text.startsWith("[")) continue;
+    const whole = parseList(text);
+    if (whole) {
+      out[key] = whole;
+      continue;
+    }
+    const end = valueEnd(text, 0);
+    const head = end > 0 ? parseList(text.slice(0, end)) : undefined;
+    if (!head) continue;
+    out[key] = head;
+    const rest = text.slice(end);
+    for (const other of keys) {
+      if (other === key || (out[other] !== undefined && typeof out[other] !== "string")) continue;
+      const at = rest.search(new RegExp(`"${other}"\\s*:\\s*\\[`));
+      if (at < 0) continue;
+      const open = rest.indexOf("[", at);
+      const close = valueEnd(rest, open);
+      const list = close > 0 ? parseList(rest.slice(open, close)) : undefined;
+      if (list) out[other] = list;
+    }
+  }
+  for (const key of keys) out[key] = lenientList(out[key]);
+  return out;
+}
+
 export function repairContentQuotes(json: string) {
   let out = "",
     inString = false,

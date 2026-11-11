@@ -43,7 +43,7 @@ import {
 } from "../picture-guard.js";
 import { repairAnchors } from "../anchor-repair.js";
 import { withStyle } from "./style-kit.js";
-import { lenientList } from "./lenient-json.js";
+import { lenientArgs } from "./lenient-json.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
@@ -818,7 +818,7 @@ async function execute(
           ),
           tool(
             "submit_facts",
-            "Submit facts and optional media associations; no independent tracing pass",
+            "Submit facts and optional media associations; no independent tracing pass. facts and limitations are JSON arrays in the arguments (facts: objects with id, text, sourceId, assetIds), never one string holding them.",
             factsParams,
             async (args) => {
               if (value) throw new Error("事实已经提交");
@@ -851,11 +851,7 @@ async function execute(
             // A list sent as a JSON string (with stray quotes in its text) is read, not refused.
             (args) => {
               const raw = (args || {}) as Record<string, unknown>;
-              return {
-                ...raw,
-                facts: lenientList(raw.facts),
-                limitations: lenientList(raw.limitations),
-              } as never;
+              return lenientArgs(raw, ["facts", "limitations"]) as never;
             },
           ),
         ],

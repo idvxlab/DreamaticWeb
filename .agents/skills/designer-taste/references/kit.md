@@ -193,3 +193,5 @@ Write each moment's final state in HTML; the kit animates it and shows the finis
   <div class="footer__legal"><span>© 2026 Company</span></div></div>
 </div></footer>
 ```
+
+Contact details (address, phone, email, a small logo) go in `.closing__links`; without a photograph or the name across, the kit sets the ask and these details as two balanced columns on a desktop. Do not position or size them yourself.

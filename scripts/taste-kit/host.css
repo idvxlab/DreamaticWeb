@@ -209,3 +209,18 @@ main > :is(.case, .feature) {
 .range--steps .range__body > h3::before {
   content: counter(range-item, decimal-leading-zero) " "; color: var(--p-accent, var(--accent)); font-variant-numeric: tabular-nums;
 }
+
+/* closing without a photograph or the name across: the ask and the contact details balance as two
+   columns on a desktop (ask left, details right, both on one baseline), whatever columns the page
+   wrote inside the links; the big button keeps its own width, a logo stays small */
+.closing__cta:not(.close--type, .close--photo, .close--word) > .btn--xl { align-self: flex-start; width: auto; max-width: 100%; }
+.closing__links img { width: auto !important; max-width: 160px !important; max-height: 48px !important; }
+@media (min-width: 1024px) {
+  footer.closing:not(:has(.close--photo, .close--word, .close__media)) > .wrap:has(> .closing__cta + .closing__links) {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); grid-template-rows: auto; column-gap: var(--gutter); align-items: end;
+  }
+  footer.closing:not(:has(.close--photo, .close--word, .close__media)) > .wrap > .closing__links { margin-top: 0 !important; }
+  footer.closing:not(:has(.close--photo, .close--word, .close__media)) > .wrap > .closing__links > .grid { display: flex !important; flex-direction: column; gap: var(--s-5); }
+  footer.closing:not(:has(.close--photo, .close--word, .close__media)) > .wrap > .closing__links > .grid > * { text-align: left !important; }
+  footer.closing:not(:has(.close--photo, .close--word, .close__media)) .closing__cta.close--type > .btn--xl { width: auto; align-self: flex-start; }
+}

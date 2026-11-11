@@ -116,11 +116,11 @@
     },
     {
       "path": "references/kit.md",
-      "sha256": "e2cd2c8b0f109807823f3fa689430254e1abafeb4e451c683832538d92c9d630"
+      "sha256": "edfa5be03ed7364d9588e67bd58e6d73be24c15455e53d9143953b7df55afbde"
     },
     {
       "path": "assets/taste.css",
-      "sha256": "8cfc97ab5d8781780b2f672e413bd9a39c8d8e5411d3c84e903c168225293744"
+      "sha256": "5a93a4e3ee4b2f5db546a801f2e3a475b323cc2f39eafb45455cfb54becb9538"
     },
     {
       "path": "assets/taste.js",
@@ -140,7 +140,8 @@
     "host layer appended last: a button row nested in the hero head and facts after the stage keep their places; .spec-card (product picture and rows, one media frame) and .figure-panel (drawings and charts at half width) added",
     ".range (product lineup with count-based columns and a centred last row), .spec-table (models as columns) and host.js (range frame ratio from its pictures) added to the host layer; the product-page rules point to them",
     ".feature (one product per section, alternating), .case (one shape for every case: words and figures beside a drawing and a measured chart) and shared .figures added; kit.md gives a product-page block menu that varies the blocks",
-    "host layer: blocks placed outside .wrap keep the side margins; .figures values wrap; a .range__media with no picture shows the numbered panel; .range--steps numbers a process; kit.md asks for blocks inside .wrap and forbids restyling kit layout"
+    "host layer: blocks placed outside .wrap keep the side margins; .figures values wrap; a .range__media with no picture shows the numbered panel; .range--steps numbers a process; kit.md asks for blocks inside .wrap and forbids restyling kit layout",
+    "host layer: a closing without photograph or name word sets the ask and the contact details as two balanced columns on a desktop; its button keeps its width and a logo stays small"
   ],
   "local": [
     {
