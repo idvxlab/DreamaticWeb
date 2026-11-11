@@ -177,3 +177,10 @@ main > [data-moment]:is(section, .section) { overflow-y: visible !important; }
   aspect-ratio: var(--range-ratio, 16 / 9); background: var(--range-bg, var(--p-surface));
   font: var(--display-weight, 600) clamp(2rem, 4vw, 3.5rem) / 1 var(--font-display); color: var(--p-muted);
 }
+
+/* the host sizes the pictures in feature and case frames, like the range: a page rule that resizes
+   them makes a tall drawing overflow its frame and get cut */
+.feature__media:not([data-fit="cover"]) > img, .case__media > figure > img {
+  position: absolute !important; inset: 6% !important; width: 88% !important; height: 88% !important;
+  max-width: none !important; max-height: none !important; object-fit: contain !important;
+}

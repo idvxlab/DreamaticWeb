@@ -116,11 +116,11 @@
     },
     {
       "path": "references/kit.md",
-      "sha256": "7c19081e72e1ae0cc01082d0e68c1caaea70195f69e12a4d610391de433fca6f"
+      "sha256": "77728f95ca570b0f8e3ce07b9206620dfb21311e65f515c7d6ef24072af3d8bb"
     },
     {
       "path": "assets/taste.css",
-      "sha256": "763137885f005d1029f307c77356b956c1ad841f58a5b4e153eebd48909e79c8"
+      "sha256": "dc86bdf460370a72264c1743aea40a1fb10ae5d3e0f317d31b552bc7dcb40ed3"
     },
     {
       "path": "assets/taste.js",

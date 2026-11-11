@@ -1,7 +1,14 @@
 import * as cheerio from "cheerio";
 
 /** Kinds of pictures whose content is lines, labels or data: shown whole, never cropped. */
-export const WHOLE_PICTURE_KINDS = ["drawing", "chart", "diagram", "screenshot"] as const;
+export const WHOLE_PICTURE_KINDS = [
+  "drawing",
+  "chart",
+  "diagram",
+  "screenshot",
+  "poster",
+  "illustration",
+] as const;
 const MARK = "pictures";
 
 /**
@@ -12,9 +19,12 @@ const MARK = "pictures";
  * Photographs stay free to be cropped. Idempotent.
  */
 export function guardPictures(html: string) {
-  if (!/data-kind\s*=/.test(html) || html.includes(`data-host="${MARK}"`)) return html;
+  if (!/data-kind\s*=/.test(html) || html.includes(`data-host="${MARK}"`))
+    return html;
   const $ = cheerio.load(html);
-  const kinds = WHOLE_PICTURE_KINDS.map((k) => `img[data-kind="${k}"]`).join(",");
+  const kinds = WHOLE_PICTURE_KINDS.map((k) => `img[data-kind="${k}"]`).join(
+    ",",
+  );
   if (!$(kinds).length) return html;
   // An opaque plate too, so a picture shown whole never lets a layer below show through its margins.
   const css = `:is(${kinds}){object-fit:contain!important;object-position:50% 50%!important;background-color:var(--panel-bg,#fff)}`;

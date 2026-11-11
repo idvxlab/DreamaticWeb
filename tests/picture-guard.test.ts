@@ -8,6 +8,11 @@ test("marked drawings and charts are kept whole; photographs and unmarked pages 
   assert.match(out, /<style data-host="pictures">[^<]*img\[data-kind="drawing"\][^<]*object-fit:contain!important/);
   assert.doesNotMatch(out.match(/<style data-host="pictures">([^<]*)</)![1], /photo/);
   assert.equal(guardPictures(out), out, "idempotent");
+  for (const kind of ["poster", "illustration"])
+    assert.match(
+      guardPictures(`<html><head></head><body><img data-kind="${kind}" src="/c.png" alt="c"></body></html>`),
+      new RegExp(`img\\[data-kind="${kind}"\\]`),
+    );
   const plain = `<html><head></head><body><img src="/b.png" alt="p"></body></html>`;
   assert.equal(guardPictures(plain), plain);
   const onlyPhoto = `<html><head></head><body><img data-kind="photo" src="/b.png" alt="p"></body></html>`;
