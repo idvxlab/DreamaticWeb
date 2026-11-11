@@ -36,6 +36,7 @@ import {
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
 import { inlineSkillAssets } from "./skill-assets.js";
+import { guardPictures } from "../picture-guard.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
@@ -833,6 +834,8 @@ async function execute(
         ).html;
       else if (html.includes("skill://"))
         throw new Error("当前运行没有可用的 Skill 资源");
+      // Drawings, charts and diagrams marked by the Designer are shown whole.
+      html = guardPictures(html);
       const report = await validatePage(p, html, { rejectUnusableMedia: true });
       if (!report.valid)
         throw new Error(

@@ -2907,3 +2907,8 @@ main > :is(section, .section) > :is(.wrap, .container), footer.closing > .wrap {
 
 /* no decoration can widen the page: each band clips sideways (clip keeps sticky and pinned moments working) */
 main > :is(section, .section), footer.closing, header.nav { overflow-x: clip; }
+
+/* hero facts share the width evenly whatever their count, and a page rule cannot re-grid them into a
+   stack that pushes the hero over the next section */
+.hero__facts { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)) !important; }
+.hero__facts > * { grid-column: auto !important; }
