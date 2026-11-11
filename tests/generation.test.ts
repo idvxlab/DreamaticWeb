@@ -1086,7 +1086,9 @@ test("Skill upgrades invalidate only affected stages, preserve patch mode and ke
       skills: library,
     });
   try {
-    await run("创建品牌网站");
+    // A page type whose route loads the visual method the later edit reuses (company pages
+    // now load the page kit instead).
+    await run("创建作品集网站");
     assert.equal(p.status, "complete", p.error);
     assert.equal(seen.length, 3);
     const initialReads = library.io.reads;

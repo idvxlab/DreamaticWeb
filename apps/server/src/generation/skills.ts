@@ -61,6 +61,9 @@ const categories: [string, RegExp][] = [
     /落地页|营销|宣传|推广|品牌介绍|产品(?:官网|首页|介绍|展示|发布)|发布会|\blanding\b|\bcampaign\b|marketing|promotion(?:al)?\b|product launch/i,
   ],
 ];
+/** The page kit that new company, product, campaign and institution pages are built on. */
+const PAGE_KIT = "designer-taste";
+const PAGE_KIT_SITES = ["designer-landing-page", "designer-saas-website"];
 /** User wording that asks for an expressive showcase rather than a plain informational page. */
 const EXPRESSIVE =
   /炫酷|酷炫|惊艳|高级感|质感|大气|沉浸|视觉冲击|设计感|氛围|有冲击力|\b(?:stunning|striking|immersive|premium|bold|award|cinematic|wow)\b/i;
@@ -141,7 +144,27 @@ export function selectSkills(
       const match =
         categories.find(([, pattern]) => pattern.test(local)) ||
         categories.find(([, pattern]) => pattern.test(combined));
-      chosen.add(match?.[0] || "designer-web-architecture");
+      // Company, product, campaign and institution pages are built on the page kit, which
+      // carries its own layout, blocks, motion moments and looks (styles and block sets are
+      // supplied after the plan). Dashboards, catalogues, portfolios and editorial sites keep
+      // their subject Skills.
+      if (!match || PAGE_KIT_SITES.includes(match[0])) {
+        chosen.add(PAGE_KIT);
+        if (
+          /多页|分层|信息密集|\bmulti[- ]?page\b|hierarchy|complex site/i.test(
+            combined,
+          )
+        )
+          chosen.add("designer-web-architecture");
+        if (
+          /菜单|交互|筛选|表单|\b(?:interaction|menu|filter|form|tabs?)\b/i.test(
+            combined,
+          )
+        )
+          chosen.add("designer-interaction-design");
+        return [...chosen].filter((name) => exists(name));
+      }
+      chosen.add(match[0]);
       // Only what the user asked for (request text and user-stated design) raises
       // ambition; Orchestrator's designDefaults never do.
       const brief = (context.brief || {}) as {

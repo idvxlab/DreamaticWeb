@@ -320,8 +320,8 @@ test("deterministic routing composes complementary skills and keeps edits narrow
     "designer-interaction-design",
   ]);
   for (const [request, expected] of [
-    ["产品营销首页", "designer-landing-page"],
-    ["SaaS 多页面网站导航", "designer-saas-website"],
+    ["产品营销首页", "designer-taste"],
+    ["SaaS 多页面网站导航", "designer-taste"],
     ["KPI dashboard", "designer-dashboard"],
     ["商城商品详情", "designer-ecommerce"],
     ["作品集", "designer-portfolio"],
@@ -336,10 +336,8 @@ test("deterministic routing composes complementary skills and keeps edits narrow
     route("KPI dashboard with helpful navigation and native disclosure"),
     ["designer-dashboard", "designer-visual-design"],
   );
-  assert.deepEqual(route("创建网站"), [
-    "designer-web-architecture",
-    "designer-visual-design",
-  ]);
+  // Company, product and campaign pages, and pages of unstated type, are built on the page kit.
+  assert.deepEqual(route("创建网站"), ["designer-taste"]);
   assert.deepEqual(route("/skill:designer-editorial 修改章节", true), [
     "designer-editorial",
   ]);
@@ -493,36 +491,30 @@ test("showcase routing follows user wording, not Orchestrator defaults, and stay
     const showcase = route(
       "用上传资料生成公司的产品宣传页，视觉成熟、酷炫、惊艳，整页有编排的主题动效",
     );
-    assert.deepEqual(showcase, [
-      "designer-landing-page",
-      "designer-impeccable",
-      "designer-motion-design",
-    ]);
-    assert.deepEqual(route("生成产品宣传页，不要动画，简洁即可"), [
-      "designer-landing-page",
-      "designer-visual-design",
-    ]);
-    // Inferred taste in designDefaults never raises ambition; user-stated design does.
+    // Showcase pages are built on the page kit, whose moments carry the motion.
+    assert.deepEqual(showcase, ["designer-taste"]);
+    assert.deepEqual(route("生成产品宣传页，不要动画，简洁即可"), ["designer-taste"]);
     assert.deepEqual(
       route("根据资料做公司介绍网站", {
         goal: "公司介绍",
         design: [],
         designDefaults: ["科技感、炫酷动效"],
       }),
-      ["designer-web-architecture", "designer-visual-design"],
+      ["designer-taste"],
     );
-    assert.ok(
-      route("根据资料做公司介绍网站", {
-        design: ["首屏要有明显的主题动效"],
-      }).includes("designer-motion-design"),
-    );
+    // Subject Skills still follow the user's wording, and ambition rises only from it.
+    assert.deepEqual(route("作品集展示", { designDefaults: ["炫酷动效"] }), [
+      "designer-portfolio",
+      "designer-visual-design",
+    ]);
+    assert.ok(route("作品集展示，炫酷动效").includes("designer-motion-design"));
     const worst = route("产品宣传页，炫酷动效，带菜单交互和筛选");
-    assert.equal(worst.length, 4);
+    assert.deepEqual(worst, ["designer-taste", "designer-interaction-design"]);
     const prepared = await library.prepare("designer", worst);
     assert.ok(prepared.characters < SKILL_BODY_CHARACTER_LIMIT);
     assert.ok(
-      prepared.references.some((r) => r.endsWith("page-narrative.md")),
-      "the page narrative method is preloaded with motion",
+      prepared.references.some((r) => r.endsWith("kit.md")),
+      "the kit markup is preloaded",
     );
   } finally {
     library.close();
@@ -543,7 +535,7 @@ test("site type follows the user's words, and automatic routing drops low-priori
         { text: "用资料生成产品宣传页，酷炫动效", editing: false, brief },
         skills,
       )[0],
-      "designer-landing-page",
+      "designer-taste",
       "a brief mention of case studies does not turn a promotional page into a portfolio",
     );
     const names = [

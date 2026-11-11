@@ -37,6 +37,7 @@ import {
 import { applyPagePatch } from "./page-patch.js";
 import { inlineSkillAssets } from "./skill-assets.js";
 import { guardPictures } from "../picture-guard.js";
+import { repairAnchors } from "../anchor-repair.js";
 import { withStyle } from "./style-kit.js";
 import { lenientList } from "./lenient-json.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
@@ -924,12 +925,20 @@ async function execute(
         throw new Error("当前运行没有可用的 Skill 资源");
       // Drawings, charts and diagrams marked by the Designer are shown whole.
       html = guardPictures(html);
+      const anchors = repairAnchors(html);
+      html = anchors.html;
       const report = await validatePage(p, html, { rejectUnusableMedia: true });
       if (!report.valid)
         throw new Error(
           "页面结构需要修正：" +
             JSON.stringify(report.issues.filter((i) => i.severity === "error")),
         );
+      if (anchors.repaired.length)
+        report.issues.push({
+          severity: "warning",
+          code: "anchor_repaired",
+          message: "Repaired in-page links: " + anchors.repaired.join("; "),
+        });
       // Record, never reject: planned sections that the code did not implement.
       const $page = cheerio.load(report.html);
       const missing = (contentOutline || [])
