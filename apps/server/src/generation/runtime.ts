@@ -42,7 +42,7 @@ import {
   kitLayoutOverrides,
 } from "../picture-guard.js";
 import { repairAnchors } from "../anchor-repair.js";
-import { withStyle } from "./style-kit.js";
+import { sectionInventory, withCompose, withStyle } from "./style-kit.js";
 import { lenientArgs } from "./lenient-json.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
@@ -927,6 +927,7 @@ async function execute(
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
       if (appliedStyle) html = withStyle(html, appliedStyle);
+      if ((loadedSkills.designer || []).includes("designer-compose")) html = withCompose(html);
       if (library)
         html = (
           await inlineSkillAssets(html, (reference) =>
@@ -1293,7 +1294,7 @@ async function execute(
               }),
               form: Type.String({
                 description:
-                  "Composition and visual treatment that serve that purpose",
+                  "The block this section is built from — a loaded kit's block (range, case, feature, an org block) or a designer-compose composition (cx-split, cx-gallery, cx-cards, cx-timeline, cx-facts, cx-figure, cx-band) — then its visual treatment",
               }),
             }),
             { maxItems: 12 },
@@ -1316,9 +1317,25 @@ async function execute(
             ]
               .filter(Boolean)
               .join("\n\n");
+            // What each section holds, counted here, so the composition follows the content.
+            const inventory =
+              (loadedSkills.designer || []).includes("designer-compose") &&
+              args.contentOutline?.length
+                ? "Section inventory (counted by the host from your outline: characters of planned content, pictures named, their orientation, and the composition that fits). Build each section from a block that fits what it holds:\n" +
+                  sectionInventory(
+                    args.contentOutline,
+                    catalog.flatMap((source) => source.assets),
+                  )
+                    .map(
+                      (row) =>
+                        `- #${row.id}: ${row.words} chars, ${row.pictures.length} picture(s)${row.pictures.length ? " [" + row.pictures.map((p) => p.id + " " + p.orient).join(", ") + "]" : ""} → ${row.fits}`,
+                    )
+                    .join("\n")
+                : "";
             return (
               "Plan recorded. " +
               (supplied ? supplied + "\n\n" : "") +
+              (inventory ? inventory + "\n\n" : "") +
               "In your next turn call submit_page with the complete HTML that carries out this plan; do not restate the plan."
             );
           },

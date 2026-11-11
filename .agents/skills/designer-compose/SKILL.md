@@ -5,8 +5,7 @@ description: Balanced compositions of words and pictures for any page — a spli
 
 # Balanced compositions
 
-Include once, after any kit stylesheet:
-`<link rel="stylesheet" href="skill://designer-compose/assets/compose.css">` and, before `</body>`, `<script src="skill://designer-compose/assets/compose.js"></script>`.
+Name each section's composition in the plan (`contentOutline[].form`); after the plan the host replies with a section inventory (planned content, pictures named, their orientation) and the composition that fits it. Write the classes below; the host links this Skill's stylesheet and script whenever the page uses a `cx-` class.
 
 A loaded kit's own blocks come first for what they cover (a product range, a case, a feature, an org block). For every other section, choose one composition from what the section holds, counted from the facts and the media catalog (words, number of pictures, their width×height):
 
