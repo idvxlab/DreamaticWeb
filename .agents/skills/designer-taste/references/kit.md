@@ -61,7 +61,7 @@ Four to six one-word nav items, one primary button. The logo is the client's log
 </section>
 ```
 
-Hero over a whole photograph or scene, only one with a truly empty calm side for the words, never a title card, poster or picture with its own lettering (`data-calm` names its empty side: left, right or top; `data-tone` says whether that side is dark or light; `--ly-pos` crops to the subject; nothing is laid over the picture):
+Hero over a whole photograph or scene, with the words on a part whose tone contrasts with them and never over the picture's own lettering (`data-calm` names that side: left, right or top; `data-tone` says whether that side is dark or light; `--ly-pos` crops to the subject; nothing is laid over the picture):
 
 ```html
 <section class="hero hero--photo" data-calm="left" data-box="none" data-tone="dark" data-enter aria-labelledby="hero-h">

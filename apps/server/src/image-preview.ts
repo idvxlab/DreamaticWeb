@@ -43,7 +43,15 @@ const CELL = 384,
  * One labelled grid for several requested images, so a batched asset_view costs
  * one tool result instead of one model round per image. Display files are unchanged.
  */
-export async function contactSheet(filenames: string[], firstNumber = 1) {
+/**
+ * Each tile's label carries its number and, when given, a short tag (the asset id's first
+ * characters) so the model can read which asset a tile is from the picture itself.
+ */
+export async function contactSheet(
+  filenames: string[],
+  firstNumber = 1,
+  tags: string[] = [],
+) {
   if (!filenames.length || filenames.length > CONTACT_SHEET_LIMIT)
     throw new Error("批量查看数量无效");
   const columns = filenames.length <= 4 ? 2 : filenames.length <= 9 ? 3 : 4;
@@ -64,7 +72,7 @@ export async function contactSheet(filenames: string[], firstNumber = 1) {
       const left = (index % columns) * CELL,
         top = Math.floor(index / columns) * CELL;
       const label = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${CELL}" height="${LABEL}"><rect width="100%" height="100%" fill="#111"/><text x="10" y="20" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#fff">${index + firstNumber}</text></svg>`,
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${CELL}" height="${LABEL}"><rect width="100%" height="100%" fill="#111"/><text x="10" y="20" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#fff">${index + firstNumber}${tags[index] ? " · " + tags[index].replace(/[^a-z0-9]/gi, "") : ""}</text></svg>`,
       );
       return [
         { input: label, left, top },

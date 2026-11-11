@@ -454,6 +454,9 @@ async function execute(
       const stageStart = performance.now(),
         callStart = metrics.modelCalls;
       let turns = 0;
+      // One light reminder when a turn ends with neither a tool call nor a result (the model
+      // wrote its answer, such as a whole page, into reply text). Never repeated.
+      let reminded = false;
       let lastTool = "none",
         requestId = "",
         responseStatus = 0;
@@ -507,6 +510,29 @@ async function execute(
             return;
           if (submitted()) return { action: "end" };
           if (turns >= 6) throw new Error(`${role} 未在 6 轮内提交有效结果`);
+          const calledTool = message.content.some((c) => c.type === "toolCall");
+          if (!calledTool && !reminded) {
+            reminded = true;
+            const terminal =
+              role === "orchestrator"
+                ? "submit_intent"
+                : role === "analyst"
+                  ? "submit_facts"
+                  : plan
+                    ? "submit_page"
+                    : "plan_page, then submit_page";
+            event(
+              role,
+              `${role} 未调用工具就结束了这一轮，已提醒一次`,
+              "status",
+            );
+            agent.followUp({
+              role: "user",
+              content: `Your turn ended without a tool call. Deliver the result only through ${terminal}; do not write it in reply text.`,
+              timestamp: Date.now(),
+            });
+            return { action: "continue" };
+          }
         },
       });
       agent.subscribe((event) => {
@@ -1016,6 +1042,9 @@ async function execute(
                       .slice(at, at + CONTACT_SHEET_LIMIT)
                       .map((i) => i.filename),
                     at + 1,
+                    items
+                      .slice(at, at + CONTACT_SHEET_LIMIT)
+                      .map((i) => i.asset.id.slice(0, 4)),
                   ),
                 );
             else {
@@ -1057,27 +1086,36 @@ async function execute(
                     },
                   ]
                 : []),
+              // Each sheet follows its own legend, so a tile is never matched across sheets.
               ...(items.length > 1
-                ? [
+                ? buffers.flatMap((buffer, sheet) => [
                     {
                       type: "text" as const,
                       text:
-                        "Contact sheet tiles (number → asset): " +
+                        `Contact sheet ${sheet + 1} of ${buffers.length} (tile number · id start → asset): ` +
                         items
+                          .slice(
+                            sheet * CONTACT_SHEET_LIMIT,
+                            (sheet + 1) * CONTACT_SHEET_LIMIT,
+                          )
                           .map(
                             (i, n) =>
-                              `${n + 1}=${i.asset.id} (${i.asset.width}×${i.asset.height})`,
+                              `${sheet * CONTACT_SHEET_LIMIT + n + 1} · ${i.asset.id.slice(0, 4)} = ${i.asset.id} (${i.asset.width}×${i.asset.height})`,
                           )
                           .join("; ") +
-                        ". Tiles are scaled to fit; use the original URL in the page.",
+                        ". Each tile's label shows its number and the asset id's start; describe a picture only from its own tile. Tiles are scaled to fit; use the original URL in the page.",
                     },
-                  ]
-                : []),
-              ...buffers.map((buffer) => ({
-                type: "image" as const,
-                data: buffer.toString("base64"),
-                mimeType: mime,
-              })),
+                    {
+                      type: "image" as const,
+                      data: buffer.toString("base64"),
+                      mimeType: mime,
+                    },
+                  ])
+                : buffers.map((buffer) => ({
+                    type: "image" as const,
+                    data: buffer.toString("base64"),
+                    mimeType: mime,
+                  }))),
             ],
             details: {},
           };

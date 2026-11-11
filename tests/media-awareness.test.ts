@@ -329,7 +329,7 @@ test("batched asset_view costs one round; flagged media leave the catalog, facts
       const results = context.messages.filter((m) => m.role === "toolResult");
       if (!rejected) {
         const last = JSON.stringify(results.at(-1)!.content);
-        assert.match(last, /Contact sheet tiles/);
+        assert.match(last, /Contact sheet 1 of 1 .*1 · [0-9a-f]{4} = /);
         assert.equal(
           results.at(-1)!.content.filter((c) => c.type === "image").length,
           1,
