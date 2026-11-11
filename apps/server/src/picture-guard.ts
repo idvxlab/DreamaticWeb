@@ -33,3 +33,51 @@ export function guardPictures(html: string) {
   else $.root().prepend(style);
   return $.html();
 }
+
+/** Kinds that keep their size even when flagged graphic: their content is the lettering or data. */
+const SIZED_KINDS = ["screenshot", "chart", "poster", "drawing"];
+const GRAPHIC_MARK = "graphics";
+
+/**
+ * Harness rule: flat low-detail artwork flagged `graphic` at import (a logo, emblem or badge)
+ * is shown at icon size, unless the Designer marked it as a screenshot, chart, poster or
+ * drawing. A logo enlarged to fill a frame is the failure this prevents. Idempotent.
+ */
+export function guardGraphics(html: string, urls: string[]) {
+  if (!urls.length || html.includes(`data-host="${GRAPHIC_MARK}"`)) return html;
+  const present = urls.filter((url) => html.includes(url));
+  if (!present.length) return html;
+  const $ = cheerio.load(html);
+  const not = SIZED_KINDS.map((k) => `[data-kind="${k}"]`).join(",");
+  const selector = present
+    .map((url) => `img[src="${url.replaceAll('"', "")}"]:not(${not})`)
+    .join(",");
+  if (!$(selector).length) return html;
+  const css = `:is(${selector}){width:auto!important;height:auto!important;max-width:min(160px,100%)!important;max-height:96px!important;object-fit:contain!important;position:static!important;inset:auto!important;margin:auto!important}`;
+  const style = $("<style>").attr("data-host", GRAPHIC_MARK).text(css);
+  if ($("head").length) $("head").append(style);
+  else $.root().prepend(style);
+  return $.html();
+}
+
+const KIT_BLOCKS =
+  /\.(hero|range|case|feature|wrap|container|spec-table|figures)(?:--[\w-]+|__[\w-]+)*(?![\w-])/;
+const LAYOUT = /(?:^|;|\{)\s*(display|grid-template-columns|grid-template-areas|columns|width|max-width|position|flex-direction)\s*:/;
+
+/**
+ * Selectors in the page's own stylesheets that change the layout of a kit block or hero.
+ * Recorded as a warning, never rejected: it explains a broken frame or row when one appears.
+ */
+export function kitLayoutOverrides(html: string) {
+  const $ = cheerio.load(html);
+  const found = new Set<string>();
+  $("style")
+    .not("[data-skill-asset],[data-host]")
+    .each((_i, element) => {
+      const css = $(element).text().replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const [, selector, body] of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g))
+        if (KIT_BLOCKS.test(selector) && LAYOUT.test("{" + body))
+          found.add(selector.trim().replace(/\s+/g, " ").slice(0, 80));
+    });
+  return [...found];
+}

@@ -29,6 +29,8 @@ function rows(markdown: string) {
   }
   return result;
 }
+const withoutKey = (records: Record<string, unknown>[]) =>
+  records.map(({ key: _key, ...record }) => record);
 const sourceId = "11111111-1111-4111-8111-111111111111";
 function fixture() {
   const facts: Analysis = {
@@ -66,7 +68,13 @@ test("compact Designer input retains exact facts, conditions, IDs, URLs and meta
   assert.ok(output.length < original.length);
   const [factView, mediaView] = output.split("# Media catalog");
   assert.deepEqual(rows(factView), facts.facts);
-  assert.deepEqual(rows(mediaView), catalog[0].assets);
+  const media = rows(mediaView);
+  // More pictures than one look shows: the facts' cited pictures, in fact order, are marked key.
+  assert.deepEqual(
+    media.filter((row) => row.key).map((row) => row.id),
+    catalog[0].assets.slice(0, 18).map((asset) => asset.id),
+  );
+  assert.deepEqual(withoutKey(media), catalog[0].assets);
   assert.ok(factView.includes(JSON.stringify(facts.summary)));
   assert.ok(
     factView.includes(
@@ -96,7 +104,7 @@ test("mixed optional asset fields and source boundaries preserve presence and or
   const output = designerContext(facts, [source, second], factsMarkdown(facts));
   const mediaView = output.split("# Media catalog")[1];
   assert.deepEqual(
-    rows(mediaView),
+    withoutKey(rows(mediaView)),
     JSON.parse(JSON.stringify([...source.assets, ...second.assets])),
   );
   assert.ok(mediaView.includes('"id":"second-source"'));

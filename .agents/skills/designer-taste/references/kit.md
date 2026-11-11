@@ -101,7 +101,9 @@ Choose per content, and vary them: a page is not one block repeated.
 - Several comparable models → `.range` then one `.spec-table`.
 - A flagship, or two or three products that each deserve a look → one `.feature` per product (alternate with `.feature--flip`); its specs in its own `.rows`.
 - A flagship as `.feature` and the rest as `.range` is often the best mix.
-- Cases → one `.case` each, all the same shape. Process steps or services with pictures → `.range` with a name and one line.
+- Cases → one `.case` each, all the same shape. The steps of a process → `<ul class="range range--steps">`, one `.range__item` per step with its name in the `h3` and one line; the kit numbers them, and a step without its own picture has no figure (the kit shows its number in the same frame). Services with pictures → `.range` with a name and one line.
+
+All these blocks sit inside their section's `.wrap` (`<section class="section" id="…"><div class="wrap">…</div></section>`).
 
 ```html
 <div class="range-group"><h3>旋翼桨</h3><ul class="range">
@@ -123,11 +125,11 @@ Choose per content, and vary them: a page is not one block repeated.
 
 - A range or a case uses one kind of picture per frame row; a product's odd photograph goes to the hero or a `.feature` (`data-fit="cover"` on its `.feature__media` for an edge-to-edge photograph).
 - The same three figures in the same order in every card or case; complete specifications once in `.spec-table`; values all models share once in `.spec-common`.
-- Group by product family; a family of one is a `.feature`, never a lone card. Nothing but products in a `.range`. Do not restyle the frames or their pictures: the host sizes them. Set `--range-bg`, `--feature-bg` and `--panel-bg` to the pictures' own backdrop (white drawings: #fff) so no picture shows as a box in a box.
+- Group by product family; a family of one is a `.feature`, never a lone card. Nothing but products, or the steps of one process in `.range--steps`, in a `.range`. Do not restyle the frames or their pictures: the host sizes them. Set `--range-bg`, `--feature-bg` and `--panel-bg` to the pictures' own backdrop (white drawings: #fff) so no picture shows as a box in a box.
 
 A drawing or a chart: `<figure class="figure-panel"><img src="…" alt="…"></figure>` beside its text (`span-6` next to the words' `span-5`), never alone on a row and never full width; the panel is light and caps its height.
 
-Write these blocks, not cards, image boxes or chart frames of your own.
+Write these blocks, not cards, image boxes, step grids or chart frames of your own. Your own CSS sets the kit's variables and styles only blocks the kit does not have; it never changes the layout (display, grid, columns, width, max-width, position) of a kit block or hero.
 
 A dark band or a dark closing on a light page: add `ground-inverse` to the section or footer (`<footer class="footer closing ground-inverse">`). It switches ground, text, lines and buttons together; never paint a band's background yourself, or its buttons keep the light page's colours and vanish.
 

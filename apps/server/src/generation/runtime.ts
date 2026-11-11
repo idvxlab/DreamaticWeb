@@ -36,7 +36,11 @@ import {
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
 import { inlineSkillAssets } from "./skill-assets.js";
-import { guardPictures } from "../picture-guard.js";
+import {
+  guardGraphics,
+  guardPictures,
+  kitLayoutOverrides,
+} from "../picture-guard.js";
 import { repairAnchors } from "../anchor-repair.js";
 import { withStyle } from "./style-kit.js";
 import { lenientList } from "./lenient-json.js";
@@ -941,6 +945,15 @@ async function execute(
         throw new Error("当前运行没有可用的 Skill 资源");
       // Drawings, charts and diagrams marked by the Designer are shown whole.
       html = guardPictures(html);
+      // Flat artwork flagged at import (logos, emblems) stays at icon size.
+      html = guardGraphics(
+        html,
+        catalog.flatMap((source) =>
+          source.assets
+            .filter((a) => a.flags?.includes("graphic"))
+            .map((a) => a.url),
+        ),
+      );
       const anchors = repairAnchors(html);
       html = anchors.html;
       const report = await validatePage(p, html, { rejectUnusableMedia: true });
@@ -954,6 +967,13 @@ async function execute(
           severity: "warning",
           code: "anchor_repaired",
           message: "Repaired in-page links: " + anchors.repaired.join("; "),
+        });
+      const overrides = kitLayoutOverrides(report.html);
+      if (overrides.length && (loadedSkills.designer || []).includes("designer-taste"))
+        report.issues.push({
+          severity: "warning",
+          code: "kit_layout_override",
+          message: "Page CSS changes kit block layout: " + overrides.join("; "),
         });
       // Record, never reject: planned sections that the code did not implement.
       const $page = cheerio.load(report.html);
@@ -1049,7 +1069,7 @@ async function execute(
       tools.push({
         name: "asset_view",
         label: "asset_view",
-        description: `Inspect relevant project images only when visual information is needed. Pass every candidate you need in ONE call (assetIds, at most ${ASSET_VIEW_LIMIT}); several images return as numbered contact sheets of up to ${CONTACT_SHEET_LIMIT} tiles each. Original bytes remain unchanged.`,
+        description: `Inspect relevant project images only when visual information is needed. Pass your candidates in one call (assetIds, at most ${ASSET_VIEW_LIMIT}); they return as numbered contact sheets of ${CONTACT_SHEET_LIMIT} tiles each. One more call is allowed for further pictures you intend to place; never look at a picture twice. Original bytes remain unchanged.`,
         parameters: Type.Object({
           assetIds: Type.Optional(
             Type.Array(Type.String(), {
@@ -1156,7 +1176,7 @@ async function execute(
                               `${sheet * CONTACT_SHEET_LIMIT + n + 1} · ${i.asset.id.slice(0, 4)} = ${i.asset.id} (${i.asset.width}×${i.asset.height})`,
                           )
                           .join("; ") +
-                        ". Each tile's label shows its number and the asset id's start; describe a picture only from its own tile. Tiles are scaled to fit; use the original URL in the page.",
+                        ". Each tile's label shows its number and the asset id's start; describe a picture only from what its own tile shows. A catalog context is the page text printed nearby and often belongs to a neighbouring picture: when the tile disagrees, the tile is right (a mascot is a mascot, a logo is a logo). Tiles are scaled to fit; use the original URL in the page.",
                     },
                     {
                       type: "image" as const,

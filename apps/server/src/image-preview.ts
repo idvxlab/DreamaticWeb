@@ -33,9 +33,10 @@ export async function imagePreview(filename: string, cacheDir: string) {
   return buffer;
 }
 
-export const CONTACT_SHEET_LIMIT = 12;
-/** One asset_view call may name two sheets' worth; the host splits them, so the model never has to. */
-export const ASSET_VIEW_LIMIT = CONTACT_SHEET_LIMIT * 2;
+/** Six tiles per sheet: large enough that a picture is read from its pixels, not its caption. */
+export const CONTACT_SHEET_LIMIT = 6;
+/** One asset_view call may name three sheets' worth; the host splits them, so the model never has to. */
+export const ASSET_VIEW_LIMIT = CONTACT_SHEET_LIMIT * 3;
 const CELL = 384,
   LABEL = 28;
 

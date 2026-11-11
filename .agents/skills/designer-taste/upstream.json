@@ -116,11 +116,11 @@
     },
     {
       "path": "references/kit.md",
-      "sha256": "9074227f64534d9a69616671eb7573dc5dae3f56420258b238e379d8637e8ac4"
+      "sha256": "e2cd2c8b0f109807823f3fa689430254e1abafeb4e451c683832538d92c9d630"
     },
     {
       "path": "assets/taste.css",
-      "sha256": "6e0115ff93e349e2005aa01db1ed9e53ea463428fd8f064c34f79c10c60dd2b7"
+      "sha256": "8cfc97ab5d8781780b2f672e413bd9a39c8d8e5411d3c84e903c168225293744"
     },
     {
       "path": "assets/taste.js",
@@ -139,7 +139,8 @@
     "sections are content-sized instead of fixed at one or two screens (upstream needs its browser checker for that); the hero keeps at least one screen",
     "host layer appended last: a button row nested in the hero head and facts after the stage keep their places; .spec-card (product picture and rows, one media frame) and .figure-panel (drawings and charts at half width) added",
     ".range (product lineup with count-based columns and a centred last row), .spec-table (models as columns) and host.js (range frame ratio from its pictures) added to the host layer; the product-page rules point to them",
-    ".feature (one product per section, alternating), .case (one shape for every case: words and figures beside a drawing and a measured chart) and shared .figures added; kit.md gives a product-page block menu that varies the blocks"
+    ".feature (one product per section, alternating), .case (one shape for every case: words and figures beside a drawing and a measured chart) and shared .figures added; kit.md gives a product-page block menu that varies the blocks",
+    "host layer: blocks placed outside .wrap keep the side margins; .figures values wrap; a .range__media with no picture shows the numbered panel; .range--steps numbers a process; kit.md asks for blocks inside .wrap and forbids restyling kit layout"
   ],
   "local": [
     {

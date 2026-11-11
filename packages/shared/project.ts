@@ -36,7 +36,13 @@ export interface Asset {
   /** Deterministic import signals; flat/frame-only media are not standalone content. */
   flags?: AssetFlag[];
 }
-export type AssetFlag = "flat" | "frame-only" | "fragment" | "page-background";
+/** graphic: flat low-detail artwork (a logo, emblem or badge), shown at icon size only. */
+export type AssetFlag =
+  | "flat"
+  | "frame-only"
+  | "fragment"
+  | "page-background"
+  | "graphic";
 export interface Source {
   id: string;
   name: string;

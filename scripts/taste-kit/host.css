@@ -184,3 +184,28 @@ main > [data-moment]:is(section, .section) { overflow-y: visible !important; }
   position: absolute !important; inset: 6% !important; width: 88% !important; height: 88% !important;
   max-width: none !important; max-height: none !important; object-fit: contain !important;
 }
+
+/* a block placed straight in its section, outside .wrap, keeps the page's side margins: a case or
+   feature that touches the window edge, or runs past it, is never the intent */
+main > :is(section, .section) > :is(.case, .feature, .range, .range-group, .spec-table-wrap, .figures),
+main > :is(.case, .feature) {
+  width: min(100% - 2 * var(--gut), var(--container)); margin-inline: auto; box-sizing: border-box;
+}
+/* figures hold short values; words in them wrap inside their column instead of overlapping */
+:is(.figures, .range__figures) dd { white-space: normal !important; overflow-wrap: anywhere; }
+
+/* a picture frame without a picture (only words standing in for one) shows the numbered panel */
+.range__item > .range__media:not(:has(img, picture, svg, video, canvas)) {
+  display: grid !important; place-items: center; background: var(--range-bg, var(--p-surface)) !important;
+}
+.range__item > .range__media:not(:has(img, picture, svg, video, canvas)) > * { display: none !important; }
+.range__item > .range__media:not(:has(img, picture, svg, video, canvas))::before {
+  content: counter(range-item, decimal-leading-zero);
+  font: var(--display-weight, 600) clamp(2rem, 4vw, 3.5rem) / 1 var(--font-display); color: var(--p-muted);
+}
+
+/* steps of a process: a range whose items are numbered in order; a step without its own picture
+   shows its number in the same frame, so the row stays even */
+.range--steps .range__body > h3::before {
+  content: counter(range-item, decimal-leading-zero) " "; color: var(--p-accent, var(--accent)); font-variant-numeric: tabular-nums;
+}

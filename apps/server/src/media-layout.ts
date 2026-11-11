@@ -55,7 +55,33 @@ export async function imageSignals(buffer: Buffer): Promise<AssetFlag[]> {
   if (all.sd < 6 && all.range < 48) return ["flat"];
   const center = region(13, 13, 51, 51);
   if (center.sd < 1.5 && center.range < 6 && all.sd >= 6) return ["frame-only"];
-  return [];
+  return (await flatGraphic(buffer)) ? ["graphic"] : [];
+}
+
+/**
+ * A logo, emblem or badge: a few colours filling large areas. Line drawings also use
+ * few colours but ink little of the frame; photographs, renders and character art
+ * spread over many colours. Such artwork has no detail to show beyond icon size.
+ */
+async function flatGraphic(buffer: Buffer) {
+  const { data, info } = await sharp(buffer, { limitInputPixels: 100_000_000 })
+    .flatten({ background: "#fff" })
+    .resize(128, 128, { fit: "inside" })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const counts = new Map<number, number>();
+  let ink = 0;
+  const pixels = data.length / info.channels;
+  for (let i = 0; i < data.length; i += info.channels) {
+    const key = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+    counts.set(key, (counts.get(key) || 0) + 1);
+    if (data[i] + data[i + 1] + data[i + 2] < 720) ink++;
+  }
+  const top = [...counts.values()]
+    .sort((a, b) => b - a)
+    .slice(0, 8)
+    .reduce((a, b) => a + b, 0);
+  return counts.size < 120 && top / pixels >= 0.93 && ink / pixels >= 0.35;
 }
 
 const clean = (text: string) => text.replace(/\s+/g, " ").trim();
