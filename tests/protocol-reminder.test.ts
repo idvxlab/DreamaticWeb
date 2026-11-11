@@ -106,3 +106,20 @@ test("block sets named in the plan are supplied for the writing turn and their s
   assert.match(p.versions.at(-1)!.html, /data-skill-asset="designer-org:org.css"/);
   await removeProject(p.id).catch(() => {});
 });
+
+test("a read-only question answered in reply text is taken as the answer, with no extra call", async () => {
+  const p = await create();
+  const source = await ingest(Buffer.from("# 公司\n\n产品介绍。"), "a.md", p.id);
+  p.sources.push(source);
+  await save(p);
+  let calls = 0;
+  const streamFn: StreamFn = (model) => {
+    calls++;
+    return reply(model, [{ type: "text", text: "产品区按系列排列，后面是参数对比表。" }], "stop");
+  };
+  await runProject(p, requestSchema.parse({ text: "解释一下产品区怎样组织", mode: "answer" }), save, () => {}, { config, streamFn, skills: false });
+  assert.equal(p.status, "complete", p.error);
+  assert.equal(calls, 1);
+  assert.equal(p.messages.at(-1)!.text, "产品区按系列排列，后面是参数对比表。");
+  await removeProject(p.id).catch(() => {});
+});

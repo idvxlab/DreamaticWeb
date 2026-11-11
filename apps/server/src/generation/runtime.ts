@@ -431,6 +431,8 @@ async function execute(
       input: string,
       tools: AgentTool[],
       submitted: () => boolean,
+      /** A stage whose result may be plain reply text (a read-only answer) takes it here. */
+      takeProse?: (text: string) => boolean,
     ) {
       controller.signal.throwIfAborted();
       p.run!.activeRole = role;
@@ -531,10 +533,19 @@ async function execute(
           if (submitted()) return { action: "end" };
           if (turns >= 6) throw new Error(`${role} 未在 6 轮内提交有效结果`);
           const calledTool = message.content.some((c) => c.type === "toolCall");
+          if (!calledTool && takeProse) {
+            const text = message.content
+              .filter((c) => c.type === "text")
+              .map((c) => c.text)
+              .join("\n")
+              .trim();
+            if (text && takeProse(text)) return { action: "end" };
+          }
           if (!calledTool && !reminded) {
             reminded = true;
-            const terminal =
-              role === "orchestrator"
+            const terminal = tools.some((t) => t.name === "submit_answer")
+              ? "submit_answer"
+              : role === "orchestrator"
                 ? "submit_intent"
                 : role === "analyst"
                   ? "submit_facts"
@@ -639,6 +650,11 @@ async function execute(
           ),
         ],
         () => Boolean(answer),
+        // The model often answers a read-only question in reply text: that text is the answer.
+        (text) => {
+          answer = text.slice(0, 20000);
+          return true;
+        },
       );
       p.messages.push({
         role: "assistant",
