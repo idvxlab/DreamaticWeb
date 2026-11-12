@@ -129,7 +129,7 @@ All these blocks sit inside their section's `.wrap` (`<section class="section" i
 
 A drawing or a chart: `<figure class="figure-panel"><img src="…" alt="…"></figure>` beside its text (`span-6` next to the words' `span-5`), never alone on a row and never full width; the panel is light and caps its height.
 
-Write these blocks, not cards, image boxes, step grids or chart frames of your own; a section these blocks do not cover uses a designer-compose composition (split, gallery, cards, timeline, facts, figure, band). Your own CSS sets the kit's variables and styles only blocks the kit does not have; it never changes the layout (display, grid, columns, width, max-width, position) of a kit block or hero.
+Write these blocks, not cards, image boxes, step grids or chart frames of your own. Your own CSS sets the kit's variables and styles only blocks the kit does not have; it never changes the layout (display, grid, columns, width, max-width, position) of a kit block or hero.
 
 A dark band or a dark closing on a light page: add `ground-inverse` to the section or footer (`<footer class="footer closing ground-inverse">`). It switches ground, text, lines and buttons together; never paint a band's background yourself, or its buttons keep the light page's colours and vanish.
 
