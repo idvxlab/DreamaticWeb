@@ -16,7 +16,8 @@ import path from "node:path";
 import { ingest } from "../apps/server/src/ingest.js";
 import { runProject } from "../apps/server/src/generation/runtime.js";
 import { requestSchema } from "../packages/shared/generation.js";
-import { contactSheet, CONTACT_LAYOUTS, DETAIL_VIEW_LIMIT } from "../apps/server/src/image-preview.js";
+import { contactSheet, CONTACT_SHEET_LIMIT, ASSET_VIEW_LIMIT } from "../apps/server/src/image-preview.js";
+import { guardPictures } from "../apps/server/src/picture-guard.js";
 
 const config: RuntimeConfig = {
   mode: "live",
@@ -45,49 +46,47 @@ const picture = (n: number) =>
     .png()
     .toBuffer();
 
-test("contact sheets: overview tiles are small and twenty to a sheet, detail tiles large and six to a sheet", async () => {
+test("contact sheets hold six large tiles; an undecodable picture blanks only its own tile", async () => {
   const p = await create();
   try {
     const files: string[] = [];
-    for (let n = 0; n < 20; n++) {
+    for (let n = 0; n < 7; n++) {
       const s = await ingest(await picture(n), `p${n}.png`, p.id);
       files.push(path.join(projectDir(p.id), "assets", path.basename(s.assets[0].url)));
     }
-    const overview = await sharp(await contactSheet(files, { layout: "overview" })).metadata();
-    const { cell } = CONTACT_LAYOUTS.overview;
-    assert.ok(cell >= 240 && cell <= 300);
-    assert.equal(overview.width, 5 * cell);
-    assert.equal(overview.height, 4 * cell);
-    await assert.rejects(contactSheet([...files, files[0]], { layout: "overview" }));
-    const detail = await sharp(await contactSheet(files.slice(0, 6), { layout: "detail" })).metadata();
-    assert.equal(detail.width, 3 * CONTACT_LAYOUTS.detail.cell);
-    await assert.rejects(contactSheet(files.slice(0, 7), { layout: "detail" }));
+    assert.equal(CONTACT_SHEET_LIMIT, 6);
+    assert.equal(ASSET_VIEW_LIMIT, 24);
+    const sheet = await sharp(await contactSheet(files.slice(0, 6))).metadata();
+    assert.equal(sheet.width, 3 * 384);
+    assert.equal(sheet.height, 2 * 384);
+    await assert.rejects(contactSheet(files));
     const bad = path.join(projectDir(p.id), "assets", "broken.png");
     await writeFile(bad, Buffer.from("not an image"));
-    const sheet = await contactSheet([files[0], bad, files[1]], { layout: "overview", firstNumber: 21 });
-    assert.deepEqual(sheet.unreadable, [22], "an undecodable picture blanks only its own tile");
+    const mixed = await contactSheet([files[0], bad, files[1]], { firstNumber: 19 });
+    assert.deepEqual(mixed.unreadable, [20]);
   } finally {
     await removeProject(p.id).catch(() => {});
   }
 });
 
-test("asset_view: one overview of every offered picture numbered across sheets, one capped detail view, at most two calls", async () => {
+test("asset_view: candidates chosen from the catalog, up to 24 in one call as sheets of six numbered across sheets, at most two calls", async () => {
   const p = await create();
   const doc = await ingest(Buffer.from("# 公司\n\n产品介绍。"), "a.md", p.id);
   p.sources.push(doc);
   const images: Source[] = [];
-  for (let n = 0; n < 25; n++) {
+  for (let n = 0; n < 30; n++) {
     const s = await ingest(await picture(n), `p${n}.png`, p.id);
     p.sources.push(s);
     images.push(s);
   }
-  // Import flags: two layout leftovers are never offered; a logo is offered and kept small.
+  // Import flags: two layout leftovers are never offered; a backdrop and a logo are, with their flag.
   images[3].assets[0].flags = ["flat"];
   images[4].assets[0].flags = ["fragment"];
   images[5].assets[0].flags = ["page-background"];
   images[6].assets[0].flags = ["graphic"];
   await save(p);
   const asset = (n: number) => images[n].assets[0];
+  const offered = [0, 1, 2, ...Array.from({ length: 27 }, (_, n) => n + 5).filter((n) => n < 30)].map(asset);
   const results: { text: string; images: number; error: boolean }[] = [];
   let designerInput = "";
   let step = 0;
@@ -111,44 +110,55 @@ test("asset_view: one overview of every offered picture numbered across sheets, 
       });
     else designerInput = JSON.stringify(context.messages);
     step++;
-    if (step === 1) return tool(model, "asset_view", { overview: true });
-    if (step === 2)
-      return tool(model, "asset_view", { assetIds: Array.from({ length: DETAIL_VIEW_LIMIT + 1 }, (_, n) => asset(n + 7).id) });
-    if (step === 3) return tool(model, "asset_view", { assetIds: [asset(0).id, asset(5).id, asset(6).id] });
-    if (step === 4) return tool(model, "asset_view", { overview: true });
+    if (step === 1) return tool(model, "asset_view", { assetIds: offered.slice(0, 25).map((a) => a.id) });
+    if (step === 2) return tool(model, "asset_view", { assetIds: [asset(0).id, asset(3).id] });
+    if (step === 3) return tool(model, "asset_view", { assetIds: offered.slice(0, 24).map((a) => a.id) });
+    if (step === 4) return tool(model, "asset_view", { assetIds: [asset(5).id, asset(6).id] });
+    if (step === 5) return tool(model, "asset_view", { assetIds: [asset(0).id] });
     return tool(model, "submit_page", {
       usedFactIds: ["f"],
-      html: `<html><head></head><body><h1>产品</h1><img alt="logo" src="${asset(6).url}"><img alt="hero" src="${asset(0).url}"></body></html>`,
+      html: `<html><head></head><body><h1>产品</h1><img alt="logo" src="${asset(6).url}"><img alt="hero" src="${asset(0).url}"><img alt="线稿" data-kind="drawing" src="${asset(1).url}"></body></html>`,
     });
   };
   try {
     await runProject(p, requestSchema.parse({ text: "生成展示页" }), save, () => {}, { config, streamFn, skills: false });
     assert.equal(p.status, "complete", p.error);
-    const [overview, tooMany, detail, third] = results;
-    // 25 pictures minus the flat tile and the fragment: 23 offered, two sheets, numbered 1..23.
-    assert.equal(overview.images, 2);
-    assert.match(overview.text, /Overview of all 23 catalog images/);
-    assert.match(overview.text, /Sheet 1 of 2/);
-    assert.match(overview.text, /Sheet 2 of 2 .*: 21 · /);
-    assert.match(overview.text, /23 · [0-9a-f]{4} = /);
-    assert.doesNotMatch(overview.text, /24 · /);
-    assert.ok(!overview.text.includes(asset(3).id) && !overview.text.includes(asset(4).id), "flagged leftovers are not offered");
-    assert.match(overview.text, new RegExp(asset(5).id + ".*\\[page-background\\]"));
-    assert.equal(tooMany.error, true, "a detail view is capped");
+    const [tooMany, flagged, view, more, third] = results;
+    assert.equal(tooMany.error, true, "one call names at most 24 images");
     assert.equal(tooMany.images, 0);
-    assert.equal(detail.images, 1);
-    assert.match(detail.text, /Detail view of 3 images/);
+    assert.equal(flagged.error, true, "a flat tile is not offered for viewing");
+    assert.match(flagged.text, new RegExp("图片不可用：" + asset(3).id));
+    // 24 candidates: four sheets of six, numbered 1..24 across sheets.
+    assert.equal(view.images, 4);
+    assert.match(view.text, /24 images as large tiles, 6 per sheet/);
+    assert.match(view.text, /Sheet 4 of 4 .*: 19 · [0-9a-f]{4} = /);
+    assert.match(view.text, /24 · [0-9a-f]{4} = /);
+    assert.doesNotMatch(view.text, /25 · /);
+    assert.equal(more.images, 1, "one further look is allowed");
+    assert.match(more.text, new RegExp(asset(5).id + ".*\\[page-background\\]"));
     assert.equal(third.images, 0);
     assert.match(third.text, /Both image views are used/);
     assert.ok(designerInput.includes(asset(5).id), "the Designer sees the offered catalog");
     assert.ok(!designerInput.includes(asset(3).id), "a flat tile is stripped from facts and the catalog");
     const html = p.versions.at(-1)!.html;
-    assert.match(html, /data-host="graphics"/);
-    assert.ok(html.includes(`img[src="${asset(6).url}"]`), "the logo is kept at icon size");
+    assert.ok(html.match(/data-host="graphics"[^<]*/)![0].includes(asset(6).url), "the logo is kept at icon size");
     assert.ok(!html.match(/data-host="graphics"[^<]*/)![0].includes(asset(0).url), "a photograph is not");
+    assert.match(html, /data-host="pictures"/, "a marked drawing is shown whole");
   } finally {
     await removeProject(p.id).catch(() => {});
   }
+});
+
+test("drawings, charts, diagrams and screenshots are shown whole; photographs may be cropped", () => {
+  const page = (kind: string) => `<html><head></head><body><img src="/a.png" data-kind="${kind}"></body></html>`;
+  for (const kind of ["drawing", "chart", "diagram", "screenshot"]) {
+    const guarded = guardPictures(page(kind));
+    assert.match(guarded, /data-host="pictures"/, kind);
+    assert.match(guarded, /object-fit:contain!important/);
+    assert.equal(guardPictures(guarded), guarded, "idempotent");
+  }
+  assert.equal(guardPictures(page("photo")), page("photo"));
+  assert.equal(guardPictures("<html><body><img src=/a.png></body></html>"), "<html><body><img src=/a.png></body></html>");
 });
 
 test("a generated page that uses a flat tile is rejected", async () => {

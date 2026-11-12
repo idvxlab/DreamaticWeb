@@ -33,38 +33,31 @@ export async function imagePreview(filename: string, cacheDir: string) {
   return buffer;
 }
 
-/**
- * Two layers of looking. The overview shows every offered picture as a small tile, twenty to a
- * sheet, so the Designer sees the whole set once; the detail view shows the pictures it will put
- * in key places as large tiles, six to a sheet.
- */
-export const CONTACT_LAYOUTS = {
-  overview: { perSheet: 20, columns: 5, cell: 260 },
-  detail: { perSheet: 6, columns: 3, cell: 384 },
-} as const;
-export type ContactLayout = keyof typeof CONTACT_LAYOUTS;
-/** Pictures one detail call may name (two detail sheets). */
-export const DETAIL_VIEW_LIMIT = 12;
-const LABEL = 28;
+/** Six large tiles per sheet: big enough that a picture is read from its pixels, not its caption. */
+export const CONTACT_SHEET_LIMIT = 6;
+/** One asset_view call may name four sheets' worth of candidates; the host splits them. */
+export const ASSET_VIEW_LIMIT = CONTACT_SHEET_LIMIT * 4;
+const CELL = 384,
+  COLUMNS = 3,
+  LABEL = 28;
 
 /**
- * One labelled grid for up to one sheet's worth of images. Each tile's label carries its number
- * (continuous across sheets through `firstNumber`) and a short tag (the asset id's first
- * characters), so the model reads which asset a tile is from the picture itself.
+ * One labelled grid for up to six images. Each tile's label carries its number (continuous
+ * across sheets through `firstNumber`) and a short tag (the asset id's first characters), so
+ * the model reads which asset a tile is from the picture itself.
  */
 export async function contactSheet(
   filenames: string[],
-  options: { layout?: ContactLayout; firstNumber?: number; tags?: string[] } = {},
+  options: { firstNumber?: number; tags?: string[] } = {},
 ) {
-  const { perSheet, columns: maxColumns, cell } =
-    CONTACT_LAYOUTS[options.layout || "detail"];
+  const cell = CELL;
   const firstNumber = options.firstNumber ?? 1,
     tags = options.tags || [];
-  if (!filenames.length || filenames.length > perSheet)
+  if (!filenames.length || filenames.length > CONTACT_SHEET_LIMIT)
     throw new Error("批量查看数量无效");
-  const columns = Math.min(maxColumns, filenames.length);
+  const columns = Math.min(COLUMNS, filenames.length);
   const rows = Math.ceil(filenames.length / columns);
-  const fontSize = cell < 300 ? 16 : 18;
+  const fontSize = 18;
   const unreadable: number[] = [];
   const tiles = await Promise.all(
     filenames.map(async (file, index) => {

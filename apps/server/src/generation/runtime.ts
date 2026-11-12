@@ -41,12 +41,11 @@ import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
   contactSheet,
-  CONTACT_LAYOUTS,
-  DETAIL_VIEW_LIMIT,
-  type ContactLayout,
+  CONTACT_SHEET_LIMIT,
+  ASSET_VIEW_LIMIT,
 } from "../image-preview.js";
 import { offeredAsset } from "../media-layout.js";
-import { guardGraphics } from "../picture-guard.js";
+import { guardGraphics, guardPictures } from "../picture-guard.js";
 import {
   designerContext,
   DESIGNER_CONTEXT_VERSION,
@@ -828,6 +827,8 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
+      // Drawings, charts, diagrams and screenshots marked by the Designer are shown whole.
+      html = guardPictures(html);
       // Flat artwork flagged at import (logos, emblems) stays at icon size.
       html = guardGraphics(
         html,
@@ -880,16 +881,16 @@ async function execute(
       profile("designer").vision &&
       catalog.some((s) => s.assets.some((a) => a.type === "image"))
     ) {
-      // Two layers of looking, at most two calls: an overview of every offered picture as small
-      // tiles, then a detail view of the pictures chosen for key places as large tiles.
+      // The Designer chooses candidates from the catalog text, then looks at them as large tiles:
+      // one call in principle, one further call at most.
       const viewable = catalog
         .flatMap((s) => s.assets)
         .filter(
           (a) => a.type === "image" && /^image\/(png|jpeg|webp|gif)$/.test(a.mime),
         );
       let views = 0;
-      const sheets = async (items: typeof viewable, layout: ContactLayout) => {
-        const { perSheet } = CONTACT_LAYOUTS[layout];
+      const sheets = async (items: typeof viewable) => {
+        const perSheet = CONTACT_SHEET_LIMIT;
         const content: (
           | { type: "text"; text: string }
           | { type: "image"; data: string; mimeType: string }
@@ -903,7 +904,6 @@ async function execute(
               path.join(projectDir(p.id), "assets", path.basename(a.url)),
             ),
             {
-              layout,
               firstNumber: first,
               tags: batch.map((a) => a.id.slice(0, 4)),
             },
@@ -937,21 +937,15 @@ async function execute(
       tools.push({
         name: "asset_view",
         label: "asset_view",
-        description: `Look at project images; originals are unchanged. First call with overview: true to see every catalog image as small numbered tiles in one call. Then call once with assetIds (up to ${DETAIL_VIEW_LIMIT}) for the images you will place in key positions (hero, products, cases) to see them as large tiles. At most two calls in all.`,
+        description: `Look at candidate project images as large numbered tiles (${CONTACT_SHEET_LIMIT} per sheet); originals are unchanged. Choose the candidates from the facts and the media catalog text first, then name them all in one call (up to ${ASSET_VIEW_LIMIT}). At most one further call.`,
         parameters: Type.Object({
-          overview: Type.Optional(Type.Boolean()),
-          assetIds: Type.Optional(
-            Type.Array(Type.String(), {
-              minItems: 1,
-              maxItems: DETAIL_VIEW_LIMIT,
-            }),
-          ),
+          assetIds: Type.Array(Type.String(), {
+            minItems: 1,
+            maxItems: ASSET_VIEW_LIMIT,
+          }),
         }),
         execute: async (_id, args, signal) => {
-          const { overview, assetIds } = args as {
-            overview?: boolean;
-            assetIds?: string[];
-          };
+          const { assetIds } = args as { assetIds: string[] };
           signal?.throwIfAborted();
           if (views >= 2)
             return {
@@ -963,27 +957,19 @@ async function execute(
               ],
               details: {},
             };
-          let items: typeof viewable, layout: ContactLayout;
-          if (overview) {
-            items = viewable;
-            layout = "overview";
-          } else {
-            const ids = [...new Set(assetIds || [])];
-            if (!ids.length) throw new Error("请传 overview: true 或 assetIds");
-            if (ids.length > DETAIL_VIEW_LIMIT)
-              throw new Error(`细看一次最多 ${DETAIL_VIEW_LIMIT} 张图片`);
-            items = ids.map((id) => {
-              const asset = viewable.find((a) => a.id === id);
-              if (!asset) throw new Error("图片不可用：" + id);
-              return asset;
-            });
-            layout = "detail";
-          }
+          const ids = [...new Set(assetIds || [])];
+          if (ids.length > ASSET_VIEW_LIMIT)
+            throw new Error(`一次最多查看 ${ASSET_VIEW_LIMIT} 张图片`);
+          const items = ids.map((id) => {
+            const asset = viewable.find((a) => a.id === id);
+            if (!asset) throw new Error("图片不可用：" + id);
+            return asset;
+          });
           if (!items.length) throw new Error("没有可查看的图片");
           views++;
           let content;
           try {
-            content = await sheets(items, layout);
+            content = await sheets(items);
           } catch {
             return {
               content: [
@@ -1001,9 +987,7 @@ async function execute(
               {
                 type: "text",
                 text:
-                  (layout === "overview"
-                    ? `Overview of all ${items.length} catalog images, ${CONTACT_LAYOUTS.overview.perSheet} small tiles per sheet, numbered continuously.`
-                    : `Detail view of ${items.length} images as large tiles.`) +
+                  `${items.length} images as large tiles, ${CONTACT_SHEET_LIMIT} per sheet, numbered continuously.` +
                   " Each tile's label shows its number and the asset id's start; describe a picture only from its own tile. Tiles are scaled to fit; use the original URL in the page.",
               },
               ...content,
