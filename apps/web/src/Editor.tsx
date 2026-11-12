@@ -269,6 +269,9 @@ export default function Editor({
       fromElement: false,
       noticeOnUnload: false,
       panels: { defaults: [] },
+      // Generated pages style elements their scripts create (motion moments, counters);
+      // GrapesJS would otherwise drop every rule no canvas component matches.
+      keepUnusedStyles: true,
       assetManager: {
         upload: false,
         embedAsBase64: false,
@@ -576,6 +579,9 @@ export default function Editor({
       bodyAttributes: e.getWrapper()?.getAttributes() || {},
     });
   };
+  // Without manual edits, Preview and Open show the saved page itself, exactly as
+  // exported; the editor's re-serialization is only needed for unsaved changes.
+  const currentHtml = () => (modified ? getHtml() : html);
   async function openInBrowser() {
     if (opening) return;
     setOpening(true);
@@ -583,7 +589,7 @@ export default function Editor({
     try {
       await api(`/projects/${projectId}/open`, {
         method: "POST",
-        body: JSON.stringify({ html: getHtml() }),
+        body: JSON.stringify({ html: currentHtml() }),
       });
     } catch (error) {
       setOpenError((error as Error).message);
@@ -731,7 +737,7 @@ export default function Editor({
           <iframe
             title="网页交互预览"
             sandbox="allow-scripts"
-            srcDoc={serializePreviewDocument(getHtml())}
+            srcDoc={serializePreviewDocument(currentHtml())}
             style={{
               border: 0,
               height: "100%",

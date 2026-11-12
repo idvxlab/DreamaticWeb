@@ -13,6 +13,7 @@ import path from "node:path";
 import { z } from "zod";
 import { get, projectDir } from "./store.js";
 import { validatePage } from "./page-validation.js";
+import { inlinePageAssets } from "./page-export.js";
 import { PREVIEW_CSP } from "../../../packages/shared/html-policy.js";
 const execute = promisify(execFile);
 const lifetime = 60 * 60 * 1000;
@@ -57,7 +58,11 @@ export function registerBrowserPreview(app: Express, open = openSystemBrowser) {
       await rm(path.join(directory, file.name), { force: true });
     const snapshot = crypto.randomUUID();
     const file = path.join(directory, snapshot + ".html");
-    await writeFile(file, result.html, { flag: "wx" });
+    // The snapshot is served sandboxed (an opaque origin), where img-src 'self' no
+    // longer matches /assets/: embed the pictures, as the exported file does.
+    await writeFile(file, await inlinePageAssets(project.id, result.html), {
+      flag: "wx",
+    });
     // Use the listening socket, never an untrusted Host header or user-supplied URL.
     const url = `http://127.0.0.1:${req.socket.localPort}/browser-preview/${project.id}/${snapshot}`;
     try {

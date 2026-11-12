@@ -58,7 +58,9 @@ test("default-browser snapshot preserves unsaved HTML, scopes assets, expires an
     const response = await fetch(opened[0]);
     const content = await response.text();
     assert.match(content, /Unsaved canvas/);
-    assert.match(content, new RegExp(project.sources[0].assets[0].url));
+    // Served sandboxed (opaque origin): the picture is embedded, not linked.
+    assert.doesNotMatch(content, new RegExp(project.sources[0].assets[0].url));
+    assert.match(content, /<img alt="Source photo" src="data:image\/png;base64,/);
     assert.match(content, /<script/);
     assert.match(
       response.headers.get("content-security-policy") || "",
