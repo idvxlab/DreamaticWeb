@@ -4,7 +4,8 @@ import {
   type AgentEvent,
   type StreamFn,
 } from "@earendil-works/pi-agent-core";
-import { Type } from "typebox";
+import { Type, type TSchema } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import * as cheerio from "cheerio";
@@ -37,7 +38,15 @@ import {
 import { applyPagePatch } from "./page-patch.js";
 import { lenientArgs } from "./lenient-json.js";
 import { repairAnchors } from "../anchor-repair.js";
-import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
+import {
+  skillLibrary,
+  selectSkills,
+  type SkillLibrary,
+  STYLE_PREFIX,
+  COMPONENT_PREFIX,
+  COMPONENT_CHOICE_LIMIT,
+  LAYER_CHARACTER_LIMIT,
+} from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
   contactSheet,
@@ -210,6 +219,7 @@ async function execute(
     skillCharacters: 0,
     skillLoads: 0,
     skillReads: 0,
+    skillsChosen: [] as string[],
     stages: [] as NonNullable<
       NonNullable<Project["generation"]>["metrics"]
     >["stages"],
@@ -879,6 +889,78 @@ async function execute(
           .slice(0, 15000)}`
       : current;
     const tools: AgentTool[] = [];
+    // Style and component layers: the Designer names its choice inside the call it already makes
+    // (asset_view, or skill_choose when there is nothing to view); the host returns those Skills.
+    const explicitSkills = /\/skill:designer-[a-z0-9-]+/.test(request.text);
+    const layerCatalog =
+      library && !editing && !explicitSkills
+        ? skillCatalog.filter(
+            (s) =>
+              s.name.startsWith(STYLE_PREFIX) ||
+              s.name.startsWith(COMPONENT_PREFIX),
+          )
+        : [];
+    const styles = layerCatalog.filter((s) => s.name.startsWith(STYLE_PREFIX));
+    const components = layerCatalog.filter((s) =>
+      s.name.startsWith(COMPONENT_PREFIX),
+    );
+    const menu = (list: typeof layerCatalog) =>
+      list.map((s) => `${s.name}: ${s.description}`).join("\n");
+    const layerParams: Record<string, TSchema> = layerCatalog.length
+      ? {
+          style: StringEnum([...styles.map((s) => s.name), "none"] as string[], {
+            description:
+              "The one industry style whose subject matches the material (or none); its design system becomes the page's colours, type, shapes and character.",
+          }),
+          components: Type.Array(
+            StringEnum(components.map((s) => s.name) as string[]),
+            {
+              maxItems: COMPONENT_CHOICE_LIMIT,
+              description: `Up to ${COMPONENT_CHOICE_LIMIT} page components this page will build (frames, grid lines, numbering, borders, shadows, masks, glass, pricing); empty when none fits.`,
+            },
+          ),
+        }
+      : {};
+    const layerGuide = layerCatalog.length
+      ? ` Also name the page's Skills: style (one industry style or none) and components (0–${COMPONENT_CHOICE_LIMIT}); their full text is returned with this result and is applied as you write the page.\nStyles:\n${menu(styles)}\nComponents:\n${menu(components)}`
+      : "";
+    const loadedLayers = new Set<string>();
+    async function layerContent(args: { style?: string; components?: string[] }) {
+      if (!library || !layerCatalog.length) return [];
+      const wanted = [
+        ...(args.style && args.style !== "none" ? [args.style] : []),
+        ...(args.components || []).slice(0, COMPONENT_CHOICE_LIMIT),
+      ].filter(
+        (name, i, all) =>
+          all.indexOf(name) === i &&
+          layerCatalog.some((s) => s.name === name) &&
+          !loadedLayers.has(name),
+      );
+      if (!wanted.length) return [];
+      const loaded = await library.load(
+        "designer",
+        wanted,
+        LAYER_CHARACTER_LIMIT,
+        () => {
+          metrics.skillReads++;
+        },
+      );
+      for (const name of wanted) loadedLayers.add(name);
+      metrics.skillsChosen.push(...wanted);
+      metrics.skillCharacters += loaded.characters;
+      event("designer", "已选用 " + wanted.join(", "), "skill", {
+        skillCharacters: loaded.characters,
+        skillReferences: loaded.references.join(", "),
+      });
+      return [
+        {
+          type: "text" as const,
+          text:
+            "Skills chosen for this page, loaded in full. Apply them as you write the page: the style's design system sets its colours, type, shapes and character; each component is built where the page uses it, in inline CSS without any external library or font. All of it serves the tidy layout.\n\n" +
+            loaded.blocks.join("\n\n"),
+        },
+      ];
+    }
     if (
       profile("designer").vision &&
       catalog.some((s) => s.assets.some((a) => a.type === "image"))
@@ -939,19 +1021,22 @@ async function execute(
       tools.push({
         name: "asset_view",
         label: "asset_view",
-        description: `Look at candidate project images as large numbered tiles (${CONTACT_SHEET_LIMIT} per sheet); originals are unchanged. Choose the candidates from the facts and the media catalog text first, then name them all in one call (up to ${ASSET_VIEW_LIMIT}). At most one further call.`,
+        description: `Look at candidate project images as large numbered tiles (${CONTACT_SHEET_LIMIT} per sheet); originals are unchanged. Choose the candidates from the facts and the media catalog text first, then name them all in one call (up to ${ASSET_VIEW_LIMIT}). At most one further call.${layerGuide}`,
         parameters: Type.Object({
           assetIds: Type.Array(Type.String(), {
             minItems: 1,
             maxItems: ASSET_VIEW_LIMIT,
           }),
+          ...layerParams,
         }),
         execute: async (_id, args, signal) => {
           const { assetIds } = args as { assetIds: string[] };
+          const layers = args as { style?: string; components?: string[] };
           signal?.throwIfAborted();
           if (views >= 2)
             return {
               content: [
+                ...(await layerContent(layers)),
                 {
                   type: "text",
                   text: "Both image views are used. Write the page now from what you have seen.",
@@ -968,6 +1053,7 @@ async function execute(
             return asset;
           });
           if (!items.length) throw new Error("没有可查看的图片");
+          const chosenSkills = await layerContent(layers);
           views++;
           let content;
           try {
@@ -975,6 +1061,7 @@ async function execute(
           } catch {
             return {
               content: [
+                ...chosenSkills,
                 {
                   type: "text",
                   text: "无法视觉查看这些图片；仍可直接引用素材。不要重复查看。",
@@ -986,6 +1073,7 @@ async function execute(
           signal?.throwIfAborted();
           return {
             content: [
+              ...chosenSkills,
               {
                 type: "text",
                 text:
@@ -999,6 +1087,26 @@ async function execute(
         },
       });
     }
+    if (layerCatalog.length && !tools.some((t) => t.name === "asset_view"))
+      tools.push({
+        name: "skill_choose",
+        label: "skill_choose",
+        description:
+          "Before writing the page, name its Skills once; their full text is returned." +
+          layerGuide,
+        parameters: Type.Object(layerParams),
+        execute: async (_id, args) => {
+          const content = await layerContent(
+            args as { style?: string; components?: string[] },
+          );
+          return {
+            content: content.length
+              ? content
+              : [{ type: "text", text: "No Skill chosen. Write the page now." }],
+            details: {},
+          };
+        },
+      });
     if (existingPage)
       tools.push(
         tool(

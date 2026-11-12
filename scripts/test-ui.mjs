@@ -364,7 +364,7 @@ try {
 
   await page.getByRole("button", { name: "关闭资料" }).click();
   await page.getByTitle("查看技能", { exact: true }).click();
-  assert.equal(await page.locator(".skills-list > *").count(), 37);
+  assert.equal(await page.locator(".skills-list > *").count(), 33);
   await page.getByRole("button", { name: "关闭弹窗" }).click();
   assert.equal(await page.locator(".sidebar").getByRole("button",{name:"技能库",exact:false}).count(),0);
   await page.getByRole("button",{name:/^事实列表/}).click();

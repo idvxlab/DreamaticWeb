@@ -14,6 +14,14 @@ import { hash } from "./artifacts.js";
 export const SKILLS_ROOT = path.resolve(".agents/skills");
 export const SKILL_BODY_CHARACTER_LIMIT = 24000;
 export const SKILL_REFERENCE_BYTE_LIMIT = 48000;
+/** Two layers the Designer chooses from itself: one industry style, a few page components. */
+export const STYLE_PREFIX = "designer-style-";
+export const COMPONENT_PREFIX = "designer-fx-";
+export const COMPONENT_CHOICE_LIMIT = 3;
+/** A full style design system plus its components, returned once in the choosing tool call. */
+export const LAYER_CHARACTER_LIMIT = 80000;
+/** Passive quality gate loaded with every new page. */
+export const QUALITY_GATE = "designer-no-ai-design-slop";
 
 /** Portable Markdown declares only the references essential to this Skill. */
 function requiredReferences(body: string) {
@@ -142,6 +150,7 @@ export function selectSkills(
           "designer-visual-design",
           "designer-web-architecture",
           "designer-interaction-design",
+          QUALITY_GATE,
         ])
           chosen.add(name);
         return [...chosen].filter((name) => exists(name));
@@ -161,6 +170,7 @@ export function selectSkills(
         )
       )
         chosen.add("designer-interaction-design");
+      chosen.add(QUALITY_GATE);
     }
   }
   return [...chosen]
@@ -170,7 +180,7 @@ export function selectSkills(
         (!allowed.find((s) => s.name === name)!.disableModelInvocation ||
           explicit.includes(name)),
     )
-    .slice(0, 4);
+    .slice(0, 5);
 }
 
 /** Public Pi discovery + reader; this adapter only scopes filesystem access and caches results. */
@@ -352,21 +362,23 @@ export class SkillLibrary {
     }
     return hash(parts.join("|"));
   }
-  async prepare(
+  /** Entries and their declared core references, read through the scoped Pi reader. */
+  async load(
     role: Role,
-    names: string[],
-    options: { selectedOnly?: boolean } = {},
+    names: readonly string[],
+    limit = SKILL_BODY_CHARACTER_LIMIT,
+    onRead?: (name: string, characters: number) => void,
   ) {
     const catalog = (await this.catalog()).skills.filter(
       (s) => roleFor(s.name) === role,
     );
-    const blocks = [];
+    const blocks: string[] = [];
     const references: string[] = [];
     let characters = 0;
     for (const name of names) {
       const skill = catalog.find((s) => s.name === name);
       if (!skill) throw new Error("Skill 不可自动加载：" + name);
-      const result = await this.reader(role).execute("preload", {
+      const result = await this.reader(role, onRead).execute("preload", {
         path: skill.filePath,
       });
       const body = result.content
@@ -374,9 +386,9 @@ export class SkillLibrary {
         .map((c) => c.text)
         .join("\n");
       characters += body.length;
-      if (characters > SKILL_BODY_CHARACTER_LIMIT)
+      if (characters > limit)
         throw new Error(
-          `选定 Skills 正文超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
+          `选定 Skills 正文超过 ${limit} 字符预算，请缩小选择`,
         );
       blocks.push(
         `<skill name="${name}" location="${skill.filePath}">\n${body}\n</skill>`,
@@ -384,7 +396,7 @@ export class SkillLibrary {
       const raw = this.buffers.get(skill.filePath)!.buffer.toString("utf8");
       for (const reference of requiredReferences(raw)) {
         const filename = path.resolve(skill.baseDir, reference);
-        const result = await this.reader(role, undefined, names).execute(
+        const result = await this.reader(role, onRead, names).execute(
           "preload-reference",
           { path: filename },
         );
@@ -393,9 +405,9 @@ export class SkillLibrary {
           .map((c) => c.text)
           .join("\n");
         characters += content.length;
-        if (characters > SKILL_BODY_CHARACTER_LIMIT)
+        if (characters > limit)
           throw new Error(
-            `选定 Skills 和核心参考超过 ${SKILL_BODY_CHARACTER_LIMIT} 字符预算，请缩小选择`,
+            `选定 Skills 和核心参考超过 ${limit} 字符预算，请缩小选择`,
           );
         references.push(`${name}/${reference}`);
         blocks.push(
@@ -403,6 +415,17 @@ export class SkillLibrary {
         );
       }
     }
+    return { blocks, characters, references };
+  }
+  async prepare(
+    role: Role,
+    names: string[],
+    options: { selectedOnly?: boolean } = {},
+  ) {
+    const catalog = (await this.catalog()).skills.filter(
+      (s) => roleFor(s.name) === role,
+    );
+    const { blocks, characters, references } = await this.load(role, names);
     return {
       prompt: names.length
         ? `${formatSkillsForPrompt(options.selectedOnly ? catalog.filter((s) => names.includes(s.name)) : catalog, "read")}\n\nSelected skills and their required references are loaded below; apply them without reading them again. For other linked references, use read with the absolute Skill location's directory plus the relative reference path. ${options.selectedOnly ? "Only these selected Skills and their references are available." : "Read other relevant references only when needed."}\n${blocks.join("\n\n")}`

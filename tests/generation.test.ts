@@ -855,7 +855,11 @@ test("additional source ranges and optional image inspection use Pi tools and ca
       }
       if (!imageRead) {
         imageRead = true;
-        return answer(model, "asset_view", { assetIds: [media.assets[0].id] });
+        return answer(model, "asset_view", {
+          assetIds: [media.assets[0].id],
+          style: "designer-style-corporate",
+          components: ["designer-fx-number-details"],
+        });
       }
       assert.ok(
         context.messages.some(
@@ -864,6 +868,13 @@ test("additional source ranges and optional image inspection use Pi tools and ca
             m.content.some((c) => c.type === "image"),
         ),
       );
+      // The chosen style (with its design system) and component come back in full with the tiles.
+      const viewed = JSON.stringify(
+        context.messages.filter((m) => m.role === "toolResult"),
+      );
+      assert.ok(viewed.includes('<skill name=\\"designer-style-corporate\\"'));
+      assert.ok(viewed.includes("#0f62fe"));
+      assert.ok(viewed.includes('<skill name=\\"designer-fx-number-details\\"'));
       return answer(model, "submit_page", {
         usedFactIds: [],
         html: `<html><body><h1>Brand</h1><img alt="Logo" src="${media.assets[0].url}"></body></html>`,
@@ -893,6 +904,10 @@ test("additional source ranges and optional image inspection use Pi tools and ca
       "only explicitly needed tools add follow-up requests",
     );
     assert.ok(p.versions[0].html.includes(media.assets[0].url));
+    assert.deepEqual(p.generation!.metrics!.skillsChosen, [
+      "designer-style-corporate",
+      "designer-fx-number-details",
+    ]);
   } finally {
     await removeProject(p.id);
   }

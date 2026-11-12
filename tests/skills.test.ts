@@ -83,7 +83,7 @@ test("required references are scoped, budgeted, cached and invalidate the select
 test("published Pi loader discovers portable Skills; Codex and Claude paths resolve the same resources", async () => {
   const pi = loadSkillsFromDir({ dir: SKILLS_ROOT, source: "test" });
   assert.equal(pi.diagnostics.length, 0);
-  assert.equal(pi.skills.length, 37);
+  assert.equal(pi.skills.length, 33);
   const alias = path.resolve(".claude/skills");
   assert.equal(await realpath(alias), await realpath(SKILLS_ROOT));
   const claudeLayout = loadSkillsFromDir({
@@ -296,6 +296,7 @@ test("deterministic routing composes complementary skills and keeps edits narrow
     "designer-visual-design",
     "designer-web-architecture",
     "designer-interaction-design",
+    "designer-no-ai-design-slop",
   ];
   assert.deepEqual(route("为这篇论文做一个介绍页。", false, { content: ["图表与数据"] }), editorial);
   assert.deepEqual(route("根据研究报告制作介绍网页"), editorial);
@@ -325,16 +326,17 @@ test("deterministic routing composes complementary skills and keeps edits narrow
   ]) {
     const selected = route(request);
     assert.ok(selected.includes(expected));
-    assert.ok(selected.length <= 4);
+    assert.ok(selected.length <= 5);
     assert.equal(new Set(selected).size, selected.length);
   }
   assert.deepEqual(
     route("KPI dashboard with helpful navigation and native disclosure"),
-    ["designer-dashboard", "designer-visual-design"],
+    ["designer-dashboard", "designer-visual-design", "designer-no-ai-design-slop"],
   );
   assert.deepEqual(route("创建网站"), [
     "designer-web-architecture",
     "designer-visual-design",
+    "designer-no-ai-design-slop",
   ]);
   assert.deepEqual(route("/skill:designer-editorial 修改章节", true), [
     "designer-editorial",

@@ -32,6 +32,23 @@ All nine runs eventually persisted a page, but the visual goal was not met relia
 
 All nine CLI projects were visible in the frontend. Two source-application/save/reopen cycles retained body text, heading styles, images and inline script code; external browser renders of saved and exported pages introduced no new script errors. Those cycles also exposed duplicated document metadata: stored title counts grew from 1 to 3 to 5, with 6 in the reopened preview. The Canvas compatibility gap is tracked in [#24](https://github.com/idvxlab/DreamaticWeb/issues/24); metadata accumulation in [#25](https://github.com/idvxlab/DreamaticWeb/issues/25). The subsequent Canvas and metadata repairs are included in this PR; original experiment artifacts retain their original state.
 
+## Style and component layers (2026-11-12)
+
+Two layers sit beside the routed Skills and are chosen by the Designer itself, not by keyword routing. The choice rides on the call the Designer already makes to look at the pictures: `asset_view({ assetIds, style, components })` (or `skill_choose` when there is nothing to view). `style` is an enum of the `designer-style-*` entries plus `none`; `components` holds up to three `designer-fx-*` entries. The host reads the chosen entries and their required references through the scoped Pi reader and returns them in full in that tool result (up to 80,000 characters), so no extra model request is added. The choice is recorded in `metrics.skillsChosen` and as a `已选用 …` event. Edits and explicit `/skill:` selections do not offer the layers.
+
+| Layer | Entry | Source (licence) |
+| --- | --- | --- |
+| style | designer-style-aerospace | awesome-design-md, SpaceX (MIT) |
+| style | designer-style-hardware | awesome-design-md, DJI (MIT) |
+| style | designer-style-corporate | awesome-design-md, IBM Carbon (MIT) |
+| style | designer-style-software | awesome-design-md, Stripe (MIT) |
+| style | designer-style-consumer | awesome-design-md, Apple (MIT) |
+| style | designer-style-enterprise-ai | MengTo/skills operational-enterprise-ai (MIT) |
+| style | designer-style-academic | bergside/awesome-design-skills academic (MIT) |
+| component | designer-fx-framed-grid-layout, container-lines, nested-container-frames, number-details, css-border-gradient, beautiful-shadows, corner-diagonals, css-alpha-masking, glass-dark-ui, pricing-page | MengTo/skills web-design (MIT) |
+
+`designer-no-ai-design-slop` (MengTo/skills ui, MIT) is routed with every new page as a passive quality gate. Upstream text is unchanged; entries over 5,000 characters keep the whole original in `references/original.md`.
+
 ## Library and responsibilities
 
 Canonical source: `.agents/skills/`. `.claude/skills` is a relative symlink to that source, not a second maintained copy.

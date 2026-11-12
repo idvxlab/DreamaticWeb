@@ -81,6 +81,8 @@ export interface GenerationState {
     skillCharacters?: number;
     skillLoads?: number;
     skillReads?: number;
+    /** Style and component Skills the Designer chose and the host returned in full. */
+    skillsChosen?: string[];
     elapsedMs: number;
     modelCalls: number;
     sourceReads: number;
