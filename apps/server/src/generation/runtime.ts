@@ -387,6 +387,9 @@ async function execute(
       const stageStart = performance.now(),
         callStart = metrics.modelCalls;
       let turns = 0;
+      // One light reminder when a turn ends with neither a tool call nor a result (the model
+      // wrote its answer, such as a whole page, into reply text). Never repeated.
+      let reminded = false;
       let lastTool = "none",
         requestId = "",
         responseStatus = 0;
@@ -427,6 +430,29 @@ async function execute(
             return;
           if (submitted()) return { action: "end" };
           if (turns >= 6) throw new Error(`${role} 未在 6 轮内提交有效结果`);
+          const calledTool = message.content.some((c) => c.type === "toolCall");
+          if (!calledTool && !reminded) {
+            reminded = true;
+            const terminal =
+              role === "orchestrator"
+                ? "submit_intent"
+                : role === "analyst"
+                  ? "submit_facts"
+                  : tools.some((t) => t.name === "page_patch")
+                    ? "page_patch"
+                    : "submit_page";
+            event(
+              role,
+              `${role} 未调用工具就结束了这一轮，已提醒一次`,
+              "status",
+            );
+            agent.followUp({
+              role: "user",
+              content: `Your turn ended without a tool call. Deliver the result only through ${terminal}; do not write it in reply text.`,
+              timestamp: Date.now(),
+            });
+            return { action: "continue" };
+          }
         },
       });
       agent.subscribe((event) => {
