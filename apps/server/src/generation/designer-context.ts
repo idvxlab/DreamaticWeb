@@ -2,7 +2,7 @@ import type { Analysis } from "../../../../packages/shared/generation.js";
 import type { Source } from "../../../../packages/shared/project.js";
 
 // Invalidate only Designer reuse when its input representation changes.
-export const DESIGNER_CONTEXT_VERSION = "shared-fields-markdown-v1";
+export const DESIGNER_CONTEXT_VERSION = "shared-fields-markdown-v2-offered-media";
 type Catalog = Pick<Source, "id" | "name" | "format" | "assets">[];
 const cell = (value: unknown) =>
   JSON.stringify(value).replaceAll("|", "\\u007c");

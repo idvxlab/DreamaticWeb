@@ -855,7 +855,7 @@ test("additional source ranges and optional image inspection use Pi tools and ca
       }
       if (!imageRead) {
         imageRead = true;
-        return answer(model, "asset_view", { assetId: media.assets[0].id });
+        return answer(model, "asset_view", { overview: true });
       }
       assert.ok(
         context.messages.some(

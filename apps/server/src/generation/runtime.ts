@@ -39,7 +39,14 @@ import { lenientArgs } from "./lenient-json.js";
 import { repairAnchors } from "../anchor-repair.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
-import { imagePreview } from "../image-preview.js";
+import {
+  contactSheet,
+  CONTACT_LAYOUTS,
+  DETAIL_VIEW_LIMIT,
+  type ContactLayout,
+} from "../image-preview.js";
+import { offeredAsset } from "../media-layout.js";
+import { guardGraphics } from "../picture-guard.js";
 import {
   designerContext,
   DESIGNER_CONTEXT_VERSION,
@@ -338,11 +345,13 @@ async function execute(
     delete p.error;
     p.run = { id: crypto.randomUUID(), checkpoints: {} };
     await save(p);
+    // Media flagged at import as flat tiles, empty frames or composite slices stay stored but are
+    // not offered as content; page backdrops are offered with their flag.
     const catalog = documents.map(({ source }) => ({
       id: source.id,
       name: source.name,
       format: source.format,
-      assets: source.assets,
+      assets: source.assets.filter(offeredAsset),
     }));
     async function roleRun(
       role: Role,
@@ -737,6 +746,10 @@ async function execute(
                   )
                 )
                   throw new Error("事实素材不属于其资料");
+                // Media that is not offered as content is dropped without another round.
+                fact.assetIds = fact.assetIds.filter((id) =>
+                  source?.assets.some((a) => a.id === id && offeredAsset(a)),
+                );
               }
               value = data;
               return "Facts accepted";
@@ -815,9 +828,18 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
+      // Flat artwork flagged at import (logos, emblems) stays at icon size.
+      html = guardGraphics(
+        html,
+        catalog.flatMap((source) =>
+          source.assets
+            .filter((a) => a.flags?.includes("graphic"))
+            .map((a) => a.url),
+        ),
+      );
       const anchors = repairAnchors(html);
       html = anchors.html;
-      const report = await validatePage(p, html);
+      const report = await validatePage(p, html, { rejectUnusableMedia: true });
       if (!report.valid)
         throw new Error(
           "页面结构需要修正：" +
@@ -858,45 +880,116 @@ async function execute(
       profile("designer").vision &&
       catalog.some((s) => s.assets.some((a) => a.type === "image"))
     ) {
+      // Two layers of looking, at most two calls: an overview of every offered picture as small
+      // tiles, then a detail view of the pictures chosen for key places as large tiles.
+      const viewable = catalog
+        .flatMap((s) => s.assets)
+        .filter(
+          (a) => a.type === "image" && /^image\/(png|jpeg|webp|gif)$/.test(a.mime),
+        );
+      let views = 0;
+      const sheets = async (items: typeof viewable, layout: ContactLayout) => {
+        const { perSheet } = CONTACT_LAYOUTS[layout];
+        const content: (
+          | { type: "text"; text: string }
+          | { type: "image"; data: string; mimeType: string }
+        )[] = [];
+        const count = Math.ceil(items.length / perSheet);
+        for (let sheet = 0; sheet < count; sheet++) {
+          const batch = items.slice(sheet * perSheet, (sheet + 1) * perSheet);
+          const first = sheet * perSheet + 1;
+          const buffer = await contactSheet(
+            batch.map((a) =>
+              path.join(projectDir(p.id), "assets", path.basename(a.url)),
+            ),
+            {
+              layout,
+              firstNumber: first,
+              tags: batch.map((a) => a.id.slice(0, 4)),
+            },
+          );
+          content.push(
+            {
+              type: "text",
+              text:
+                `Sheet ${sheet + 1} of ${count} (tile number · id start → asset): ` +
+                batch
+                  .map(
+                    (a, n) =>
+                      `${first + n} · ${a.id.slice(0, 4)} = ${a.id}` +
+                      (a.width && a.height ? ` (${a.width}×${a.height})` : "") +
+                      (a.flags?.length ? ` [${a.flags.join(",")}]` : ""),
+                  )
+                  .join("; ") +
+                (buffer.unreadable.length
+                  ? `. Tiles ${buffer.unreadable.join(", ")} could not be decoded and are blank.`
+                  : ""),
+            },
+            {
+              type: "image",
+              data: buffer.toString("base64"),
+              mimeType: "image/jpeg",
+            },
+          );
+        }
+        return content;
+      };
       tools.push({
         name: "asset_view",
         label: "asset_view",
-        description:
-          "Inspect a relevant project image only when visual information is needed; original bytes remain unchanged",
-        parameters: Type.Object({ assetId: Type.String() }),
+        description: `Look at project images; originals are unchanged. First call with overview: true to see every catalog image as small numbered tiles in one call. Then call once with assetIds (up to ${DETAIL_VIEW_LIMIT}) for the images you will place in key positions (hero, products, cases) to see them as large tiles. At most two calls in all.`,
+        parameters: Type.Object({
+          overview: Type.Optional(Type.Boolean()),
+          assetIds: Type.Optional(
+            Type.Array(Type.String(), {
+              minItems: 1,
+              maxItems: DETAIL_VIEW_LIMIT,
+            }),
+          ),
+        }),
         execute: async (_id, args, signal) => {
-          const { assetId } = args as { assetId: string };
+          const { overview, assetIds } = args as {
+            overview?: boolean;
+            assetIds?: string[];
+          };
           signal?.throwIfAborted();
-          const asset = catalog
-            .flatMap((s) => s.assets)
-            .find((a) => a.id === assetId && a.type === "image");
-          if (!asset || !/^image\/(png|jpeg|webp|gif)$/.test(asset.mime))
-            throw new Error("图片不可用");
-          const filename = path.join(
-            projectDir(p.id),
-            "assets",
-            path.basename(asset.url),
-          );
-          let buffer: Buffer,
-            mime = asset.mime;
+          if (views >= 2)
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Both image views are used. Write the page now from what you have seen.",
+                },
+              ],
+              details: {},
+            };
+          let items: typeof viewable, layout: ContactLayout;
+          if (overview) {
+            items = viewable;
+            layout = "overview";
+          } else {
+            const ids = [...new Set(assetIds || [])];
+            if (!ids.length) throw new Error("请传 overview: true 或 assetIds");
+            if (ids.length > DETAIL_VIEW_LIMIT)
+              throw new Error(`细看一次最多 ${DETAIL_VIEW_LIMIT} 张图片`);
+            items = ids.map((id) => {
+              const asset = viewable.find((a) => a.id === id);
+              if (!asset) throw new Error("图片不可用：" + id);
+              return asset;
+            });
+            layout = "detail";
+          }
+          if (!items.length) throw new Error("没有可查看的图片");
+          views++;
+          let content;
           try {
-            if (
-              (await stat(filename)).size > 1024 * 1024 ||
-              (asset.width || 0) > 1600 ||
-              (asset.height || 0) > 1600
-            ) {
-              buffer = await imagePreview(
-                filename,
-                path.join(projectDir(p.id), "previews", "images"),
-              );
-              mime = "image/jpeg";
-            } else buffer = await readFile(filename);
+            content = await sheets(items, layout);
           } catch {
             return {
               content: [
                 {
                   type: "text",
-                  text: `无法视觉查看此图片；仍可直接引用素材。不要重复查看。assetId=${asset.id}, url=${asset.url}`,
+                  text: "无法视觉查看这些图片；仍可直接引用素材。不要重复查看。",
                 },
               ],
               details: {},
@@ -906,10 +999,14 @@ async function execute(
           return {
             content: [
               {
-                type: "image",
-                data: buffer.toString("base64"),
-                mimeType: mime,
+                type: "text",
+                text:
+                  (layout === "overview"
+                    ? `Overview of all ${items.length} catalog images, ${CONTACT_LAYOUTS.overview.perSheet} small tiles per sheet, numbered continuously.`
+                    : `Detail view of ${items.length} images as large tiles.`) +
+                  " Each tile's label shows its number and the asset id's start; describe a picture only from its own tile. Tiles are scaled to fit; use the original URL in the page.",
               },
+              ...content,
             ],
             details: {},
           };

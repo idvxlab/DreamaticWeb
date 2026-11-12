@@ -29,7 +29,20 @@ export interface Asset {
   mime: string;
   width?: number;
   height?: number;
+  /** Document page/slide that contained this extracted medium. */
+  page?: number;
+  /** Nearby document text by layout proximity; not a description of image content. */
+  context?: string;
+  /** Deterministic import signals; flat/frame-only media are not standalone content. */
+  flags?: AssetFlag[];
 }
+/** graphic: flat low-detail artwork (a logo, emblem or badge), shown at icon size only. */
+export type AssetFlag =
+  | "flat"
+  | "frame-only"
+  | "fragment"
+  | "page-background"
+  | "graphic";
 export interface Source {
   id: string;
   name: string;
