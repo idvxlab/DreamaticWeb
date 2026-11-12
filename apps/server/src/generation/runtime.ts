@@ -36,6 +36,7 @@ import {
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
 import { lenientArgs } from "./lenient-json.js";
+import { repairAnchors } from "../anchor-repair.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import { imagePreview } from "../image-preview.js";
@@ -814,12 +815,20 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
+      const anchors = repairAnchors(html);
+      html = anchors.html;
       const report = await validatePage(p, html);
       if (!report.valid)
         throw new Error(
           "页面结构需要修正：" +
             JSON.stringify(report.issues.filter((i) => i.severity === "error")),
         );
+      if (anchors.repaired.length)
+        report.issues.push({
+          severity: "warning",
+          code: "anchor_repaired",
+          message: "Repaired in-page links: " + anchors.repaired.join("; "),
+        });
       accepted = {
         html: report.html,
         checks: pageChecks(p, report.html, report.issues),
