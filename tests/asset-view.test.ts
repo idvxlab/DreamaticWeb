@@ -141,9 +141,7 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
     assert.ok(designerInput.includes(asset(5).id), "the Designer sees the offered catalog");
     assert.ok(!designerInput.includes(asset(3).id), "a flat tile is stripped from facts and the catalog");
     const html = p.versions.at(-1)!.html;
-    assert.ok(html.match(/data-host="graphics"[^<]*/)![0].includes(asset(6).url), "the logo is kept at icon size");
-    assert.ok(!html.match(/data-host="graphics"[^<]*/)![0].includes(asset(0).url), "a photograph is not");
-    assert.match(html, /data-host="pictures"/, "a marked drawing is shown whole");
+    assert.doesNotMatch(html, /data-host="(graphics|pictures)"/, "the page is kept as the Designer wrote it");
   } finally {
     await removeProject(p.id).catch(() => {});
   }

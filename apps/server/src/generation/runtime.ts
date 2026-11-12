@@ -72,8 +72,20 @@ const intentParams = Type.Object({
   audience: Type.String(),
   content: strings,
   features: strings,
-  design: strings,
-  constraints: strings,
+  design: Type.Array(Type.String(), {
+    description:
+      "Only design requirements the user explicitly stated or answered; empty when none",
+  }),
+  designDefaults: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "Your inferred, overridable suggestions for unstated design choices; never a style, palette or layout the user did not ask for",
+    }),
+  ),
+  constraints: Type.Array(Type.String(), {
+    description:
+      "Only hard requirements the user stated or the host rules imply",
+  }),
 });
 const factsParams = Type.Object({
   summary: Type.String(),
@@ -827,17 +839,7 @@ async function execute(
         );
       if (accepted) throw new Error("页面已经提交");
       controller.signal.throwIfAborted();
-      // Drawings, charts, diagrams and screenshots marked by the Designer are shown whole.
-      html = guardPictures(html);
-      // Flat artwork flagged at import (logos, emblems) stays at icon size.
-      html = guardGraphics(
-        html,
-        catalog.flatMap((source) =>
-          source.assets
-            .filter((a) => a.flags?.includes("graphic"))
-            .map((a) => a.url),
-        ),
-      );
+      // The page is taken as the Designer wrote it: no picture rules applied afterwards.
       const anchors = repairAnchors(html);
       html = anchors.html;
       const report = await validatePage(p, html, { rejectUnusableMedia: true });

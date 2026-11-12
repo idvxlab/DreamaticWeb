@@ -290,6 +290,16 @@ test("deterministic routing composes complementary skills and keeps edits narrow
   const { skills } = await lib.catalog();
   const route = (text: string, editing = false, brief?: unknown) =>
     selectSkills("designer", { text, editing, brief }, skills);
+  // A paper or research page reads as an article, even when its brief is about charts and data.
+  const editorial = [
+    "designer-editorial",
+    "designer-visual-design",
+    "designer-web-architecture",
+    "designer-interaction-design",
+  ];
+  assert.deepEqual(route("为这篇论文做一个介绍页。", false, { content: ["图表与数据"] }), editorial);
+  assert.deepEqual(route("根据研究报告制作介绍网页"), editorial);
+  assert.ok(!route("KPI dashboard").includes("designer-editorial"));
   assert.deepEqual(
     selectSkills("analyst", { text: "PDF table", editing: false }, skills),
     ["analyst-information-extraction"],

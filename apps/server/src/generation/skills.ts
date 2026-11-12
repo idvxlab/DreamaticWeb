@@ -60,6 +60,10 @@ const categories: [string, RegExp][] = [
     /落地页|营销|品牌介绍|产品(?:官网|首页)|\blanding\b|\bcampaign\b|marketing/i,
   ],
 ];
+/** Papers, academic work and research reports, in the user's own words. */
+const PAPER =
+  /论文|学术|研究(?:报告|解读|成果|介绍)|\bpaper\b|\bresearch\b|\bacademic\b/i;
+
 export function positiveRequirements(text: string) {
   return text
     .replace(/(?:但是|但要|但需|but\s+)/gi, "，需要")
@@ -130,6 +134,18 @@ export function selectSkills(
         if (match) chosen.add(match[0]);
       }
     } else {
+      // A paper or research page in the user's own words reads as an article: the editorial
+      // set (reading structure, figures and captions, anchors), before any data or chart match.
+      if (PAPER.test(local)) {
+        for (const name of [
+          "designer-editorial",
+          "designer-visual-design",
+          "designer-web-architecture",
+          "designer-interaction-design",
+        ])
+          chosen.add(name);
+        return [...chosen].filter((name) => exists(name));
+      }
       const match = categories.find(([, pattern]) => pattern.test(combined));
       chosen.add(match?.[0] || "designer-web-architecture");
       chosen.add("designer-visual-design");

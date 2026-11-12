@@ -4,6 +4,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { create, projectDir, removeProject } from "../apps/server/src/store.js";
 import {
+  intentMarkdown,
   loadArtifact,
   persistArtifact,
 } from "../apps/server/src/generation/artifacts.js";
@@ -57,4 +58,32 @@ test("immutable Markdown keeps prior checkpoints readable across metadata public
   } finally {
     await removeProject(p.id);
   }
+});
+
+test("intent briefs keep user-stated design apart from overridable defaults and old briefs still parse", async () => {
+  const { intentSchema } = await import("../packages/shared/generation.js");
+  const brief = intentSchema.parse({
+    goal: "宣传",
+    audience: "客户",
+    content: [],
+    features: [],
+    design: ["首屏有明显的主题动效"],
+    designDefaults: ["深色背景"],
+    constraints: [],
+  });
+  const markdown = intentMarkdown(brief);
+  assert.match(
+    markdown,
+    /## design\n- "首屏有明显的主题动效"\n\n## designDefaults\n- "深色背景"/,
+  );
+  const old = intentSchema.parse({
+    goal: "g",
+    audience: "a",
+    content: [],
+    features: [],
+    design: [],
+    constraints: [],
+  });
+  assert.equal(old.designDefaults, undefined);
+  assert.doesNotMatch(intentMarkdown(old), /designDefaults/);
 });
