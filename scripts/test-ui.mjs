@@ -127,18 +127,22 @@ try {
   await page.getByText("演示模式不调用模型。请切换实时模式并配置模型后生成页面。", { exact:true }).waitFor();
   // Seed a clearly labeled manual test page; no generation runtime is used.
   const fixtureProjectId = await page.evaluate(() => localStorage.getItem("dreamatic-project"));
+  const fixtureImageId = crypto.randomUUID();
+  const fixtureImageUrl = `/assets/${fixtureProjectId}/${fixtureImageId}.png`;
+  await page.route(`**${fixtureImageUrl}`, route => route.fulfill({contentType:"image/png",body:Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=","base64")}));
   await fetch(base + "/api/projects/" + fixtureProjectId, {
     method: "PATCH", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: "森屿生活 · UI 测试" }),
+    body: JSON.stringify({ title: "森屿生活 · UI 测试 · 一个很长的完整项目名称" }),
   });
   const fixture = await fetch(base + `/api/projects/${fixtureProjectId}/versions`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ baseVersionId: "", label: "UI 测试页面（未调用 AI）", html: `<!doctype html><html><head><title>素材与灵感</title><style>body{margin:0;background:#f5f3ed;color:#25392d;font-family:sans-serif}nav{padding:24px}main{padding:48px}h1{font-size:48px}p{line-height:1.8}</style></head><body><nav>森屿生活</nav><main><h1>森屿生活</h1><p>UI 测试页面 · 手动创建 · 未调用 AI</p><p>自然与可持续设计</p></main></body></html>` }),
+    body: JSON.stringify({ baseVersionId: "", label: "UI 测试页面（未调用 AI）", html: `<!doctype html><html><head><title>素材与灵感</title><style>body{margin:0;background:#f5f3ed;color:#25392d;font-family:sans-serif}nav{padding:24px}main{padding:48px}h1{font-size:48px}p{line-height:1.8}.reveal{opacity:0}.shared-card{width:120px;margin:4px}</style></head><body><nav>森屿生活</nav><main><h1>森屿生活</h1><p>UI 测试页面 · 手动创建 · 未调用 AI</p><p>自然与可持续设计</p><div id="reveal-fixture" class="reveal">设计视图可见</div><div id="shared-a" class="shared-card">共享样式 A</div><div id="shared-b" class="shared-card">共享样式 B</div><a id="anchor-jump" href="#anchor-target">跳到目标</a><div style="height:1200px"></div><section id="anchor-target">锚点目标</section></main></body></html>` }),
   });
   assert.equal(fixture.status, 200);
   await page.route(`**/api/projects/${fixtureProjectId}`, async route => {
     const response = await route.fetch();
     const project = await response.json();
+    project.sources[0].assets.push({id:fixtureImageId,name:"项目图片.png",type:"image",mime:"image/png",url:fixtureImageUrl});
     project.messages = [{ role: "assistant", text: "UI 测试页面 · 未调用 AI", time: new Date().toISOString() }];
     project.events = [{ id: "manual-ui-fixture", role: "system", kind: "status", text: "手动测试页面已载入", time: new Date().toISOString() }];
     await route.fulfill({ json: project });
@@ -150,6 +154,11 @@ try {
   assert.match(await frame.locator("h1").innerText(), /森屿生活/);
   assert.equal(await page.locator(".gjs-frame").getAttribute("sandbox"), "allow-same-origin");
   assert.ok(await frame.locator('meta[http-equiv="Content-Security-Policy"]').count());
+  assert.equal(await frame.locator("#reveal-fixture").evaluate(element=>getComputedStyle(element).opacity),"1","editor-only reveal override makes script-driven content selectable");
+  assert.equal(await frame.locator("#dreamatic-editor-reveal-style").count(),1);
+  const projectButton=page.locator(".project-item").filter({hasText:"森屿生活"});
+  assert.equal(await projectButton.getAttribute("title"),"森屿生活 · UI 测试 · 一个很长的完整项目名称");
+  assert.deepEqual(await page.locator(".project-list").evaluate(list=>{const name=list.querySelector(".project-item strong");return{scrollbar:getComputedStyle(list).scrollbarWidth,maxWidth:name?getComputedStyle(name).maxWidth:"",lines:name?getComputedStyle(name).webkitLineClamp:""};}),{scrollbar:"thin",maxWidth:"100%",lines:"2"});
   await frame.locator("body").evaluate(body => {
     const script = body.ownerDocument.createElement("script");
     script.textContent = "parent.__dreamaticEscaped = true";
@@ -267,6 +276,13 @@ try {
     assert.ok(await livePreview.locator('#vector-fixture').evaluate(e=>e.getAnimations({subtree:true}).some(a=>a.playState==='running')));
     await livePreview.getByRole('button',{name:'SVG menu',exact:true}).click();
     assert.equal(await livePreview.locator('body').getAttribute('data-vector-clicked'),'yes');
+    if(cycle===0){
+      await livePreview.locator("#anchor-jump").click();
+      await page.waitForTimeout(700);
+      assert.equal(await livePreview.locator("#anchor-target").count(),1,"anchor clicks keep the srcDoc preview loaded");
+      assert.ok(await livePreview.locator("body").evaluate(()=>window.scrollY>0));
+      assert.ok(await livePreview.locator("#anchor-target").evaluate(target=>{const top=target.getBoundingClientRect().top;return top>=-1&&top<window.innerHeight;}),"anchor target scrolls into the preview viewport");
+    }
     const vectorExport = await (await fetch(base + '/api/projects/' + p.id + '/export?version=' + saved.versions.at(-1).id)).text();
     assert.match(vectorExport, /viewBox="0 0 80 40"/);
     assert.match(vectorExport, /Vector regression/);
@@ -291,10 +307,36 @@ try {
   const columnCard = page.locator('[data-block-kind="columns"]');
   assert.match(await columnCard.getAttribute("aria-label"), /并排展示两组内容/);
   await columnCard.focus();
+  const imageBlock=page.locator('[data-block-kind="image"]'),imageBlockBox=await imageBlock.boundingBox(),canvasBodyBox=await frame.locator("body").boundingBox();
+  assert.ok(imageBlockBox&&canvasBodyBox);
+  // Native drag events across the canvas iframe, as the browser fires them.
+  await page.evaluate(async()=>{const block=document.querySelector('[data-block-kind="image"]');const doc=document.querySelector(".gjs-frame").contentDocument;const target=doc.querySelector("main");const r=target.getBoundingClientRect();const dt=new DataTransfer();const at={bubbles:true,cancelable:true,dataTransfer:dt,clientX:r.left+40,clientY:r.top+40};const wait=()=>new Promise(res=>setTimeout(res,60));block.dispatchEvent(new DragEvent("dragstart",at));await wait();for(const type of ["dragenter","dragover","dragover"]){target.dispatchEvent(new DragEvent(type,at));await wait();}target.dispatchEvent(new DragEvent("drop",at));await wait();block.dispatchEvent(new DragEvent("dragend",at));});
+  const assetHint=page.getByText("只能选择项目中的图片；新图片请先作为资料上传。",{exact:true});
+  await assetHint.waitFor();
+  const assetUpload=page.locator(".gjs-am-file-uploader input[type=file]");assert.ok(await assetUpload.count()===0||await assetUpload.isDisabled());
+  assert.match(await page.locator(".gjs-am-asset").first().innerText(),/项目图片/);
+  await page.locator(".gjs-am-asset").first().dblclick();await assetHint.waitFor({state:"hidden"});
+  const insertedImage=frame.locator(`img[src="${fixtureImageUrl}"]`).last();await insertedImage.waitFor();await insertedImage.dblclick();await assetHint.waitFor();
+  await page.locator(".gjs-am-asset").first().dblclick();
   await page.screenshot({ path: path.join(data, "screenshots", "components.png"), fullPage: true });
 
   await page.getByRole("button", { name: "样式", exact: true }).click();
   assert.equal(await page.locator("#selectors > .gjs-clm-tags").count(), 1);
+  await frame.locator("h1").click();await page.getByText("显示方式",{exact:true}).waitFor();
+  assert.equal(await page.getByText("字体",{exact:true}).count(),1);
+  assert.match(await page.locator(".gjs-sm-property").filter({hasText:"字体"}).locator("select").innerText(),/苹方/);
+  const inspector=page.locator(".inspector");await inspector.evaluate(element=>{element.scrollTop=element.scrollHeight;});
+  const backgroundColor=page.locator(".gjs-sm-property").filter({hasText:"背景色"});await inspector.evaluate(element=>{const row=[...element.querySelectorAll(".gjs-sm-property")].find(item=>item.textContent.includes("背景色"));element.scrollTop+=row.getBoundingClientRect().top-element.getBoundingClientRect().top-120;});assert.ok(await inspector.evaluate(element=>element.scrollTop)>0,"inspector itself is scrolled before opening the picker");
+  const colorSwatch=backgroundColor.locator(".gjs-field-color-picker");await colorSwatch.click();
+  const picker=page.locator(".sp-container:not(.sp-hidden)");await picker.waitFor();
+  const pickerBox=await picker.boundingBox(),swatchBox=await colorSwatch.boundingBox(),viewport=page.viewportSize();assert.ok(pickerBox&&swatchBox&&viewport);
+  await frame.locator("#shared-a").click();const widthProperty=page.locator(".gjs-sm-property").filter({hasText:"宽度"}).first();await widthProperty.scrollIntoViewIfNeeded();
+  await widthProperty.locator("input").fill("210");await widthProperty.locator("input").press("Enter");
+  assert.equal(await frame.locator("#shared-a").evaluate(element=>getComputedStyle(element).width),"210px");assert.equal(await frame.locator("#shared-b").evaluate(element=>getComputedStyle(element).width),"120px");
+  const beforeComponentSave=await(await fetch(base+"/api/projects/"+p.id)).json();await page.getByRole("button",{name:"保存",exact:true}).click();
+  await page.waitForFunction(async({base,id,count})=>(await(await fetch(base+"/api/projects/"+id)).json()).versions.length>count,{base,id:p.id,count:beforeComponentSave.versions.length});
+  const afterComponentSave=await(await fetch(base+"/api/projects/"+p.id)).json();assert.doesNotMatch(afterComponentSave.versions.at(-1).html,/dreamatic-editor-reveal-style|data-dreamatic-editor-only/);
+  await page.reload();await frame.locator("#shared-a").waitFor();assert.equal(await frame.locator("#shared-a").evaluate(element=>getComputedStyle(element).width),"210px");assert.equal(await frame.locator("#shared-b").evaluate(element=>getComputedStyle(element).width),"120px");
   await page.screenshot({
     path: path.join(data, "screenshots", "editor.png"),
     fullPage: true,
@@ -322,7 +364,7 @@ try {
 
   await page.getByRole("button", { name: "关闭资料" }).click();
   await page.getByTitle("查看技能", { exact: true }).click();
-  assert.equal(await page.locator(".skills-list > *").count(), 18);
+  assert.equal(await page.locator(".skills-list > *").count(), 15);
   await page.getByRole("button", { name: "关闭弹窗" }).click();
   assert.equal(await page.locator(".sidebar").getByRole("button",{name:"技能库",exact:false}).count(),0);
   await page.getByRole("button",{name:/^事实列表/}).click();
