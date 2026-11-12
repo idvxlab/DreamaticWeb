@@ -35,6 +35,7 @@ import {
   factsMarkdown,
 } from "./artifacts.js";
 import { applyPagePatch } from "./page-patch.js";
+import { lenientArgs } from "./lenient-json.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import { imagePreview } from "../image-preview.js";
@@ -115,12 +116,14 @@ function tool(
   parameters: AgentTool["parameters"],
   execute: (args: any) => Promise<unknown>,
   terminal = false,
+  prepareArguments?: AgentTool["prepareArguments"],
 ): AgentTool {
   return {
     name,
     label: name,
     description,
     parameters,
+    ...(prepareArguments ? { prepareArguments } : {}),
     executionMode: terminal ? "sequential" : "parallel",
     execute: async (_id, args, signal) => {
       signal?.throwIfAborted();
@@ -714,7 +717,7 @@ async function execute(
           ),
           tool(
             "submit_facts",
-            "Submit facts and optional media associations; no independent tracing pass",
+            "Submit facts and optional media associations; no independent tracing pass. facts and limitations are JSON arrays in the arguments (facts: objects with id, text, sourceId, assetIds), never one string holding them.",
             factsParams,
             async (args) => {
               if (value) throw new Error("事实已经提交");
@@ -738,6 +741,11 @@ async function execute(
               return "Facts accepted";
             },
             true,
+            // A list sent as a JSON string (with stray quotes in its text) is read, not refused.
+            (args) => {
+              const raw = (args || {}) as Record<string, unknown>;
+              return lenientArgs(raw, ["facts", "limitations"]) as never;
+            },
           ),
         ],
         () => Boolean(value),
