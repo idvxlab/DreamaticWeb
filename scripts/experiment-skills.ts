@@ -71,10 +71,7 @@ const variants = [
   "designer-awwwards",
   "designer-frontend-design",
   "designer-impeccable",
-  "designer-impeccable-animate",
   "designer-impeccable-overdrive",
-  "designer-motion-design",
-  "designer-web-animation-design",
   "designer-3d-transforms",
 ];
 const only = args.includes("--only") ? arg("--only") : undefined;

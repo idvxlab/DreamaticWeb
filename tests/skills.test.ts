@@ -83,7 +83,7 @@ test("required references are scoped, budgeted, cached and invalidate the select
 test("published Pi loader discovers portable Skills; Codex and Claude paths resolve the same resources", async () => {
   const pi = loadSkillsFromDir({ dir: SKILLS_ROOT, source: "test" });
   assert.equal(pi.diagnostics.length, 0);
-  assert.equal(pi.skills.length, 18);
+  assert.equal(pi.skills.length, 15);
   const alias = path.resolve(".claude/skills");
   assert.equal(await realpath(alias), await realpath(SKILLS_ROOT));
   const claudeLayout = loadSkillsFromDir({
@@ -148,7 +148,7 @@ test("explicit Designer selections stay exact and scoped while references remain
               "designer-impeccable",
               "designer-frontend-design",
               "designer-3d-transforms",
-              "designer-motion-design",
+              "designer-impeccable-overdrive",
             ]
               .map((n) => `/skill:${n}`)
               .join(" "),
@@ -280,7 +280,7 @@ test("adapted Skills carry intact licenses/provenance and every linked reference
         assert.ok(!result.isError, skill.name + "/" + ref[1]);
       }
     }
-    assert.equal(adapted, 8);
+    assert.equal(adapted, 5);
   } finally {
     library.close();
   }

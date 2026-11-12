@@ -4,17 +4,14 @@ Initial integration: 2026-10-21. ZJT adapters: 2026-11-04. The existing three-ro
 
 ## ZJT adapter addition
 
-The library now contains 18 entries: the 10 baseline Skills below plus 8 adapters. These are derived design instructions, not unchanged upstream plugins. Each adapter retains its upstream license and `upstream.json` records archive/source hashes, local instruction hashes, implementation mappings and validation limits. Original archives remain experiment data, not runtime input.
+The library now contains 15 entries: the 10 baseline Skills below plus 5 adapters (the three motion adapters — impeccable-animate, motion-design, web-animation-design — were removed on 2026-11-11). These are derived design instructions, not unchanged upstream plugins. Each adapter retains its upstream license and `upstream.json` records archive/source hashes, local instruction hashes, implementation mappings and validation limits. Original archives remain experiment data, not runtime input.
 
 | Entry | Scope |
 | --- | --- |
 | designer-awwwards | Subject-specific concept, composed frames, one signature and coherent motion driver |
 | designer-frontend-design | Distinct visual identity, typography and content-led composition |
 | designer-impeccable | Visitor mode, committed visual world and detailed craft |
-| designer-impeccable-animate | Focal sequence, continuity, interruption and feedback |
 | designer-impeccable-overdrive | Ambitious spatial/procedural effect with usable fallback |
-| designer-motion-design | Emotional intent, personality, timing and layered choreography |
-| designer-web-animation-design | Natural and interruptible web interaction motion |
 | designer-3d-transforms | Perceptible perspective, z layers, spatial transforms and depth tokens |
 
 The ports replace plugin launchers, framework scaffolds, unprovided library globals, automatic critic loops and readiness-only responses with guidance usable in the existing Designer task. Visual goals and native JavaScript remain; no independent review agent is introduced. Reference paths are readable Markdown under each Skill's `references/`; depth tokens are converted to Markdown without changing their values. The current host requires canvas creation from inline JavaScript and blocks external scripts, so an original GSAP/Three.js implementation is not claimed to execute unchanged.

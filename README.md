@@ -80,7 +80,7 @@ PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；�
 
 ## 专业 Skills
 
-`.agents/skills` 保存 10 项基础 Skill 和 8 项 ZJT 上游适配版（Awwwards、frontend-design、Impeccable、animate、overdrive、Motion Design、web-animation-design、3d-transforms）。Pi 通过官方 `loadSkillsFromDir` 发现、`formatSkillsForPrompt` 展示目录、`createReadTool` 按需读取；角色权限和文件缓存由应用适配。继续使用锁定版本的 `pi-coding-agent@1.3.0`，不启用它的 CLI、shell 或额外 Agent。
+`.agents/skills` 保存 10 项基础 Skill 和 5 项 ZJT 上游适配版（Awwwards、frontend-design、Impeccable、overdrive、3d-transforms；动效类 animate、Motion Design、web-animation-design 已移除）。Pi 通过官方 `loadSkillsFromDir` 发现、`formatSkillsForPrompt` 展示目录、`createReadTool` 按需读取；角色权限和文件缓存由应用适配。继续使用锁定版本的 `pi-coding-agent@1.3.0`，不启用它的 CLI、shell 或额外 Agent。
 
 Analyst 默认使用 `analyst-information-extraction`。未指定时，Designer 根据任务选择网站类型及必要的架构、视觉或交互指导，最多四项；简单文字编辑不加载设计 Skill。显式 `/skill:名称` 则精确使用所列组合，不再混入默认视觉/交互 Skill，读取权限也限定在该组合及其参考资料。选定正文在现有模型请求前注入，不额外调用模型选择 Skill。参考正文继续按需读取，缓存避免重复读盘。
 
