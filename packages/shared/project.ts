@@ -46,7 +46,8 @@ export type AssetFlag =
   | "frame-only"
   | "fragment"
   | "page-background"
-  | "graphic";
+  | "graphic"
+  | "text-strip";
 export interface Source {
   id: string;
   name: string;

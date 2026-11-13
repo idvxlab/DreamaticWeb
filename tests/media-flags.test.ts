@@ -158,6 +158,25 @@ test("every caption on a page goes to every picture on it, and a caption is not 
   assert.ok(!CAPTION.test("Figures show that") && !CAPTION.test("Fig. shows"));
 });
 
+test("a line of type stored as a picture is a text strip and is not offered; a wordmark logo is not", () => {
+  const layout = mediaLayout([
+    {
+      type: "page",
+      metadata: { pageNumber: 5, pageWidth: 612, pageHeight: 792 },
+      children: [
+        { type: "image", metadata: { attachmentName: "caption.png" }, bounds: { x: 116, y: 578, width: 153, height: 8 } },
+        { type: "image", metadata: { attachmentName: "wordmark.png" }, bounds: { x: 40, y: 20, width: 120, height: 20 } },
+        { type: "image", metadata: { attachmentName: "chart.png" }, bounds: { x: 40, y: 100, width: 500, height: 200 } },
+      ],
+    },
+  ] as unknown as OfficeContentNode[]);
+  assert.equal(layout.get("caption.png")!.textStrip, true);
+  assert.equal(layout.get("wordmark.png")!.textStrip, false);
+  assert.equal(layout.get("chart.png")!.textStrip, false);
+  const strip = { id: "a", name: "a", type: "image", url: "/a", mime: "image/png", flags: ["text-strip"] } as Asset;
+  assert.equal(offeredAsset(strip), false);
+});
+
 test("canonical Markdown lists page, nearby text and flags without claiming visual content", async () => {
   const source = {
     id: "s",

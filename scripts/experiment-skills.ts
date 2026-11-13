@@ -49,6 +49,9 @@ const config = runtimeConfig();
 if (config.mode !== "live" || !config.models.reasoning.apiKey)
   throw new Error("Live DREAMATIC model profile is required");
 const profiles = Object.values(config.models).filter(Boolean);
+// A no-vision control: the same code and prompts with image viewing turned off.
+if (process.env.EXPERIMENT_VISION === "false")
+  for (const profile of profiles) profile!.vision = false;
 const providers = profiles.map((p) => modelRuntime(p!));
 const secrets = profiles.map((p) => p!.apiKey).filter(Boolean) as string[];
 const redact = (value: unknown) => {
@@ -290,24 +293,17 @@ try {
         writeFile(path.join(folder, "trace-partial.json"), snapshot),
       );
     }, 15000);
-    const timer = setTimeout(
+    let timer = setTimeout(
       () => activeRuns.get(p.id)?.abort(),
       minutes * 60000,
     );
     console.log(JSON.stringify({ variant, event: "started", projectId: p.id }));
     try {
-      await runProject(
-        p,
-        requestSchema.parse({
-          text,
-          mode: variant === "baseline" ? "auto" : "redesign",
-        }),
-        save,
-        (e) =>
-          console.log(
-            redact({ variant, event: "status", role: e.role, text: e.text }),
-          ),
-        {
+      const status = (e: { role?: string; text?: string }) =>
+        console.log(
+          redact({ variant, event: "status", role: e.role, text: e.text }),
+        );
+      const runOptions: Parameters<typeof runProject>[4] = {
           config,
           skills: library,
           onAgentEvent: observe,
@@ -334,8 +330,49 @@ try {
               },
             });
           },
-        },
+        };
+      await runProject(
+        p,
+        requestSchema.parse({
+          text,
+          mode: variant === "baseline" ? "auto" : "redesign",
+        }),
+        save,
+        status,
+        runOptions,
       );
+      // An Orchestrator question is shown as question.json and answered once by whoever runs the
+      // experiment, through answer.txt in the same folder (as the owner would in the app).
+      const open = p.questions?.find((q) => !q.answeredAt);
+      let answer: string | undefined;
+      if (p.status === "needs_input" && open && p.generation?.pending) {
+        await writeFile(
+          path.join(folder, "question.json"),
+          JSON.stringify({ title: open.title, options: open.options }, null, 1),
+        );
+        console.log(redact({ variant, event: "question", question: open.title }));
+        const file = path.join(folder, "answer.txt");
+        for (let waited = 0; waited < 20 * 60 && !answer; waited += 5) {
+          answer = await readFile(file, "utf8").then((t) => t.trim() || undefined, () => undefined);
+          if (!answer) await new Promise((r) => setTimeout(r, 5000));
+        }
+      }
+      if (answer && open && p.generation?.pending) {
+        // Waiting for the answer does not count against the condition's deadline.
+        clearTimeout(timer);
+        timer = setTimeout(() => activeRuns.get(p.id)?.abort(), minutes * 60000);
+        open.answer = { selected: [], text: answer };
+        open.answeredAt = new Date().toISOString();
+        p.messages.push({ role: "user", text: answer, time: open.answeredAt });
+        console.log(redact({ variant, event: "answered", question: open.title, answer }));
+        await runProject(
+          p,
+          requestSchema.parse(p.generation.pending),
+          save,
+          status,
+          { ...runOptions, resume: true },
+        );
+      }
     } finally {
       clearTimeout(timer);
       clearInterval(checkpoint);

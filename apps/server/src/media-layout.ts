@@ -12,6 +12,7 @@ export const usableAsset = (a: Asset) =>
 export const OFFERED_EXCLUDED_FLAGS: readonly AssetFlag[] = [
   ...UNUSABLE_FLAGS,
   "fragment",
+  "text-strip",
 ];
 export const offeredAsset = (a: Asset) =>
   !a.flags?.some((f) => OFFERED_EXCLUDED_FLAGS.includes(f));
@@ -24,6 +25,7 @@ export type MediaLayout = {
   position?: string;
   fragment?: boolean;
   pageBackground?: boolean;
+  textStrip?: boolean;
 };
 
 /**
@@ -195,9 +197,15 @@ export function mediaLayout(nodes: OfficeContentNode[]) {
                   (stacked(other.box, b) && small(b)) ||
                   (stacked(b, other.box) && small(other.box))),
             );
-            if (pageWidth && pageHeight)
+            if (pageWidth && pageHeight) {
               entry.pageBackground =
                 (b.width * b.height) / (pageWidth * pageHeight) > 0.5;
+              // A line of type stored as a picture (a caption or label drawn as an image): a
+              // band at least ten times wider than tall and under 3% of the page's height.
+              // Wordmark logos are far less elongated.
+              entry.textStrip =
+                b.width >= 10 * b.height && b.height < 0.03 * pageHeight;
+            }
           }
           result.set(image.name, entry);
         }
@@ -247,5 +255,6 @@ export function annotate(asset: Asset, layout?: MediaLayout) {
   const flags = new Set(asset.flags || []);
   if (layout.fragment) flags.add("fragment");
   if (layout.pageBackground) flags.add("page-background");
+  if (layout.textStrip) flags.add("text-strip");
   if (flags.size) asset.flags = [...flags];
 }

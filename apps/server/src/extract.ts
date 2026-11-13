@@ -4,6 +4,8 @@ import {
   type StructuredExtraction,
 } from "./document-structure.js";
 import { enhancePdf } from "./pdf-structure.js";
+import { pdfImageTurns } from "./pdf-orientation.js";
+import sharp from "sharp";
 import { imageSize } from "image-size";
 import path from "node:path";
 import { writeFile, mkdir, link, access } from "node:fs/promises";
@@ -24,7 +26,7 @@ import {
   mediaLayout,
   type MediaLayout,
 } from "./media-layout.js";
-export const PARSER_VERSION = "markdown-media-v12";
+export const PARSER_VERSION = "markdown-media-v14";
 export const DOCUMENT_MEDIA_LIMIT = 200;
 export const DOCUMENT_MEDIA_BYTES = 80 * 1024 * 1024;
 export const sourceFingerprint = (buffer: Buffer) =>
@@ -148,6 +150,8 @@ export async function extract(
   };
   let structured: StructuredExtraction | undefined;
   let layout: Map<string, MediaLayout> | undefined;
+  // Pictures a PDF draws turned are stored upright, as the page shows them.
+  let turns = new Map<string, number>();
   const mediaLimit = options.mediaLimit ?? DOCUMENT_MEDIA_LIMIT;
   if (!Number.isInteger(mediaLimit) || mediaLimit < 1 || mediaLimit > 1000)
     throw new Error("文档媒体数量上限无效");
@@ -167,6 +171,13 @@ export async function extract(
       skippedMedia++;
       return;
     }
+    const turn = turns.get(filename);
+    if (turn)
+      try {
+        data = await sharp(data, { limitInputPixels: 100_000_000 }).rotate(turn).png().toBuffer();
+      } catch {
+        /* An undecodable picture keeps its stored orientation. */
+      }
     const imported = await asset(data, filename, projectId);
     if (imported.type === "image")
       try {
@@ -273,6 +284,12 @@ export async function extract(
       });
       options.onParsed?.(parsed);
       layout = mediaLayout(parsed.content);
+      if (ext === "pdf")
+        try {
+          turns = await pdfImageTurns(buffer, parsed.content);
+        } catch {
+          s.warnings.push("PDF 图片方向未能读取，图片保持原存储方向");
+        }
       structured = structureDocument(parsed.content);
       s.tables = structured.tables;
       if (ext === "pdf" && process.env.DREAMATIC_PDF_ENHANCE === "true") {
