@@ -37,6 +37,45 @@ export async function imagePreview(filename: string, cacheDir: string) {
 export const CONTACT_SHEET_LIMIT = 6;
 /** One asset_view call may name four sheets' worth of candidates; the host splits them. */
 export const ASSET_VIEW_LIMIT = CONTACT_SHEET_LIMIT * 4;
+
+/**
+ * Split requested pictures into sheets of at most `perSheet`, keeping each group (the pictures of
+ * one fact, linked or possible) together: its members follow its first requested member, and a
+ * group that fits on a sheet but not in what is left of the current one starts the next sheet.
+ */
+export function packSheets<T extends { id: string }>(
+  items: T[],
+  groups: string[][],
+  perSheet = CONTACT_SHEET_LIMIT,
+) {
+  const ordered: T[][] = [];
+  const placed = new Set<string>();
+  for (const item of items) {
+    if (placed.has(item.id)) continue;
+    const group = groups.find((g) => g.length > 1 && g.includes(item.id));
+    const members = group
+      ? items.filter((i) => group.includes(i.id) && !placed.has(i.id))
+      : [item];
+    members.forEach((m) => placed.add(m.id));
+    ordered.push(members);
+  }
+  const sheets: T[][] = [];
+  for (const run of ordered) {
+    let current = sheets.at(-1);
+    if (
+      !current ||
+      current.length >= perSheet ||
+      (run.length <= perSheet && current.length + run.length > perSheet)
+    )
+      sheets.push((current = []));
+    for (const item of run) {
+      if (current.length >= perSheet) sheets.push((current = []));
+      current.push(item);
+    }
+  }
+  return sheets;
+}
+
 const CELL = 384,
   COLUMNS = 3,
   LABEL = 28;

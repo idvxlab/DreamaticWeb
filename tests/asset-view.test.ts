@@ -17,7 +17,7 @@ import path from "node:path";
 import { ingest } from "../apps/server/src/ingest.js";
 import { runProject } from "../apps/server/src/generation/runtime.js";
 import { requestSchema } from "../packages/shared/generation.js";
-import { contactSheet, CONTACT_SHEET_LIMIT, ASSET_VIEW_LIMIT } from "../apps/server/src/image-preview.js";
+import { contactSheet, packSheets, CONTACT_SHEET_LIMIT, ASSET_VIEW_LIMIT } from "../apps/server/src/image-preview.js";
 import { guardPictures } from "../apps/server/src/picture-guard.js";
 
 const config: RuntimeConfig = {
@@ -144,7 +144,7 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
     assert.match(flagged.text, new RegExp("图片不可用：" + asset(3).id));
     // 24 candidates: four sheets of six, numbered 1..24 across sheets.
     assert.equal(view.images, 4);
-    assert.match(view.text, /24 images as large tiles, 6 per sheet/);
+    assert.match(view.text, /24 images as large tiles, up to 6 per sheet/);
     assert.match(view.text, /Sheet 4 of 4 .*: 19 · [0-9a-f]{4} = /);
     assert.match(view.text, /24 · [0-9a-f]{4} = /);
     assert.doesNotMatch(view.text, /25 · /);
@@ -204,4 +204,18 @@ test("a generated page that uses a flat tile is rejected", async () => {
   } finally {
     await removeProject(p.id).catch(() => {});
   }
+});
+
+test("packSheets keeps the pictures of one fact together on one sheet", () => {
+  const it = (id: string) => ({ id });
+  const ids = (sheets: { id: string }[][]) => sheets.map((s) => s.map((i) => i.id).join(""));
+  // a b c d e, then a five-picture figure F1..F5 whose captioned part was named first.
+  const items = ["a", "b", "c", "d", "F3", "e", "F1", "F2", "F4", "F5"].map(it);
+  const sheets = packSheets(items, [["F3", "F1", "F2", "F4", "F5"], ["a"]], 6);
+  assert.deepEqual(ids(sheets), ["abcd", "F3F1F2F4F5e"]);
+  // Without groups the order and the six-per-sheet split are unchanged.
+  assert.deepEqual(ids(packSheets(items, [], 6)), ["abcdF3e", "F1F2F4F5"]);
+  // A group larger than a sheet continues on the next one.
+  const big = Array.from({ length: 8 }, (_, n) => it("g" + n));
+  assert.deepEqual(packSheets([it("x"), ...big], [big.map((i) => i.id)], 6).map((s) => s.length), [6, 3]);
 });

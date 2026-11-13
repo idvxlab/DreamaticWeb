@@ -41,6 +41,7 @@ import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
 import {
   contactSheet,
+  packSheets,
   CONTACT_SHEET_LIMIT,
   ASSET_VIEW_LIMIT,
 } from "../image-preview.js";
@@ -899,16 +900,21 @@ async function execute(
           (a) => a.type === "image" && /^image\/(png|jpeg|webp|gif)$/.test(a.mime),
         );
       let views = 0;
+      // The pictures of one fact (linked and possible) are shown side by side on one sheet.
+      const groups = chosen.facts.map((f) => [
+        ...f.assetIds,
+        ...(f.possibleAssetIds || []),
+      ]);
       const sheets = async (items: typeof viewable) => {
-        const perSheet = CONTACT_SHEET_LIMIT;
         const content: (
           | { type: "text"; text: string }
           | { type: "image"; data: string; mimeType: string }
         )[] = [];
-        const count = Math.ceil(items.length / perSheet);
+        const packed = packSheets(items, groups);
+        const count = packed.length;
+        let first = 1;
         for (let sheet = 0; sheet < count; sheet++) {
-          const batch = items.slice(sheet * perSheet, (sheet + 1) * perSheet);
-          const first = sheet * perSheet + 1;
+          const batch = packed[sheet];
           const buffer = await contactSheet(
             batch.map((a) =>
               path.join(projectDir(p.id), "assets", path.basename(a.url)),
@@ -941,6 +947,7 @@ async function execute(
               mimeType: "image/jpeg",
             },
           );
+          first += batch.length;
         }
         return content;
       };
@@ -997,7 +1004,7 @@ async function execute(
               {
                 type: "text",
                 text:
-                  `${items.length} images as large tiles, ${CONTACT_SHEET_LIMIT} per sheet, numbered continuously.` +
+                  `${items.length} images as large tiles, up to ${CONTACT_SHEET_LIMIT} per sheet, numbered continuously; the pictures of one fact share a sheet.` +
                   " Each tile's label shows its number and the asset id's start; describe a picture only from its own tile. Tiles are scaled to fit; use the original URL in the page.",
               },
               ...content,
