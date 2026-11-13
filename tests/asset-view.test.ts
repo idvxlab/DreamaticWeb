@@ -89,6 +89,9 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
   const neighbour = { ...images[8].assets[0], id: randomUUID(), name: "p8b.png" };
   const flatNeighbour = { ...images[8].assets[0], id: randomUUID(), name: "p8c.png", flags: ["flat" as const] };
   images[7].assets.push(neighbour, flatNeighbour);
+  images[7].assets[0].page = 10;
+  neighbour.page = 10;
+  flatNeighbour.page = 10;
   await save(p);
   const asset = (n: number) => images[n].assets[0];
   const offered = [0, 1, 2, ...Array.from({ length: 27 }, (_, n) => n + 5).filter((n) => n < 30)].map(asset);
@@ -126,8 +129,8 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
     step++;
     if (step === 1) return tool(model, "asset_view", { assetIds: offered.slice(0, 25).map((a) => a.id) });
     if (step === 2) return tool(model, "asset_view", { assetIds: [asset(0).id, asset(3).id] });
-    if (step === 3) return tool(model, "asset_view", { assetIds: offered.slice(0, 24).map((a) => a.id) });
-    if (step === 4) return tool(model, "asset_view", { assetIds: [asset(5).id, asset(6).id] });
+    if (step === 3) return tool(model, "asset_view", { assetIds: offered.filter((a) => a !== asset(7)).slice(0, 24).map((a) => a.id) });
+    if (step === 4) return tool(model, "asset_view", { assetIds: [asset(5).id, asset(6).id, asset(7).id] });
     if (step === 5) return tool(model, "asset_view", { assetIds: [asset(0).id] });
     return tool(model, "submit_page", {
       usedFactIds: ["f"],
@@ -149,6 +152,10 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
     assert.match(view.text, /24 · [0-9a-f]{4} = /);
     assert.doesNotMatch(view.text, /25 · /);
     assert.equal(more.images, 1, "one further look is allowed");
+    // The unnamed picture on the same page as a named one is shown with it, with its own id.
+    assert.match(more.text, new RegExp(neighbour.id + ".*same page as " + asset(7).id));
+    assert.match(more.text, /Besides the 3 you chose, 1 are other pictures from the same document page/);
+    assert.ok(!more.text.includes(flatNeighbour.id), "a flat tile is never added");
     assert.match(more.text, new RegExp(asset(5).id + ".*\\[page-background\\]"));
     assert.equal(third.images, 0);
     assert.match(third.text, /Both image views are used/);

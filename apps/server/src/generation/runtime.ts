@@ -900,20 +900,27 @@ async function execute(
           (a) => a.type === "image" && /^image\/(png|jpeg|webp|gif)$/.test(a.mime),
         );
       let views = 0;
+      const SAME_PAGE_PER_PAGE = 6,
+        SAME_PAGE_EXTRA_LIMIT = 12;
       // The pictures of one fact (linked and possible) are shown side by side on one sheet; failing
       // that, pictures from the same document page are, so the parts of a split figure meet.
       const pages = new Map<string, string[]>();
+      const pageOf = new Map<string, string>();
       for (const source of catalog)
         for (const a of source.assets)
-          if (a.page !== undefined) {
+          if (a.page !== undefined && viewable.some((v) => v.id === a.id)) {
             const key = source.id + ":" + a.page;
             pages.set(key, [...(pages.get(key) || []), a.id]);
+            pageOf.set(a.id, key);
           }
       const groups = [
         ...chosen.facts.map((f) => [...f.assetIds, ...(f.possibleAssetIds || [])]),
         ...pages.values(),
       ];
-      const sheets = async (items: typeof viewable) => {
+      const sheets = async (
+        items: typeof viewable,
+        samePage: Map<string, string> = new Map(),
+      ) => {
         const content: (
           | { type: "text"; text: string }
           | { type: "image"; data: string; mimeType: string }
@@ -942,7 +949,10 @@ async function execute(
                     (a, n) =>
                       `${first + n} · ${a.id.slice(0, 4)} = ${a.id}` +
                       (a.width && a.height ? ` (${a.width}×${a.height})` : "") +
-                      (a.flags?.length ? ` [${a.flags.join(",")}]` : ""),
+                      (a.flags?.length ? ` [${a.flags.join(",")}]` : "") +
+                      (samePage.has(a.id)
+                        ? ` [same page as ${samePage.get(a.id)}, added by the host]`
+                        : ""),
                   )
                   .join("; ") +
                 (buffer.unreadable.length
@@ -992,9 +1002,27 @@ async function execute(
           });
           if (!items.length) throw new Error("没有可查看的图片");
           views++;
+          // The other pictures on the pages of the named ones are shown with them: a figure is
+          // often split into several pictures, only one of them beside its caption.
+          const samePage = new Map<string, string>();
+          for (const item of items) {
+            const key = pageOf.get(item.id);
+            if (!key) continue;
+            let added = 0;
+            for (const id of pages.get(key) || []) {
+              if (samePage.size >= SAME_PAGE_EXTRA_LIMIT || added >= SAME_PAGE_PER_PAGE) break;
+              if (ids.includes(id) || samePage.has(id)) continue;
+              samePage.set(id, item.id);
+              added++;
+            }
+          }
+          const shown = [
+            ...items,
+            ...viewable.filter((a) => samePage.has(a.id)),
+          ];
           let content;
           try {
-            content = await sheets(items);
+            content = await sheets(shown, samePage);
           } catch {
             return {
               content: [
@@ -1012,7 +1040,10 @@ async function execute(
               {
                 type: "text",
                 text:
-                  `${items.length} images as large tiles, up to ${CONTACT_SHEET_LIMIT} per sheet, numbered continuously; the pictures of one fact share a sheet.` +
+                  `${shown.length} images as large tiles, up to ${CONTACT_SHEET_LIMIT} per sheet, numbered continuously; the pictures of one fact share a sheet.` +
+                  (samePage.size
+                    ? ` Besides the ${items.length} you chose, ${samePage.size} are other pictures from the same document page as one of yours, marked "same page as <id>" with their own full id: a figure in the source is often split into several pictures and only one of them sits beside the caption, so these may be the rest of the figure you chose. Look at them as well; if they belong to it, use them together by their own ids; if not, leave them out.`
+                    : "") +
                   " Each tile's label shows its number and the asset id's start; describe a picture only from its own tile. Tiles are scaled to fit; use the original URL in the page.",
               },
               ...content,
