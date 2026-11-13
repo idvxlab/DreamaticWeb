@@ -900,11 +900,19 @@ async function execute(
           (a) => a.type === "image" && /^image\/(png|jpeg|webp|gif)$/.test(a.mime),
         );
       let views = 0;
-      // The pictures of one fact (linked and possible) are shown side by side on one sheet.
-      const groups = chosen.facts.map((f) => [
-        ...f.assetIds,
-        ...(f.possibleAssetIds || []),
-      ]);
+      // The pictures of one fact (linked and possible) are shown side by side on one sheet; failing
+      // that, pictures from the same document page are, so the parts of a split figure meet.
+      const pages = new Map<string, string[]>();
+      for (const source of catalog)
+        for (const a of source.assets)
+          if (a.page !== undefined) {
+            const key = source.id + ":" + a.page;
+            pages.set(key, [...(pages.get(key) || []), a.id]);
+          }
+      const groups = [
+        ...chosen.facts.map((f) => [...f.assetIds, ...(f.possibleAssetIds || [])]),
+        ...pages.values(),
+      ];
       const sheets = async (items: typeof viewable) => {
         const content: (
           | { type: "text"; text: string }

@@ -215,6 +215,9 @@ test("packSheets keeps the pictures of one fact together on one sheet", () => {
   assert.deepEqual(ids(sheets), ["abcd", "F3F1F2F4F5e"]);
   // Without groups the order and the six-per-sheet split are unchanged.
   assert.deepEqual(ids(packSheets(items, [], 6)), ["abcdF3e", "F1F2F4F5"]);
+  // A fact's group comes first; pictures from one page meet when no fact links them.
+  const pageItems = ["x", "P1", "y", "P2", "z"].map(it);
+  assert.deepEqual(ids(packSheets(pageItems, [["x", "z"], ["P1", "P2"]], 6)), ["xzP1P2y"]);
   // A group larger than a sheet continues on the next one.
   const big = Array.from({ length: 8 }, (_, n) => it("g" + n));
   assert.deepEqual(packSheets([it("x"), ...big], [big.map((i) => i.id)], 6).map((s) => s.length), [6, 3]);
