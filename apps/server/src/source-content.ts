@@ -75,6 +75,7 @@ export async function persistExtraction(
             `- [${a.name.replace(/[\[\]\n\r]/g, " ")}](${a.url}) · ${a.type} · ${a.mime} · id:${a.id}` +
             (a.width && a.height ? ` · ${a.width}×${a.height}` : "") +
             (a.page ? ` · page:${a.page}` : "") +
+            (a.position ? ` · position:${JSON.stringify(a.position)}` : "") +
             (a.context ? ` · nearby:${JSON.stringify(a.context)}` : "") +
             (a.pageCaptions?.length
               ? ` · pageCaptions:${JSON.stringify(a.pageCaptions)}`
@@ -85,7 +86,7 @@ export async function persistExtraction(
       (source.assets.some(
         (a) => a.flags?.length || a.context || a.pageCaptions?.length,
       )
-        ? "\n\nnearby = text next to the image on the page, not its visual content. pageCaptions = every figure/table caption printed on the image's page; it does not say which image a caption covers, and one caption may cover several images on that page. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page (the brochure's own backdrop scene).\n"
+        ? "\n\nnearby = text next to the image on the page, not its visual content. pageCaptions = every figure/table caption printed on the image's page; it does not say which image a caption covers, and one caption may cover several images on that page. position (on an image and after each page caption) = where it sits on its page in percent of the page, so which images a caption lies under, over or beside can be seen. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page (the brochure's own backdrop scene).\n"
         : "\n");
   }
   reading.markdown += mediaAssociations;

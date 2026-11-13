@@ -35,6 +35,8 @@ export interface Asset {
   context?: string;
   /** Captions printed on the picture's page; which picture each covers is not known. */
   pageCaptions?: string[];
+  /** Where the picture sits on its page, in percent of the page. */
+  position?: string;
   /** Deterministic import signals; flat/frame-only media are not standalone content. */
   flags?: AssetFlag[];
 }

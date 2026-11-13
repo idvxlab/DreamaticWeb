@@ -21,6 +21,7 @@ export type MediaLayout = {
   page?: number;
   context?: string;
   pageCaptions?: string[];
+  position?: string;
   fragment?: boolean;
   pageBackground?: boolean;
 };
@@ -86,6 +87,12 @@ async function flatGraphic(buffer: Buffer) {
 }
 
 const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+/** Where a box sits on its page, in percent of the page: what the reader of the page sees. */
+function where(box: Box, pageWidth?: number, pageHeight?: number) {
+  if (!pageWidth || !pageHeight) return undefined;
+  const pct = (v: number, of: number) => Math.round((v / of) * 100);
+  return `left ${pct(box.x, pageWidth)}%, top ${pct(box.y, pageHeight)}%, width ${pct(box.width, pageWidth)}%, height ${pct(box.height, pageHeight)}%`;
+}
 /** A figure or table caption line: "Fig. 8.", "Figure 3:", "Table 1", "图 2", "表3". */
 export const CAPTION = /^(?:fig(?:ure)?\.?|table|图|表)\s*\d+/i;
 // Undecodable PDF fonts surface as Hangul/symbol/private-use runs; omit them instead of quoting noise.
@@ -131,7 +138,10 @@ export function mediaLayout(nodes: OfficeContentNode[]) {
           ...new Set(
             texts
               .filter((t) => CAPTION.test(t.text) && !garbled(t.text))
-              .map((t) => t.text.slice(0, 160)),
+              .map((t) => {
+                const at = where(t.box, pageWidth, pageHeight);
+                return t.text.slice(0, 160) + (at ? ` (at ${at})` : "");
+              }),
           ),
         ];
         for (const image of images) {
@@ -139,6 +149,8 @@ export function mediaLayout(nodes: OfficeContentNode[]) {
           if (pageCaptions.length) entry.pageCaptions = pageCaptions;
           const b = image.box;
           if (b) {
+            const at = where(b, pageWidth, pageHeight);
+            if (at) entry.position = at;
             const overlapX = (t: Box) =>
               Math.min(b.x + b.width, t.x + t.width) - Math.max(b.x, t.x);
             const scored = texts
@@ -231,6 +243,7 @@ export function annotate(asset: Asset, layout?: MediaLayout) {
   if (layout.page) asset.page = layout.page;
   if (layout.context) asset.context = layout.context;
   if (layout.pageCaptions) asset.pageCaptions = layout.pageCaptions;
+  if (layout.position) asset.position = layout.position;
   const flags = new Set(asset.flags || []);
   if (layout.fragment) flags.add("fragment");
   if (layout.pageBackground) flags.add("page-background");

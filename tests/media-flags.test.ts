@@ -146,7 +146,12 @@ test("every caption on a page goes to every picture on it, and a caption is not 
     },
   ] as unknown as OfficeContentNode[]);
   for (const name of ["a.png", "b.png", "c.png"])
-    assert.deepEqual(layout.get(name)!.pageCaptions, ["Fig. 8. Five example videos with embedded visualizations."], name);
+    assert.deepEqual(
+      layout.get(name)!.pageCaptions,
+      ["Fig. 8. Five example videos with embedded visualizations. (at left 30%, top 51%, width 40%, height 2%)"],
+      name,
+    );
+  assert.equal(layout.get("c.png")!.position, "left 30%, top 33%, width 40%, height 18%");
   assert.equal(layout.get("c.png")!.context, undefined, "the caption beside one part is not that part's nearby text");
   assert.equal(layout.get("d.png")!.pageCaptions, undefined);
   assert.ok(CAPTION.test("图 3 系统架构") && CAPTION.test("Table 1: results") && CAPTION.test("Figure 12"));
