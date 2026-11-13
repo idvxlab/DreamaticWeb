@@ -4,6 +4,7 @@ import {
   type StructuredExtraction,
 } from "./document-structure.js";
 import { enhancePdf } from "./pdf-structure.js";
+import { analysePdfLayout, mergePdfMedia, pdfLayoutRuntime } from "./pdf-layout.js";
 import { pdfImageTurns } from "./pdf-orientation.js";
 import sharp from "sharp";
 import { imageSize } from "image-size";
@@ -26,13 +27,13 @@ import {
   mediaLayout,
   type MediaLayout,
 } from "./media-layout.js";
-export const PARSER_VERSION = "markdown-media-v14";
+export const PARSER_VERSION = "markdown-media-v15";
 export const DOCUMENT_MEDIA_LIMIT = 200;
 export const DOCUMENT_MEDIA_BYTES = 80 * 1024 * 1024;
 export const sourceFingerprint = (buffer: Buffer) =>
   createHash("sha256").update(buffer).digest("hex");
 export const parserVersion = () =>
-  `${PARSER_VERSION}:${process.env.DREAMATIC_PDF_ENHANCE || "false"}:${process.env.DREAMATIC_DOCUMENT_PYTHON || "default"}`;
+  `${PARSER_VERSION}:${process.env.DREAMATIC_PDF_ENHANCE || "false"}:${process.env.DREAMATIC_DOCUMENT_PYTHON || "default"}:layout-${process.env.DREAMATIC_PDF_LAYOUT || "auto"}`;
 export const FORMATS = [
   "pdf",
   "docx",
@@ -152,6 +153,10 @@ export async function extract(
   let layout: Map<string, MediaLayout> | undefined;
   // Pictures a PDF draws turned are stored upright, as the page shows them.
   let turns = new Map<string, number>();
+  // PDF layout analysis: whole-figure crops, and the embedded pieces those figures are made of.
+  let layoutCrops: { name: string; data: Buffer }[] = [];
+  let figureFragments = new Set<string>();
+  let fragmentLayout: Map<string, MediaLayout> | undefined;
   const mediaLimit = options.mediaLimit ?? DOCUMENT_MEDIA_LIMIT;
   if (!Number.isInteger(mediaLimit) || mediaLimit < 1 || mediaLimit > 1000)
     throw new Error("文档媒体数量上限无效");
@@ -273,6 +278,12 @@ export async function extract(
           );
       });
     } else {
+      // PDF: local layout analysis (reading order, headings, tables, whole figures) runs beside
+      // officeparser, which still supplies the embedded pictures and their placement.
+      const runtime = ext === "pdf" ? await pdfLayoutRuntime() : undefined;
+      const pageLayout = runtime
+        ? analysePdfLayout(buffer, runtime).catch(() => undefined)
+        : undefined;
       const parsed = await parseOffice(buffer, {
         extractAttachments: true,
         decompressionLimits: {
@@ -283,16 +294,26 @@ export async function extract(
         pdfParserConfig: { maxTimeMs: 30000 },
       });
       options.onParsed?.(parsed);
-      layout = mediaLayout(parsed.content);
+      const analysed = pageLayout ? await pageLayout : undefined;
+      const merged = analysed ? mergePdfMedia(analysed, parsed.content) : undefined;
+      if (merged) {
+        figureFragments = merged.fragments;
+        layoutCrops = merged.crops;
+        fragmentLayout = mediaLayout(parsed.content);
+      } else if (runtime)
+        s.warnings.push("PDF 版面分析不可用，已使用 officeparser 结构结果");
+      layout = mediaLayout(merged?.nodes || parsed.content);
       if (ext === "pdf")
         try {
           turns = await pdfImageTurns(buffer, parsed.content);
         } catch {
           s.warnings.push("PDF 图片方向未能读取，图片保持原存储方向");
         }
-      structured = structureDocument(parsed.content);
+      structured = merged
+        ? structureDocument(merged.nodes, "pp-doclayoutv3")
+        : structureDocument(parsed.content);
       s.tables = structured.tables;
-      if (ext === "pdf" && process.env.DREAMATIC_PDF_ENHANCE === "true") {
+      if (!merged && ext === "pdf" && process.env.DREAMATIC_PDF_ENHANCE === "true") {
         try {
           const enhanced = await enhancePdf(buffer);
           const next = structureDocument(enhanced.nodes, "pdfplumber");
@@ -318,16 +339,27 @@ export async function extract(
       if (structured.truncated)
         s.warnings.push("结构化阅读文本达到存储上限，请拆分材料");
       s.warnings.push(...parsed.warnings.map((w) => w.message));
-      for (const a of parsed.attachments.slice(
-        0,
-        options.legacyFirstAttachments,
-      )) {
+      const attachments = parsed.attachments.slice(0, options.legacyFirstAttachments);
+      // With layout analysis, whole figures are imported before the pieces they are made of.
+      const media = merged
+        ? [
+            ...attachments,
+            ...merged.crops.map((c) => ({ type: "image" as const, name: c.name, data: c.data, chartData: undefined })),
+          ]
+            .map((a, order) => ({ a, order, rank: merged.priority(a.name) }))
+            .sort((x, y) => x.rank - y.rank || x.order - y.order)
+            .map((x) => x.a)
+        : attachments;
+      for (const a of media) {
         if (
           a.type === "image" &&
           !s.assets.some((existing) => existing.name === a.name)
         ) {
           try {
-            await addDocumentMedia(Buffer.from(a.data, "base64"), a.name);
+            await addDocumentMedia(
+              Buffer.isBuffer(a.data) ? a.data : Buffer.from(a.data, "base64"),
+              a.name,
+            );
           } catch {
             s.warnings.push("暂无法复用附件：" + a.name);
           }
@@ -335,6 +367,7 @@ export async function extract(
         if (a.chartData)
           s.text += "\n图表 " + a.name + ": " + JSON.stringify(a.chartData);
       }
+
       if (ext === "pdf")
         s.warnings.push(
           "PDF 提取文本与可用附件；扫描页如无文字层，需要另外接入 OCR 工具。",
@@ -347,6 +380,15 @@ export async function extract(
     );
   s.assets = [...new Map(s.assets.map((a) => [a.id, a])).values()];
   if (layout) for (const a of s.assets) annotate(a, layout.get(a.name));
+  // Pieces of a whole-figure crop: placed by the parser's own layout, stored but not offered.
+  for (const a of s.assets)
+    if (figureFragments.has(a.name)) {
+      annotate(a, fragmentLayout?.get(a.name));
+      a.flags = [...new Set([...(a.flags || []), "fragment" as const])];
+    }
+  // The catalog follows the pages when whole-figure crops are added after the embedded pictures.
+  if (layoutCrops.length)
+    s.assets.sort((a, b) => (a.page ?? Infinity) - (b.page ?? Infinity));
   if (projectId) {
     const dir = path.join(projectDir(projectId), "uploads");
     await mkdir(dir, { recursive: true });

@@ -35,6 +35,7 @@ Desktop.ini
 *.swo
 *~
 
-# Optional local document parser runtime
+# Optional local document parser runtime and its layout model (scripts/setup-documents.sh)
 .venv-documents/
+models/
 __pycache__/

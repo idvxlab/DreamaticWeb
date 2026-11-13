@@ -1,3 +1,5 @@
+# Optional local document runtime (Python 3.11+). Install with scripts/setup-documents.sh.
+# pdfplumber: table grids; pypdfium2: page rendering and the PDF text layer.
 cffi==2.1.1
 charset-normalizer==3.5.2
 cryptography==46.0.7
@@ -6,3 +8,13 @@ pdfplumber==0.11.10
 pillow==13.0.0
 pycparser==3.11
 pypdfium2==5.14.0
+# PDF layout analysis: PP-DocLayoutV3 (ONNX, CPU) through rapid-layout. rapid-layout itself is
+# installed with --no-deps (it declares the full OpenCV, which needs libGL on Linux); these are its
+# runtime dependencies, with the headless OpenCV build.
+numpy==2.4.6
+onnxruntime==1.31.1
+opencv-python-headless==5.0.0.93
+omegaconf==2.4.0
+colorlog==6.10.1
+requests==2.34.2
+tqdm==4.70.1

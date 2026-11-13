@@ -53,7 +53,9 @@ npm run test:ui
 
 素材按内容寻址，避免相同媒体重复写入；独立图片/视频的原件与素材通过硬链接共享物理文件。Markdown 直接包含可解析的项目素材 URL。前端按原始文件、Markdown 解析文档和媒体分类展示，并支持原件与 Markdown 下载。
 
-PDF、DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；图片、视频不解码、不转录、不调用模型。旧 DOC/XLS 需转换为 DOCX/XLSX。扫描 PDF 的 OCR 和需要登录或执行脚本的网页不在当前实现范围。
+PDF 在安装了可选的本地文档环境时（`scripts/setup-documents.sh`：`.venv-documents` 和 `models/pp_doc_layoutv3.onnx`，Linux/macOS，仅 CPU）走本地版面分析：PDFium 渲染页面，PP-DocLayoutV3（ONNX，Apache-2.0）检测版块和阅读顺序，文字取 PDF 自身的文字层，按字符框归入版块；多页重复的页眉页脚去掉，表格按格线切分，图片区里印着的子图注保留。图片仍由 officeparser 抽取原件（保留转正、碎片和文字条标记）；没有单张原件能对应的图（矢量图、被切碎的图）按版块整块裁切，原来的碎片标为 fragment。版面分析与 officeparser 并行运行；环境缺失或失败时自动退回 officeparser，`DREAMATIC_PDF_LAYOUT=false` 可关闭。
+
+DOCX、XLSX 和其他已支持格式继续使用现有本地解析器；图片、视频不解码、不转录、不调用模型。旧 DOC/XLS 需转换为 DOCX/XLSX。扫描 PDF 的 OCR 和需要登录或执行脚本的网页不在当前实现范围。
 
 网页只抓取指定页面和最多 12 项相关媒体，不递归爬站。重导入需要检查远程依赖，因此仍有网络请求。按需在 Designer 中查看图片只在启用视觉能力时开放，不会在导入阶段自动发给模型。
 
