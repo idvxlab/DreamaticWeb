@@ -378,6 +378,8 @@ async function execute(
       takeProse?: (text: string) => boolean,
       /** Once, after the result is accepted: a further message (the visual review) or none. */
       afterSubmit?: () => Promise<AgentMessage | undefined>,
+      /** During the review, whether a correction is still pending (a failed one may be retried once). */
+      reviewPending?: () => boolean,
     ) {
       controller.signal.throwIfAborted();
       p.run!.activeRole = role;
@@ -420,7 +422,8 @@ async function execute(
       const stageStart = performance.now(),
         callStart = metrics.modelCalls;
       let turns = 0,
-        reviewed = false;
+        reviewed = false,
+        retried = false;
       // One light reminder when a turn ends with neither a tool call nor a result (the model
       // wrote its answer, such as a whole page, into reply text). Never repeated.
       let reminded = false;
@@ -470,10 +473,19 @@ async function execute(
                 agent.followUp(review);
                 return { action: "continue" };
               }
+            } else if (
+              reviewed &&
+              !retried &&
+              reviewPending?.() &&
+              message.content.some((c) => c.type === "toolCall")
+            ) {
+              // The correction was refused (for example a selector matching several elements).
+              retried = true;
+              return { action: "continue" };
             }
             return { action: "end" };
           }
-          if (turns >= (afterSubmit ? 7 : 6))
+          if (turns >= (afterSubmit ? 8 : 6))
             throw new Error(`${role} 未在 6 轮内提交有效结果`);
           const calledTool = message.content.some((c) => c.type === "toolCall");
           if (!calledTool && takeProse) {
@@ -1135,7 +1147,6 @@ async function execute(
           async ({ operations }) => {
             if (!reviewing || !accepted)
               throw new Error("review_patch 只在看过已提交页面的截图之后使用");
-            reviewing = false;
             const patched = patchHtml(accepted.html, operations as never);
             const report = await validatePage(p, patched.html, {
               rejectUnusableMedia: true,
@@ -1152,6 +1163,7 @@ async function execute(
               operations: accepted.operations + patched.operations,
             };
             metrics.patchOperations += patched.operations;
+            reviewing = false;
             return "Corrections applied";
           },
           true,
@@ -1171,7 +1183,7 @@ async function execute(
             text:
               `Your page was accepted. Here it is as rendered at 1440 px wide, top to bottom in ${shots.length} screenshots (shown at half size). ` +
               "Look only for these, as they appear on screen: a row of words beside a picture whose two sides end at clearly different heights; anything wider than the page; emoji; a picture that looks blurred or is shown larger than its own pixels; a picture showing a whole set placed inside one item; an empty or broken frame. " +
-              "If you find any, correct them with one review_patch call (minimal selector operations on the page you submitted; keep the story, the text and your choice of pictures). If nothing needs correcting, reply only: no changes.",
+              "Each one you see is a defect to correct, not a matter of taste. Correct them with one review_patch call (minimal selector operations on the page you submitted, each selector matching exactly one element; keep the story, the text and your choice of pictures). If none of these appears, reply only: no changes.",
           },
           ...shots.map((data) => ({
             type: "image" as const,
@@ -1189,6 +1201,7 @@ async function execute(
       () => Boolean(accepted),
       undefined,
       visualReview ? review : undefined,
+      () => reviewing,
     );
     controller.signal.throwIfAborted();
     if ((p.versions.at(-1)?.id || "") !== (existingPage?.id || ""))
