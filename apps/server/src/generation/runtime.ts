@@ -954,7 +954,7 @@ async function execute(
       tools.push({
         name: "asset_view",
         label: "asset_view",
-        description: `Look at candidate project images as large numbered tiles (${CONTACT_SHEET_LIMIT} per sheet); originals are unchanged. First decide from the facts and the media catalog text which pictures you will use and their candidates, then look at them (up to ${ASSET_VIEW_LIMIT} per call). At most one further call.`,
+        description: `Look at candidate project images as large numbered tiles (${CONTACT_SHEET_LIMIT} per sheet); originals are unchanged. Choose the key pictures and their candidates from the facts and the media catalog text first, then look at them (up to ${ASSET_VIEW_LIMIT} per call). At most one further call.`,
         parameters: Type.Object({
           assetIds: Type.Array(Type.String(), {
             minItems: 1,
