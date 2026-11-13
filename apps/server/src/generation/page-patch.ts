@@ -6,7 +6,16 @@ export function applyPagePatch(project: Project, value: unknown) {
   const current = project.versions.at(-1);
   if (!current || current.id !== input.baseVersionId)
     throw new Error("页面已更新，请使用当前 baseVersionId");
-  const $ = cheerio.load(current.html);
+  return patchHtml(current.html, input.operations);
+}
+
+/** The same selector operations applied to a page's HTML (used by the one visual review). */
+export function patchHtml(
+  html: string,
+  operations: ReturnType<typeof patchSchema.parse>["operations"],
+) {
+  const input = { operations };
+  const $ = cheerio.load(html);
   for (const op of input.operations) {
     const node = $(op.selector);
     if (node.length !== 1)

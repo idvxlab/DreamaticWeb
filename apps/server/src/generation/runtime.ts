@@ -3,7 +3,10 @@ import {
   type AgentTool,
   type AgentEvent,
   type StreamFn,
+  type AgentMessage,
 } from "@earendil-works/pi-agent-core";
+import { pageScreenshots } from "../page-render.js";
+import { patchHtml } from "./page-patch.js";
 import { Type } from "typebox";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -373,6 +376,8 @@ async function execute(
       submitted: () => boolean,
       /** A stage whose result may be plain reply text (a read-only answer) takes it here. */
       takeProse?: (text: string) => boolean,
+      /** Once, after the result is accepted: a further message (the visual review) or none. */
+      afterSubmit?: () => Promise<AgentMessage | undefined>,
     ) {
       controller.signal.throwIfAborted();
       p.run!.activeRole = role;
@@ -414,7 +419,8 @@ async function execute(
       const runtime = modelRuntime(profile(role));
       const stageStart = performance.now(),
         callStart = metrics.modelCalls;
-      let turns = 0;
+      let turns = 0,
+        reviewed = false;
       // One light reminder when a turn ends with neither a tool call nor a result (the model
       // wrote its answer, such as a whole page, into reply text). Never repeated.
       let reminded = false;
@@ -449,15 +455,26 @@ async function execute(
         },
         sessionId: `${p.id}-${role}`,
         toolExecution: "sequential",
-        finishTurn: ({ message }) => {
+        finishTurn: async ({ message }) => {
           turns++;
           if (
             message.stopReason === "error" ||
             message.stopReason === "aborted"
           )
             return;
-          if (submitted()) return { action: "end" };
-          if (turns >= 6) throw new Error(`${role} 未在 6 轮内提交有效结果`);
+          if (submitted()) {
+            if (afterSubmit && !reviewed) {
+              reviewed = true;
+              const review = await afterSubmit();
+              if (review) {
+                agent.followUp(review);
+                return { action: "continue" };
+              }
+            }
+            return { action: "end" };
+          }
+          if (turns >= (afterSubmit ? 7 : 6))
+            throw new Error(`${role} 未在 6 轮内提交有效结果`);
           const calledTool = message.content.some((c) => c.type === "toolCall");
           if (!calledTool && takeProse) {
             const text = message.content
@@ -1102,11 +1119,76 @@ async function execute(
           true,
         ),
       );
+    // One visual review of a new page: the Designer sees its page as rendered and may correct it
+    // once with selector operations. Experimental, off unless DREAMATIC_VISUAL_REVIEW=true.
+    const visualReview =
+      !editing &&
+      profile("designer").vision &&
+      process.env.DREAMATIC_VISUAL_REVIEW === "true";
+    let reviewing = false;
+    if (visualReview)
+      tools.push(
+        tool(
+          "review_patch",
+          "Only after the screenshots of your submitted page: correct what they show with minimal selector operations, then finish",
+          Type.Object({ operations: patchParams.properties.operations }),
+          async ({ operations }) => {
+            if (!reviewing || !accepted)
+              throw new Error("review_patch 只在看过已提交页面的截图之后使用");
+            reviewing = false;
+            const patched = patchHtml(accepted.html, operations as never);
+            const report = await validatePage(p, patched.html, {
+              rejectUnusableMedia: true,
+            });
+            if (!report.valid)
+              throw new Error(
+                "修改后的页面结构需要修正：" +
+                  JSON.stringify(report.issues.filter((i) => i.severity === "error")),
+              );
+            accepted = {
+              ...accepted,
+              html: report.html,
+              checks: pageChecks(p, report.html, report.issues),
+              operations: accepted.operations + patched.operations,
+            };
+            metrics.patchOperations += patched.operations;
+            return "Corrections applied";
+          },
+          true,
+        ),
+      );
+    const review = async (): Promise<AgentMessage | undefined> => {
+      if (!visualReview || !accepted) return undefined;
+      const shots = await pageScreenshots(p.id, accepted.html);
+      if (!shots.length) return undefined;
+      reviewing = true;
+      event("designer", `正在查看已提交页面的截图（${shots.length} 张）`);
+      return {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              `Your page was accepted. Here it is as rendered at 1440 px wide, top to bottom in ${shots.length} screenshots (shown at half size). ` +
+              "Look only for these, as they appear on screen: a row of words beside a picture whose two sides end at clearly different heights; anything wider than the page; emoji; a picture that looks blurred or is shown larger than its own pixels; a picture showing a whole set placed inside one item; an empty or broken frame. " +
+              "If you find any, correct them with one review_patch call (minimal selector operations on the page you submitted; keep the story, the text and your choice of pictures). If nothing needs correcting, reply only: no changes.",
+          },
+          ...shots.map((data) => ({
+            type: "image" as const,
+            data: data.toString("base64"),
+            mimeType: "image/jpeg",
+          })),
+        ],
+        timestamp: Date.now(),
+      };
+    };
     await roleRun(
       "designer",
       `# Fact application\nReport usedFactIds in the terminal tool: IDs actually represented in the resulting page, including preserved content. ${request.updateFacts ? "EXACT selection update: use every selected fact and remove content relying on deselected facts. Preserve unrelated design and components. Empty selection means remove all fact-derived content, not use all facts." : "Preserve existing fact associations when editing; report changed associations accurately."}\n# Previously applied fact IDs\n${JSON.stringify(existingPage?.appliedFactIds || [])}\n# Mode\n${editing ? "edit" : existingPage ? "redesign" : "create"}\n\n# Request\n${request.text}\n\n${intent!.markdown}\n\n${designerContext(chosen, catalog, selected ? factsMarkdown(chosen) : facts!.markdown)}\n\n# Current baseVersionId\n${existingPage?.id || "none"}\n\n# Current page\n${pageContext || "None"}`,
       tools,
       () => Boolean(accepted),
+      undefined,
+      visualReview ? review : undefined,
     );
     controller.signal.throwIfAborted();
     if ((p.versions.at(-1)?.id || "") !== (existingPage?.id || ""))
