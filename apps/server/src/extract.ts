@@ -25,6 +25,7 @@ import {
   annotate,
   imageSignals,
   mediaLayout,
+  shapeOf,
   type MediaLayout,
 } from "./media-layout.js";
 export const PARSER_VERSION = "markdown-media-v15";
@@ -380,6 +381,11 @@ export async function extract(
     );
   s.assets = [...new Map(s.assets.map((a) => [a.id, a])).values()];
   if (layout) for (const a of s.assets) annotate(a, layout.get(a.name));
+  for (const a of s.assets)
+    if (a.type === "image") {
+      const shape = shapeOf(a.width, a.height);
+      if (shape) a.shape = shape;
+    }
   // Pieces of a whole-figure crop: placed by the parser's own layout, stored but not offered.
   for (const a of s.assets)
     if (figureFragments.has(a.name)) {

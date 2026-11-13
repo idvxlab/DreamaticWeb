@@ -948,7 +948,7 @@ async function execute(
                   .map(
                     (a, n) =>
                       `${first + n} · ${a.id.slice(0, 4)} = ${a.id}` +
-                      (a.width && a.height ? ` (${a.width}×${a.height})` : "") +
+                      (a.width && a.height ? ` (${a.width}×${a.height}${a.shape ? ", " + a.shape : ""})` : "") +
                       (a.flags?.length ? ` [${a.flags.join(",")}]` : "") +
                       (samePage.has(a.id)
                         ? ` [same page as ${samePage.get(a.id)}, added by the host]`

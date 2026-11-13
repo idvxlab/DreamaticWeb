@@ -37,10 +37,13 @@ export interface Asset {
   pageCaptions?: string[];
   /** Where the picture sits on its page, in percent of the page. */
   position?: string;
+  /** The picture's proportion, which decides how it is laid out: band (≥2.2:1), landscape, square or portrait (<0.8:1). */
+  shape?: AssetShape;
   /** Deterministic import signals; flat/frame-only media are not standalone content. */
   flags?: AssetFlag[];
 }
 /** graphic: flat low-detail artwork (a logo, emblem or badge), shown at icon size only. */
+export type AssetShape = "band" | "landscape" | "square" | "portrait";
 export type AssetFlag =
   | "flat"
   | "frame-only"

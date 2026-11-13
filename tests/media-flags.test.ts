@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 import type { OfficeContentNode } from "officeparser";
-import { imageSignals, mediaLayout, offeredAsset, CAPTION } from "../apps/server/src/media-layout.js";
+import { imageSignals, mediaLayout, offeredAsset, CAPTION, shapeOf } from "../apps/server/src/media-layout.js";
 import { guardGraphics } from "../apps/server/src/picture-guard.js";
 import { persistExtraction } from "../apps/server/src/source-content.js";
 import type { Asset } from "../packages/shared/project.js";
@@ -256,4 +256,14 @@ test("graphic pictures are kept at icon size unless marked screenshot, chart, po
     assert.equal(guardGraphics(sized, [url]), sized, kind);
   }
   assert.equal(guardGraphics(page, []), page);
+});
+
+test("a picture's shape follows its proportion: band, landscape, square, portrait", () => {
+  assert.equal(shapeOf(2871, 684), "band");
+  assert.equal(shapeOf(2538, 765), "band");
+  assert.equal(shapeOf(4096, 2304), "landscape");
+  assert.equal(shapeOf(1412, 790), "landscape");
+  assert.equal(shapeOf(1000, 1000), "square");
+  assert.equal(shapeOf(676, 1200), "portrait");
+  assert.equal(shapeOf(undefined, 10), undefined);
 });

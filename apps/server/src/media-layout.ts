@@ -1,6 +1,13 @@
 import sharp from "sharp";
 import type { OfficeContentNode } from "officeparser";
-import type { Asset, AssetFlag } from "../../../packages/shared/project.js";
+import type { Asset, AssetFlag, AssetShape } from "../../../packages/shared/project.js";
+
+/** A picture's proportion class. Layout is chosen from it, never computed from text heights. */
+export function shapeOf(width?: number, height?: number): AssetShape | undefined {
+  if (!width || !height) return undefined;
+  const r = width / height;
+  return r >= 2.2 ? "band" : r >= 1.2 ? "landscape" : r >= 0.8 ? "square" : "portrait";
+}
 
 /** Flags that mean an extracted image cannot stand alone as page content. */
 export const UNUSABLE_FLAGS: readonly AssetFlag[] = ["flat", "frame-only"];
