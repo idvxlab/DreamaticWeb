@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
@@ -84,6 +85,10 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
   images[4].assets[0].flags = ["fragment"];
   images[5].assets[0].flags = ["page-background"];
   images[6].assets[0].flags = ["graphic"];
+  // A split figure: the caption sits by one picture; its uncaptioned neighbours are possibilities.
+  const neighbour = { ...images[8].assets[0], id: randomUUID(), name: "p8b.png" };
+  const flatNeighbour = { ...images[8].assets[0], id: randomUUID(), name: "p8c.png", flags: ["flat" as const] };
+  images[7].assets.push(neighbour, flatNeighbour);
   await save(p);
   const asset = (n: number) => images[n].assets[0];
   const offered = [0, 1, 2, ...Array.from({ length: 27 }, (_, n) => n + 5).filter((n) => n < 30)].map(asset);
@@ -98,7 +103,16 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
     if (prompt.includes("# Analyst"))
       return tool(model, "submit_facts", {
         summary: "s",
-        facts: [{ id: "f", text: "产品", sourceId: images[3].id, assetIds: [asset(3).id] }],
+        facts: [
+          { id: "f", text: "产品", sourceId: images[3].id, assetIds: [asset(3).id] },
+          {
+            id: "fig",
+            text: "图 8 五个示例",
+            sourceId: images[7].id,
+            assetIds: [asset(7).id],
+            possibleAssetIds: [asset(7).id, neighbour.id, flatNeighbour.id],
+          },
+        ],
         limitations: [],
       });
     const last = context.messages.at(-1)!;
@@ -140,6 +154,9 @@ test("asset_view: candidates chosen from the catalog, up to 24 in one call as sh
     assert.match(third.text, /Both image views are used/);
     assert.ok(designerInput.includes(asset(5).id), "the Designer sees the offered catalog");
     assert.ok(!designerInput.includes(asset(3).id), "a flat tile is stripped from facts and the catalog");
+    assert.match(designerInput, /possibleAssetIds/, "possible pictures reach the Designer with their fact");
+    assert.ok(designerInput.includes(neighbour.id));
+    assert.ok(!designerInput.includes(flatNeighbour.id), "a flat tile is not a possibility either");
     const html = p.versions.at(-1)!.html;
     assert.doesNotMatch(html, /data-host="(graphics|pictures)"/, "the page is kept as the Designer wrote it");
   } finally {

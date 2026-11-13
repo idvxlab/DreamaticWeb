@@ -95,6 +95,7 @@ const factsParams = Type.Object({
       text: Type.String(),
       sourceId: Type.String(),
       assetIds: Type.Optional(strings),
+      possibleAssetIds: Type.Optional(strings),
     }),
   ),
   limitations: strings,
@@ -738,7 +739,7 @@ async function execute(
           ),
           tool(
             "submit_facts",
-            "Submit facts and optional media associations; no independent tracing pass. facts and limitations are JSON arrays in the arguments (facts: objects with id, text, sourceId, assetIds), never one string holding them.",
+            "Submit facts and optional media associations; no independent tracing pass. facts and limitations are JSON arrays in the arguments (facts: objects with id, text, sourceId, assetIds, optional possibleAssetIds), never one string holding them.",
             factsParams,
             async (args) => {
               if (value) throw new Error("事实已经提交");
@@ -752,15 +753,22 @@ async function execute(
                 if (fact.sourceId !== "user" && !source)
                   throw new Error("事实使用了未知资料 ID");
                 if (
-                  fact.assetIds.some(
+                  [...fact.assetIds, ...(fact.possibleAssetIds || [])].some(
                     (id) => !source?.assets.some((a) => a.id === id),
                   )
                 )
                   throw new Error("事实素材不属于其资料");
                 // Media that is not offered as content is dropped without another round.
-                fact.assetIds = fact.assetIds.filter((id) =>
-                  source?.assets.some((a) => a.id === id && offeredAsset(a)),
-                );
+                const offered = (id: string) =>
+                  Boolean(source?.assets.some((a) => a.id === id && offeredAsset(a)));
+                fact.assetIds = fact.assetIds.filter(offered);
+                if (fact.possibleAssetIds) {
+                  const possible = [...new Set(fact.possibleAssetIds)].filter(
+                    (id) => offered(id) && !fact.assetIds.includes(id),
+                  );
+                  if (possible.length) fact.possibleAssetIds = possible;
+                  else delete fact.possibleAssetIds;
+                }
               }
               value = data;
               return "Facts accepted";
@@ -939,7 +947,7 @@ async function execute(
       tools.push({
         name: "asset_view",
         label: "asset_view",
-        description: `Look at candidate project images as large numbered tiles (${CONTACT_SHEET_LIMIT} per sheet); originals are unchanged. Choose the candidates from the facts and the media catalog text first, then name them all in one call (up to ${ASSET_VIEW_LIMIT}). At most one further call.`,
+        description: `Look at candidate project images as large numbered tiles (${CONTACT_SHEET_LIMIT} per sheet); originals are unchanged. First decide from the facts and the media catalog text which pictures you will use and their candidates, then look at them (up to ${ASSET_VIEW_LIMIT} per call). At most one further call.`,
         parameters: Type.Object({
           assetIds: Type.Array(Type.String(), {
             minItems: 1,

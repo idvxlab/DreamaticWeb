@@ -20,6 +20,8 @@ export const analysisSchema = z.object({
         text: z.string().min(1).max(8000),
         sourceId: z.string().max(80).default("user"),
         assetIds: z.array(z.string().uuid()).max(20).default([]),
+        /** Pictures that may belong to this fact (e.g. uncaptioned parts of a split figure); the Designer looks before using them. */
+        possibleAssetIds: z.array(z.string().uuid()).max(20).optional(),
       }),
     )
     .max(500),
