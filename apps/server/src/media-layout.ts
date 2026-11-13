@@ -20,6 +20,7 @@ type Box = { x: number; y: number; width: number; height: number };
 export type MediaLayout = {
   page?: number;
   context?: string;
+  pageCaptions?: string[];
   fragment?: boolean;
   pageBackground?: boolean;
 };
@@ -85,6 +86,8 @@ async function flatGraphic(buffer: Buffer) {
 }
 
 const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+/** A figure or table caption line: "Fig. 8.", "Figure 3:", "Table 1", "图 2", "表3". */
+export const CAPTION = /^(?:fig(?:ure)?\.?|table|图|表)\s*\d+/i;
 // Undecodable PDF fonts surface as Hangul/symbol/private-use runs; omit them instead of quoting noise.
 // Hangul interleaved with Han characters is a mis-decoded font, not Korean prose.
 const garbled = (text: string) =>
@@ -122,14 +125,26 @@ export function mediaLayout(nodes: OfficeContentNode[]) {
           }
         };
         collect(node.children || []);
+        // Every caption printed on the page goes to every picture on it: a caption sits beside
+        // only one part of a figure, and which pictures it covers is left to the model.
+        const pageCaptions = [
+          ...new Set(
+            texts
+              .filter((t) => CAPTION.test(t.text) && !garbled(t.text))
+              .map((t) => t.text.slice(0, 160)),
+          ),
+        ];
         for (const image of images) {
           const entry: MediaLayout = { page };
+          if (pageCaptions.length) entry.pageCaptions = pageCaptions;
           const b = image.box;
           if (b) {
             const overlapX = (t: Box) =>
               Math.min(b.x + b.width, t.x + t.width) - Math.max(b.x, t.x);
             const scored = texts
-              .filter((t) => t.text.length > 1 && !garbled(t.text))
+              .filter(
+                (t) => t.text.length > 1 && !garbled(t.text) && !CAPTION.test(t.text),
+              )
               .map((t) => {
                 const above = b.y - (t.box.y + t.box.height);
                 const below = t.box.y - (b.y + b.height);
@@ -215,6 +230,7 @@ export function annotate(asset: Asset, layout?: MediaLayout) {
   if (!layout) return;
   if (layout.page) asset.page = layout.page;
   if (layout.context) asset.context = layout.context;
+  if (layout.pageCaptions) asset.pageCaptions = layout.pageCaptions;
   const flags = new Set(asset.flags || []);
   if (layout.fragment) flags.add("fragment");
   if (layout.pageBackground) flags.add("page-background");

@@ -76,11 +76,16 @@ export async function persistExtraction(
             (a.width && a.height ? ` · ${a.width}×${a.height}` : "") +
             (a.page ? ` · page:${a.page}` : "") +
             (a.context ? ` · nearby:${JSON.stringify(a.context)}` : "") +
+            (a.pageCaptions?.length
+              ? ` · pageCaptions:${JSON.stringify(a.pageCaptions)}`
+              : "") +
             (a.flags?.length ? ` · flags:${a.flags.join(",")}` : ""),
         )
         .join("\n") +
-      (source.assets.some((a) => a.flags?.length || a.context)
-        ? "\n\nnearby = text next to the image on the page, not its visual content. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page (the brochure's own backdrop scene).\n"
+      (source.assets.some(
+        (a) => a.flags?.length || a.context || a.pageCaptions?.length,
+      )
+        ? "\n\nnearby = text next to the image on the page, not its visual content. pageCaptions = every figure/table caption printed on the image's page; it does not say which image a caption covers, and one caption may cover several images on that page. flags: flat = single-colour tile, frame-only = empty border; neither is standalone content. fragment = slice of a larger composite. page-background = covers most of a page (the brochure's own backdrop scene).\n"
         : "\n");
   }
   reading.markdown += mediaAssociations;

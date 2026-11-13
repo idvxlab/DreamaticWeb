@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 import type { OfficeContentNode } from "officeparser";
-import { imageSignals, mediaLayout, offeredAsset } from "../apps/server/src/media-layout.js";
+import { imageSignals, mediaLayout, offeredAsset, CAPTION } from "../apps/server/src/media-layout.js";
 import { guardGraphics } from "../apps/server/src/picture-guard.js";
 import { persistExtraction } from "../apps/server/src/source-content.js";
 import type { Asset } from "../packages/shared/project.js";
@@ -126,6 +126,33 @@ test("layers of one icon (a glyph on a disc) are fragments; a photograph carryin
   assert.equal(layout.get("logo.png")!.fragment, false, "sits on a photograph, not on an icon");
 });
 
+test("every caption on a page goes to every picture on it, and a caption is not nearby text", () => {
+  const layout = mediaLayout([
+    {
+      type: "page",
+      metadata: { pageNumber: 10, pageWidth: 600, pageHeight: 800 },
+      children: [
+        { type: "image", metadata: { attachmentName: "a.png" }, bounds: { x: 50, y: 100, width: 240, height: 140 } },
+        { type: "image", metadata: { attachmentName: "b.png" }, bounds: { x: 310, y: 100, width: 240, height: 140 } },
+        { type: "image", metadata: { attachmentName: "c.png" }, bounds: { x: 180, y: 260, width: 240, height: 140 } },
+        { type: "text", text: "Fig. 8. Five example videos with embedded visualizations.", bounds: { x: 180, y: 410, width: 240, height: 12 } },
+        { type: "text", text: "Body text of the paper.", bounds: { x: 50, y: 600, width: 500, height: 12 } },
+      ],
+    },
+    {
+      type: "page",
+      metadata: { pageNumber: 11, pageWidth: 600, pageHeight: 800 },
+      children: [{ type: "image", metadata: { attachmentName: "d.png" }, bounds: { x: 50, y: 100, width: 240, height: 140 } }],
+    },
+  ] as unknown as OfficeContentNode[]);
+  for (const name of ["a.png", "b.png", "c.png"])
+    assert.deepEqual(layout.get(name)!.pageCaptions, ["Fig. 8. Five example videos with embedded visualizations."], name);
+  assert.equal(layout.get("c.png")!.context, undefined, "the caption beside one part is not that part's nearby text");
+  assert.equal(layout.get("d.png")!.pageCaptions, undefined);
+  assert.ok(CAPTION.test("图 3 系统架构") && CAPTION.test("Table 1: results") && CAPTION.test("Figure 12"));
+  assert.ok(!CAPTION.test("Figures show that") && !CAPTION.test("Fig. shows"));
+});
+
 test("canonical Markdown lists page, nearby text and flags without claiming visual content", async () => {
   const source = {
     id: "s",
@@ -146,6 +173,7 @@ test("canonical Markdown lists page, nearby text and flags without claiming visu
         height: 8,
         page: 4,
         context: "性能曲线",
+        pageCaptions: ["图 4 性能曲线"],
       },
       {
         id: "a2",
@@ -160,7 +188,8 @@ test("canonical Markdown lists page, nearby text and flags without claiming visu
   } as never;
   await persistExtraction(source);
   const markdown = (source as { markdown: string }).markdown;
-  assert.match(markdown, /id:a1 · 10×8 · page:4 · nearby:"性能曲线"/);
+  assert.match(markdown, /id:a1 · 10×8 · page:4 · nearby:"性能曲线" · pageCaptions:\["图 4 性能曲线"\]/);
+  assert.match(markdown, /does not say which image a caption covers/);
   assert.match(markdown, /id:a2 · page:1 · flags:flat/);
   assert.match(markdown, /not its visual content/);
 });

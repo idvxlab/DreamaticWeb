@@ -33,6 +33,8 @@ export interface Asset {
   page?: number;
   /** Nearby document text by layout proximity; not a description of image content. */
   context?: string;
+  /** Captions printed on the picture's page; which picture each covers is not known. */
+  pageCaptions?: string[];
   /** Deterministic import signals; flat/frame-only media are not standalone content. */
   flags?: AssetFlag[];
 }
