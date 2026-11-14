@@ -68,3 +68,103 @@ export function patchHtml(
     operations: input.operations.length,
   };
 }
+
+/** What the one visual review may do: rearrange and resize, never take anything away. */
+export type ReviewOperation = {
+  action: "set_style" | "set_class" | "add_css" | "move" | "set_marker";
+  selector?: string;
+  name?: string;
+  value?: string;
+  target?: string;
+  position?: "before" | "after" | "prepend" | "append";
+};
+
+const HIDING =
+  /display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0*)?\s*(?:;|$|!)|(?:^|[\s;{])(?:max-)?(?:height|width)\s*:\s*0(?:px)?\s*(?:;|$|!)|clip-path|content-visibility/i;
+
+/** The visible words and pictures of a page, to check that a review kept all of them. */
+function pageContent($: cheerio.CheerioAPI) {
+  const body = $("body").clone();
+  body.find("style,script,noscript,template").remove();
+  const text = body.text().replace(/\s+/g, "");
+  const media = $("img[src],video[src],source[src]")
+    .map((_i, e) => $(e).attr("src"))
+    .get()
+    .sort();
+  return { text, media };
+}
+
+/**
+ * The review's corrections applied to a page. Only arrangement changes exist (inline style,
+ * class, added CSS rules, moving an element); a marker of at most three characters (such as an
+ * emoji standing for an icon) may be rewritten. The page must keep every word and picture.
+ */
+export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
+  const $ = cheerio.load(html);
+  const before = pageContent($);
+  let markerChars = 0;
+  const one = (selector: string | undefined) => {
+    if (!selector) throw new Error("缺少 selector");
+    const node = $(selector);
+    if (node.length !== 1)
+      throw new Error("选择器必须精确匹配一个元素：" + selector);
+    const tag = node.prop("tagName")?.toLowerCase() || "";
+    if (["html", "head", "style", "script"].includes(tag))
+      throw new Error("审查不改这个元素：" + selector);
+    return node;
+  };
+  for (const op of operations) {
+    const value = op.value || "";
+    if (op.action === "set_style") {
+      const node = one(op.selector);
+      if (!op.name || !/^(?:--[a-z][a-z0-9-]*|[a-z][a-z-]*)$/.test(op.name))
+        throw new Error("CSS 属性无效");
+      if (HIDING.test(`${op.name}:${value}`))
+        throw new Error("审查不能隐藏内容：" + op.name);
+      node.css(op.name, value);
+    } else if (op.action === "set_class") {
+      one(op.selector).attr("class", value);
+    } else if (op.action === "add_css") {
+      if (!value.trim()) throw new Error("add_css 需要 CSS 规则");
+      if (/<\/?style|<script/i.test(value)) throw new Error("add_css 只写 CSS 规则");
+      if (HIDING.test(value)) throw new Error("审查不能隐藏内容");
+      let style = $("style[data-review]");
+      if (!style.length) {
+        $("head").append("<style data-review></style>");
+        style = $("style[data-review]");
+      }
+      style.text(style.text() + "\n" + value);
+    } else if (op.action === "move") {
+      const node = one(op.selector);
+      const target = one(op.target);
+      if (node.find(target as never).length || node.is(target as never))
+        throw new Error("不能把元素移进它自己");
+      const position = op.position || "after";
+      const moved = node.remove();
+      if (position === "before") target.before(moved);
+      else if (position === "prepend") target.prepend(moved);
+      else if (position === "append") target.append(moved);
+      else target.after(moved);
+    } else if (op.action === "set_marker") {
+      const node = one(op.selector);
+      const old = node.text().trim();
+      if (node.children().length || [...old].length > 3 || [...value].length > 3)
+        throw new Error("set_marker 只改三个字符以内的标记（如表情图标）");
+      markerChars += [...old].length + [...value].length;
+      node.text(value);
+    } else throw new Error("审查不支持这个操作：" + op.action);
+  }
+  const after = pageContent($);
+  if (after.media.join("\n") !== before.media.join("\n"))
+    throw new Error("审查不能增删或替换图片，只能调整它们的排列和大小");
+  const sorted = (s: string) => [...s].sort().join("");
+  if (
+    Math.abs(after.text.length - before.text.length) > markerChars ||
+    (!markerChars && sorted(after.text) !== sorted(before.text))
+  )
+    throw new Error("审查不能增删文字，只能调整排列");
+  return {
+    html: "<!doctype html>\n" + $("html").toString(),
+    operations: operations.length,
+  };
+}

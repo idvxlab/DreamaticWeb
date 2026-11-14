@@ -11,7 +11,17 @@ Establish a compact token set for surface, ink, muted text, accent, spacing, typ
 
 Compose sections differently when their content differs: strong opening with an asymmetric or editorial arrangement; dense specifications in aligned rows; large media for visual evidence; grouped prose for explanation. Avoid automatic centered heroes, three equal cards, decorative gradients and repeated rounded panels. Build contrast through scale, alignment, spacing and content density before adding shadows.
 
-Choose image aspect ratio, placement and crop from subject and meaning. Do not crop a chart, product specification or meaningful label as decoration. Supply useful alternatives and retain native video controls. Keep absent assets honest instead of substituting unrelated imagery.
+Place pictures as an editorial designer does: for each picture and the words it illustrates, choose an arrangement that stays tidy however long the words turn out on screen, since rendered text height cannot be known exactly in advance.
+
+- Stacked: the picture spans the content width, or a centred narrower width, above or below its words. Natural for very wide pictures, dense charts whose labels need size, and figures of several panels.
+- Wrapped: the picture floats to one side at roughly 40–55% width with a margin, and the words run beside it and continue beneath it (the block contains the float, e.g. `display: flow-root`). Suits a moderately wide or squarish picture beside a paragraph or two; it never leaves an empty gap.
+- Beside: a two-column row when words and picture are of similar height. Size the picture column to the picture (a squarer or taller one takes the narrower column, a wider one the wider) and align both to the top. When one side would clearly run longer, wrap or stack instead, or keep only the paragraph the picture illustrates in the row.
+- Sticky: in a long section explained by one picture, the picture stays in view in a side column (`position: sticky; top: …`) while the words scroll beside it.
+- Set: pictures of one figure, or of parallel items, share one grid and one frame proportion.
+
+A picture's shape (band, landscape, square, portrait in the media catalog) is a starting point, not a rule: a moderately wide picture can sit beside words, and a very wide one usually reads better stacked. Vary arrangements across the page for rhythm, keep one content width, give each picture a short caption, and on narrow screens let wrapped, beside and sticky arrangements become stacked.
+
+Choose image aspect ratio and crop from subject and meaning. Do not crop a chart, product specification or meaningful label as decoration. Supply useful alternatives and retain native video controls. Keep absent assets honest instead of substituting unrelated imagery.
 
 Make mobile a deliberate reflow: readable gutters, useful stacking order, scroll containers for wide data and comfortable controls. Preserve focus visibility and readable contrast. In local edits, reuse the current type, spacing, color and component system and change only requested rules. Deliver implemented HTML/CSS, not a design rationale in place of a page.
 

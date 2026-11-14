@@ -6,7 +6,7 @@ import {
   type AgentMessage,
 } from "@earendil-works/pi-agent-core";
 import { pageScreenshots } from "../page-render.js";
-import { patchHtml } from "./page-patch.js";
+import { reviewPatchHtml, type ReviewOperation } from "./page-patch.js";
 import { Type } from "typebox";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -1131,23 +1131,55 @@ async function execute(
           true,
         ),
       );
-    // One visual review of a new page: the Designer sees its page as rendered and may correct it
-    // once with selector operations. Experimental, off unless DREAMATIC_VISUAL_REVIEW=true.
+    // One visual review of a new page: the Designer sees its page as rendered and may rearrange
+    // it once (styles, classes, added CSS, moving elements; never removing words or pictures).
+    // On for new pages with vision when DREAMATIC_VISUAL_REVIEW=true. It is skipped when the page took longer than the review budget to write.
     const visualReview =
       !editing &&
       profile("designer").vision &&
       process.env.DREAMATIC_VISUAL_REVIEW === "true";
+    const reviewBudgetMs =
+      Number(process.env.DREAMATIC_REVIEW_BUDGET_MS) || 300_000;
+    const designerStart = performance.now();
     let reviewing = false;
     if (visualReview)
       tools.push(
         tool(
           "review_patch",
-          "Only after the screenshots of your submitted page: correct what they show with minimal selector operations, then finish",
-          Type.Object({ operations: patchParams.properties.operations }),
+          "Only after the screenshots of your submitted page: rearrange what they show needs it, then finish. Operations: set_style(selector, name, value) inline CSS; set_class(selector, value) replace the class list; add_css(value) append CSS rules to the page; move(selector, target, position before|after|prepend|append) move an element; set_marker(selector, value) rewrite a marker of at most three characters. Each selector matches exactly one element. Every word and picture stays.",
+          Type.Object({
+            operations: Type.Array(
+              Type.Object({
+                action: Type.Union([
+                  Type.Literal("set_style"),
+                  Type.Literal("set_class"),
+                  Type.Literal("add_css"),
+                  Type.Literal("move"),
+                  Type.Literal("set_marker"),
+                ]),
+                selector: Type.Optional(Type.String({ maxLength: 300 })),
+                name: Type.Optional(Type.String({ maxLength: 100 })),
+                value: Type.Optional(Type.String({ maxLength: 20000 })),
+                target: Type.Optional(Type.String({ maxLength: 300 })),
+                position: Type.Optional(
+                  Type.Union([
+                    Type.Literal("before"),
+                    Type.Literal("after"),
+                    Type.Literal("prepend"),
+                    Type.Literal("append"),
+                  ]),
+                ),
+              }),
+              { minItems: 1, maxItems: 30 },
+            ),
+          }),
           async ({ operations }) => {
             if (!reviewing || !accepted)
               throw new Error("review_patch 只在看过已提交页面的截图之后使用");
-            const patched = patchHtml(accepted.html, operations as never);
+            const patched = reviewPatchHtml(
+              accepted.html,
+              operations as ReviewOperation[],
+            );
             const report = await validatePage(p, patched.html, {
               rejectUnusableMedia: true,
             });
@@ -1171,6 +1203,10 @@ async function execute(
       );
     const review = async (): Promise<AgentMessage | undefined> => {
       if (!visualReview || !accepted) return undefined;
+      if (performance.now() - designerStart > reviewBudgetMs) {
+        event("designer", "页面用时已超过审查预算，跳过截图审查");
+        return undefined;
+      }
       const shots = await pageScreenshots(p.id, accepted.html);
       if (!shots.length) return undefined;
       reviewing = true;
@@ -1182,8 +1218,8 @@ async function execute(
             type: "text",
             text:
               `Your page was accepted. Here it is as rendered at 1440 px wide, top to bottom in ${shots.length} screenshots (shown at half size). ` +
-              "Look only for these, as they appear on screen: a row of words beside a picture whose two sides end at clearly different heights; anything wider than the page; emoji; a picture that looks blurred or is shown larger than its own pixels; a picture showing a whole set placed inside one item; an empty or broken frame. " +
-              "Each one you see is a defect to correct, not a matter of taste. Correct them with one review_patch call (minimal selector operations on the page you submitted, each selector matching exactly one element; keep the story, the text and your choice of pictures). If none of these appears, reply only: no changes.",
+              "Look at it as its designer would, for what reads as untidy on screen: beside a picture, one side running clearly longer and leaving an empty area; a picture too small to read or larger than its own pixels; anything wider than the page; emoji; an empty or broken frame; a picture showing a whole set placed inside one item. " +
+              "Correct only those rows or blocks, by their arrangement, with one review_patch call: let the words wrap around the picture (float it with a margin, with the words continuing below it), change the column proportions, keep the picture in view beside long words (position: sticky), move paragraphs below the row, or stack a very wide picture above or below its words. Keep the rest of the design, the story, every word and every picture; do not turn the whole page into one column. If nothing reads as untidy, reply only: no changes.",
           },
           ...shots.map((data) => ({
             type: "image" as const,
