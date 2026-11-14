@@ -13,7 +13,7 @@ Compose sections differently when their content differs: strong opening with an 
 
 Place pictures as an editorial designer does: for each picture and the words it illustrates, choose an arrangement that stays tidy however long the words turn out on screen, since rendered text height cannot be known exactly in advance.
 
-- Stacked: the picture spans the content width, or a centred narrower width, above or below its words. Natural for very wide pictures, dense charts whose labels need size, and figures of several panels.
+- Stacked: the picture sits above or below its words at a width that suits its detail: the full content width for a wide, detailed figure; about the reading width, centred, for a simpler diagram or photo; never larger than its own pixels. Natural for very wide pictures, dense charts whose labels need size, and figures of several panels.
 - Wrapped: the picture floats to one side at roughly 40–55% width with a margin, and the words run beside it and continue beneath it (the block contains the float, e.g. `display: flow-root`). Suits a moderately wide or squarish picture beside a paragraph or two; it never leaves an empty gap.
 - Beside: a two-column row when words and picture are of similar height. Size the picture column to the picture (a squarer or taller one takes the narrower column, a wider one the wider) and align both to the top. When one side would clearly run longer, wrap or stack instead, or keep only the paragraph the picture illustrates in the row.
 - Sticky: in a long section explained by one picture, the picture stays in view in a side column (`position: sticky; top: …`) while the words scroll beside it.

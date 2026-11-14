@@ -29,3 +29,10 @@ test("the review never takes words or pictures away, nor hides them", () => {
   assert.throws(() => reviewPatchHtml(page, [{ action: "set_marker", selector: "#p1", value: "x" }]));
   assert.throws(() => reviewPatchHtml(page, [{ action: "move", selector: "#a", target: "#p1" }]));
 });
+
+test("a set's emoji markers are rewritten together, one value each", () => {
+  const set = `<html><head></head><body><main><div class="c"><i class="m">📊</i><b>A</b></div><div class="c"><i class="m">✍</i><b>B</b></div></main></body></html>`;
+  const out = reviewPatchHtml(set, [{ action: "set_marker", selector: ".m", value: "01|02" }]).html;
+  assert.match(out, /<i class="m">01<\/i>[\s\S]*<i class="m">02<\/i>/);
+  assert.throws(() => reviewPatchHtml(set, [{ action: "set_marker", selector: ".m", value: "01|02|03" }]));
+});

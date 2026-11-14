@@ -1146,7 +1146,7 @@ async function execute(
       tools.push(
         tool(
           "review_patch",
-          "Only after the screenshots of your submitted page: rearrange what they show needs it, then finish. Operations: set_style(selector, name, value) inline CSS; set_class(selector, value) replace the class list; add_css(value) append CSS rules to the page; move(selector, target, position before|after|prepend|append) move an element; set_marker(selector, value) rewrite a marker of at most three characters. Each selector matches exactly one element. Every word and picture stays.",
+          "Only after the screenshots of your submitted page: rearrange what they show needs it, then finish. Operations: set_style(selector, name, value) inline CSS; set_class(selector, value) replace the class list; add_css(value) append CSS rules to the page; move(selector, target, position before|after|prepend|append) move an element; set_marker(selector, value) rewrite markers of at most three characters, such as emoji used as icons (the selector may match all markers of a set; '01|02|03' gives each its own). Other selectors match exactly one element. Nothing may be hidden. Every word and picture stays.",
           Type.Object({
             operations: Type.Array(
               Type.Object({
@@ -1219,7 +1219,7 @@ async function execute(
             text:
               `Your page was accepted. Here it is as rendered at 1440 px wide, top to bottom in ${shots.length} screenshots (shown at half size). ` +
               "Look at it as its designer would, for what reads as untidy on screen: beside a picture, one side running clearly longer and leaving an empty area; a picture too small to read or larger than its own pixels; anything wider than the page; emoji; an empty or broken frame; a picture showing a whole set placed inside one item. " +
-              "Correct only those rows or blocks, by their arrangement, with one review_patch call: let the words wrap around the picture (float it with a margin, with the words continuing below it), change the column proportions, keep the picture in view beside long words (position: sticky), move paragraphs below the row, or stack a very wide picture above or below its words. Keep the rest of the design, the story, every word and every picture; do not turn the whole page into one column. If nothing reads as untidy, reply only: no changes.",
+              "Correct only those rows or blocks, by their arrangement, with one review_patch call. For a moderately wide or squarish picture prefer to keep it beside its words: let the words wrap around it (float it with a margin, the words continuing below it), change the column proportions, keep it in view beside long words (position: sticky), or move later paragraphs below the row. Stack a picture above or below its words when it is very wide or dense, at a width that suits its detail and never larger than its own pixels (often about the reading width, centred). Replace emoji with set_marker (a number, an initial or a short word). Keep the rest of the design, the story, every word and every picture; do not turn the whole page into one column. If nothing reads as untidy, reply only: no changes.",
           },
           ...shots.map((data) => ({
             type: "image" as const,

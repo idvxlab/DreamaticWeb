@@ -146,12 +146,23 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       else if (position === "append") target.append(moved);
       else target.after(moved);
     } else if (op.action === "set_marker") {
-      const node = one(op.selector);
-      const old = node.text().trim();
-      if (node.children().length || [...old].length > 3 || [...value].length > 3)
-        throw new Error("set_marker 只改三个字符以内的标记（如表情图标）");
-      markerChars += [...old].length + [...value].length;
-      node.text(value);
+      // A marker selector may match each of a set's markers; all get the same value unless the
+      // value lists one per marker separated by "|" (such as "01|02|03").
+      if (!op.selector) throw new Error("缺少 selector");
+      const nodes = $(op.selector);
+      if (!nodes.length) throw new Error("选择器没有匹配元素：" + op.selector);
+      const values = value.includes("|") ? value.split("|") : [];
+      if (values.length && values.length !== nodes.length)
+        throw new Error(`set_marker 的值个数（${values.length}）与匹配元素个数（${nodes.length}）不同`);
+      nodes.each((i, e) => {
+        const node = $(e);
+        const old = node.text().trim();
+        const v = values.length ? values[i] : value;
+        if (node.children().length || [...old].length > 3 || [...v].length > 3)
+          throw new Error("set_marker 只改三个字符以内的标记（如表情图标）");
+        markerChars += [...old].length + [...v].length;
+        node.text(v);
+      });
     } else throw new Error("审查不支持这个操作：" + op.action);
   }
   const after = pageContent($);
