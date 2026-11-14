@@ -45,7 +45,7 @@ test("arrange rebuilds one row as a Skill arrangement and keeps its words and pi
   assert.match(wrapped, /<div class="row" id="r" data-arrange="review-1"><figure id="f" data-arrange-picture="">/);
   assert.match(wrapped, /\[data-arrange="review-1"\] > \[data-arrange-picture\] \{ float: left !important; width: 45%/);
   const stacked = reviewPatchHtml(row, [
-    { action: "arrange", selector: "#r", picture: "#f img", as: "stacked", width: "720px", side: "below" },
+    { action: "arrange", selector: "#r", picture: "figure img", as: "stacked", width: "720px", side: "below" },
   ]).html;
   assert.match(stacked, /<\/div><figure id="f" data-arrange-picture="">/);
   assert.match(stacked, /width: 720px !important; max-width: 100% !important; margin: 1.5rem auto 0/);

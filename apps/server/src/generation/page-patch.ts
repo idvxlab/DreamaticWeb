@@ -129,7 +129,12 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       const row = one(op.selector);
       if (["body", "main"].includes(row.prop("tagName")?.toLowerCase() || ""))
         throw new Error("arrange 的 selector 是包含图片和文字的那一行，不是整页");
-      const pic = one(op.picture);
+      // The picture selector is read inside the row first (such as "figure img"), then page-wide.
+      if (!op.picture) throw new Error("arrange 需要 picture");
+      const inside = row.find(op.picture);
+      if (inside.length > 1)
+        throw new Error("picture 在这一行里匹配到多个元素：" + op.picture);
+      const pic = inside.length ? inside : one(op.picture);
       const col = row.children().filter((_i, c) => c === pic[0] || $(c).find(pic as never).length > 0);
       if (col.length !== 1) throw new Error("picture 必须在 selector 指定的那一行里面");
       const as = op.as || "";
