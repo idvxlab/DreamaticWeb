@@ -36,3 +36,23 @@ test("a set's emoji markers are rewritten together, one value each", () => {
   assert.match(out, /<i class="m">01<\/i>[\s\S]*<i class="m">02<\/i>/);
   assert.throws(() => reviewPatchHtml(set, [{ action: "set_marker", selector: ".m", value: "01|02|03" }]));
 });
+
+test("arrange rebuilds one row as a Skill arrangement and keeps its words and picture", () => {
+  const row = `<html><head></head><body><main><div class="row" id="r"><div class="txt"><p>Words beside.</p><p>More words.</p></div><figure id="f"><img src="/assets/x/1.png"><figcaption>Cap</figcaption></figure></div></main></body></html>`;
+  const wrapped = reviewPatchHtml(row, [
+    { action: "arrange", selector: "#r", picture: "#f", as: "wrapped", width: "45%", side: "left" },
+  ]).html;
+  assert.match(wrapped, /<div class="row" id="r" data-arrange="review-1"><figure id="f" data-arrange-picture="">/);
+  assert.match(wrapped, /\[data-arrange="review-1"\] > \[data-arrange-picture\] \{ float: left !important; width: 45%/);
+  const stacked = reviewPatchHtml(row, [
+    { action: "arrange", selector: "#r", picture: "#f img", as: "stacked", width: "720px", side: "below" },
+  ]).html;
+  assert.match(stacked, /<\/div><figure id="f" data-arrange-picture="">/);
+  assert.match(stacked, /width: 720px !important; max-width: 100% !important; margin: 1.5rem auto 0/);
+  assert.throws(() =>
+    reviewPatchHtml(row, [{ action: "arrange", selector: "#r", picture: "#f", as: "wrapped", width: "big" }]),
+  );
+  assert.throws(() =>
+    reviewPatchHtml(row, [{ action: "arrange", selector: "main", picture: "#f", as: "stacked", width: "50%" }]),
+  );
+});

@@ -1146,11 +1146,12 @@ async function execute(
       tools.push(
         tool(
           "review_patch",
-          "Only after the screenshots of your submitted page: rearrange what they show needs it, then finish. Operations: set_style(selector, name, value) inline CSS; set_class(selector, value) replace the class list; add_css(value) append CSS rules to the page; move(selector, target, position before|after|prepend|append) move an element; set_marker(selector, value) rewrite markers of at most three characters, such as emoji used as icons (the selector may match all markers of a set; '01|02|03' gives each its own). Other selectors match exactly one element. Nothing may be hidden. Every word and picture stays.",
+          "Only after the screenshots of your submitted page: rearrange what they show needs it, then finish. Operations: arrange(selector of the row holding a picture and its words, picture selector inside it, as stacked|wrapped|beside|sticky, width of the picture such as 720px or 42%, side left|right, or above|below for stacked) rebuilds that row as one of the visual design Skill's arrangements, desktop and mobile; set_style(selector, name, value) inline CSS; set_class(selector, value) replace the class list; add_css(value) append CSS rules to the page; move(selector, target, position before|after|prepend|append) move an element; set_marker(selector, value) rewrite markers of at most three characters, such as emoji used as icons (the selector may match all markers of a set; '01|02|03' gives each its own). Other selectors match exactly one element. Nothing may be hidden. Every word and picture stays.",
           Type.Object({
             operations: Type.Array(
               Type.Object({
                 action: Type.Union([
+                  Type.Literal("arrange"),
                   Type.Literal("set_style"),
                   Type.Literal("set_class"),
                   Type.Literal("add_css"),
@@ -1161,6 +1162,24 @@ async function execute(
                 name: Type.Optional(Type.String({ maxLength: 100 })),
                 value: Type.Optional(Type.String({ maxLength: 20000 })),
                 target: Type.Optional(Type.String({ maxLength: 300 })),
+                picture: Type.Optional(Type.String({ maxLength: 300 })),
+                as: Type.Optional(
+                  Type.Union([
+                    Type.Literal("stacked"),
+                    Type.Literal("wrapped"),
+                    Type.Literal("beside"),
+                    Type.Literal("sticky"),
+                  ]),
+                ),
+                width: Type.Optional(Type.String({ maxLength: 20 })),
+                side: Type.Optional(
+                  Type.Union([
+                    Type.Literal("left"),
+                    Type.Literal("right"),
+                    Type.Literal("above"),
+                    Type.Literal("below"),
+                  ]),
+                ),
                 position: Type.Optional(
                   Type.Union([
                     Type.Literal("before"),
@@ -1219,7 +1238,7 @@ async function execute(
             text:
               `Your page was accepted. Here it is as rendered at 1440 px wide, top to bottom in ${shots.length} screenshots (shown at half size). ` +
               "Look at it as its designer would, for what reads as untidy on screen: beside a picture, one side running clearly longer and leaving an empty area; a picture too small to read or larger than its own pixels; anything wider than the page; emoji; an empty or broken frame; a picture showing a whole set placed inside one item. " +
-              "Correct only those rows or blocks, by their arrangement, with one review_patch call. For a moderately wide or squarish picture prefer to keep it beside its words: let the words wrap around it (float it with a margin, the words continuing below it), change the column proportions, keep it in view beside long words (position: sticky), or move later paragraphs below the row. Stack a picture above or below its words when it is very wide or dense, at a width that suits its detail and never larger than its own pixels (often about the reading width, centred). Replace emoji with set_marker (a number, an initial or a short word). Keep the rest of the design, the story, every word and every picture; do not turn the whole page into one column. If nothing reads as untidy, reply only: no changes.",
+              "Rows that already read well stay as they are. Correct only the untidy rows or blocks, with one review_patch call, mainly through arrange, choosing for each row the arrangement a designer would: a moderately wide or squarish picture beside a paragraph or two is usually wrapped (the words continue beneath it) or beside in fitting proportions; one picture explaining a long section can be sticky; a very wide or dense picture is stacked. Give each picture a width that suits its detail and never larger than its own pixels: a stacked diagram or photo is often about the reading width (680–760px), only a wide, detailed figure the full content width; a wrapped picture about 40–50%. Use the other operations for anything else; replace emoji with set_marker. Keep the rest of the design, the story, every word and every picture; do not turn the whole page into one column. If nothing reads as untidy, reply only: no changes.",
           },
           ...shots.map((data) => ({
             type: "image" as const,

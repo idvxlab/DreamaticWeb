@@ -71,13 +71,20 @@ export function patchHtml(
 
 /** What the one visual review may do: rearrange and resize, never take anything away. */
 export type ReviewOperation = {
-  action: "set_style" | "set_class" | "add_css" | "move" | "set_marker";
+  action: "arrange" | "set_style" | "set_class" | "add_css" | "move" | "set_marker";
   selector?: string;
   name?: string;
   value?: string;
   target?: string;
   position?: "before" | "after" | "prepend" | "append";
+  /** arrange: the picture inside the row, how the row is arranged, the picture's width and side. */
+  picture?: string;
+  as?: "stacked" | "wrapped" | "beside" | "sticky";
+  width?: string;
+  side?: "left" | "right" | "above" | "below";
 };
+
+const LENGTH = /^\d+(?:\.\d+)?(?:px|%|rem|em|ch|vw)$/;
 
 const HIDING =
   /display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0*)?\s*(?:;|$|!)|(?:^|[\s;{])(?:max-)?(?:height|width)\s*:\s*0(?:px)?\s*(?:;|$|!)|clip-path|content-visibility/i;
@@ -102,7 +109,9 @@ function pageContent($: cheerio.CheerioAPI) {
 export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
   const $ = cheerio.load(html);
   const before = pageContent($);
-  let markerChars = 0;
+  let markerChars = 0,
+    arranged = 0;
+  const css: string[] = [];
   const one = (selector: string | undefined) => {
     if (!selector) throw new Error("缺少 selector");
     const node = $(selector);
@@ -115,7 +124,58 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
   };
   for (const op of operations) {
     const value = op.value || "";
-    if (op.action === "set_style") {
+    if (op.action === "arrange") {
+      // One row of a picture and its words, rearranged as one of the Skill's arrangements.
+      const row = one(op.selector);
+      if (["body", "main"].includes(row.prop("tagName")?.toLowerCase() || ""))
+        throw new Error("arrange 的 selector 是包含图片和文字的那一行，不是整页");
+      const pic = one(op.picture);
+      const col = row.children().filter((_i, c) => c === pic[0] || $(c).find(pic as never).length > 0);
+      if (col.length !== 1) throw new Error("picture 必须在 selector 指定的那一行里面");
+      const as = op.as || "";
+      if (!["stacked", "wrapped", "beside", "sticky"].includes(as))
+        throw new Error("as 只能是 stacked、wrapped、beside、sticky");
+      const width = (op.width || "").trim();
+      if (!LENGTH.test(width)) throw new Error("width 需要一个长度，如 720px 或 45%");
+      const others = row.children().not(col);
+      if ((as === "beside" || as === "sticky") && others.length !== 1)
+        throw new Error("beside、sticky 需要这一行只有图片和一个文字块；先用 move 整理");
+      const id = `review-${++arranged}`;
+      row.attr("data-arrange", id);
+      col.attr("data-arrange-picture", "");
+      const r = `[data-arrange="${id}"]`,
+        c = `${r} > [data-arrange-picture]`,
+        side = op.side || (as === "stacked" ? "above" : "right");
+      const media = `${c} img, ${c} video { width: 100%; height: auto; max-width: 100%; }`;
+      if (as === "stacked") {
+        if (side === "below") row.append(col);
+        else row.prepend(col);
+        css.push(
+          `${r} { display: block !important; }`,
+          `${c} { float: none !important; position: static !important; width: ${width} !important; max-width: 100% !important; margin: ${side === "below" ? "1.5rem auto 0" : "0 auto 1.5rem"} !important; }`,
+          media,
+        );
+      } else if (as === "wrapped") {
+        row.prepend(col);
+        const left = side === "left";
+        css.push(
+          `${r} { display: flow-root !important; }`,
+          `${r} > :not([data-arrange-picture]) { display: block !important; overflow: visible !important; }`,
+          `${c} { float: ${left ? "left" : "right"} !important; width: ${width} !important; max-width: 60% !important; margin: ${left ? "0.3rem 2rem 1rem 0" : "0.3rem 0 1rem 2rem"} !important; position: static !important; }`,
+          media,
+          `@media (max-width: 720px) { ${c} { float: none !important; width: auto !important; max-width: 100% !important; margin: 0 0 1rem !important; } }`,
+        );
+      } else {
+        const left = side === "left";
+        css.push(
+          `${r} { display: grid !important; grid-template-columns: ${left ? `${width} minmax(0, 1fr)` : `minmax(0, 1fr) ${width}`} !important; align-items: start !important; column-gap: clamp(1.5rem, 3vw, 3rem) !important; }`,
+          `${c} { order: ${left ? -1 : 1} !important; width: auto !important; max-width: none !important; margin: 0 !important; float: none !important; ${as === "sticky" ? "position: sticky !important; top: 6rem !important; align-self: start !important;" : "position: static !important;"} }`,
+          `${r} > :not([data-arrange-picture]) { order: 0 !important; min-width: 0; }`,
+          media,
+          `@media (max-width: 720px) { ${r} { grid-template-columns: 1fr !important; } ${c} { position: static !important; } }`,
+        );
+      }
+    } else if (op.action === "set_style") {
       const node = one(op.selector);
       if (!op.name || !/^(?:--[a-z][a-z0-9-]*|[a-z][a-z-]*)$/.test(op.name))
         throw new Error("CSS 属性无效");
@@ -164,6 +224,14 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
         node.text(v);
       });
     } else throw new Error("审查不支持这个操作：" + op.action);
+  }
+  if (css.length) {
+    let style = $("style[data-review]");
+    if (!style.length) {
+      $("head").append("<style data-review></style>");
+      style = $("style[data-review]");
+    }
+    style.text(style.text() + "\n" + css.join("\n"));
   }
   const after = pageContent($);
   if (after.media.join("\n") !== before.media.join("\n"))
