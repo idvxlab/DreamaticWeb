@@ -161,14 +161,22 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
           media,
         );
       } else if (as === "wrapped") {
-        row.prepend(col);
+        // The picture floats inside the words' own block, so the words' measure (a max-width
+        // such as a reading width) is the width it wraps in, and the words beside it keep at
+        // least about 18em; narrower than that, the picture takes the block's width above them.
+        const words = others.first();
+        if (!words.length) throw new Error("wrapped 需要这一行里有文字块");
+        words.prepend(col);
         const left = side === "left";
+        const w = `${r} [data-arrange-picture]`;
         css.push(
-          `${r} { display: flow-root !important; }`,
-          `${r} > :not([data-arrange-picture]) { display: block !important; overflow: visible !important; }`,
-          `${c} { float: ${left ? "left" : "right"} !important; width: ${width} !important; max-width: 60% !important; margin: ${left ? "0.3rem 2rem 1rem 0" : "0.3rem 0 1rem 2rem"} !important; position: static !important; }`,
-          media,
-          `@media (max-width: 720px) { ${c} { float: none !important; width: auto !important; max-width: 100% !important; margin: 0 0 1rem !important; } }`,
+          `${r} { display: block !important; }`,
+          `${r} > :not([data-arrange-picture]) { display: flow-root !important; overflow: visible !important; }`,
+          `${w} { float: ${left ? "left" : "right"} !important; width: min(${width}, 55%) !important; max-width: none !important; margin: ${left ? "0.3rem 2rem 1rem 0" : "0.3rem 0 1rem 2rem"} !important; position: static !important; }`,
+          `${w} img, ${w} video { width: 100%; height: auto; max-width: 100%; }`,
+          `@container (max-width: 30em) { ${w} { float: none !important; width: auto !important; margin: 0 0 1rem !important; } }`,
+          `${r} > :not([data-arrange-picture]) { container-type: inline-size; }`,
+          `@media (max-width: 720px) { ${w} { float: none !important; width: auto !important; max-width: 100% !important; margin: 0 0 1rem !important; } }`,
         );
       } else {
         const left = side === "left";
@@ -187,8 +195,9 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       if (HIDING.test(`${op.name}:${value}`))
         throw new Error("审查不能隐藏内容：" + op.name);
       node.css(op.name, value);
+      node.attr("data-reviewed", "");
     } else if (op.action === "set_class") {
-      one(op.selector).attr("class", value);
+      one(op.selector).attr("class", value).attr("data-reviewed", "");
     } else if (op.action === "add_css") {
       if (!value.trim()) throw new Error("add_css 需要 CSS 规则");
       if (/<\/?style|<script/i.test(value)) throw new Error("add_css 只写 CSS 规则");
@@ -205,7 +214,7 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       if (node.find(target as never).length || node.is(target as never))
         throw new Error("不能把元素移进它自己");
       const position = op.position || "after";
-      const moved = node.remove();
+      const moved = node.remove().attr("data-reviewed", "");
       if (position === "before") target.before(moved);
       else if (position === "prepend") target.prepend(moved);
       else if (position === "append") target.append(moved);

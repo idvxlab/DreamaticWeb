@@ -466,14 +466,7 @@ async function execute(
           )
             return;
           if (submitted()) {
-            if (afterSubmit && !reviewed) {
-              reviewed = true;
-              const review = await afterSubmit();
-              if (review) {
-                agent.followUp(review);
-                return { action: "continue" };
-              }
-            } else if (
+            if (
               reviewed &&
               !retried &&
               reviewPending?.() &&
@@ -483,9 +476,18 @@ async function execute(
               retried = true;
               return { action: "continue" };
             }
+            if (afterSubmit) {
+              // The review decides whether there is a further look (at most two in all).
+              reviewed = true;
+              const review = await afterSubmit();
+              if (review) {
+                agent.followUp(review);
+                return { action: "continue" };
+              }
+            }
             return { action: "end" };
           }
-          if (turns >= (afterSubmit ? 8 : 6))
+          if (turns >= (afterSubmit ? 10 : 6))
             throw new Error(`${role} 未在 6 轮内提交有效结果`);
           const calledTool = message.content.some((c) => c.type === "toolCall");
           if (!calledTool && takeProse) {
@@ -1141,7 +1143,10 @@ async function execute(
     const reviewBudgetMs =
       Number(process.env.DREAMATIC_REVIEW_BUDGET_MS) || 300_000;
     const designerStart = performance.now();
-    let reviewing = false;
+    // Two looks at most: the whole page, then (only after a correction) the parts it changed.
+    let reviewing = false,
+      looks = 0,
+      corrected = false;
     if (visualReview)
       tools.push(
         tool(
@@ -1215,6 +1220,7 @@ async function execute(
             };
             metrics.patchOperations += patched.operations;
             reviewing = false;
+            corrected = true;
             return "Corrections applied";
           },
           true,
@@ -1222,6 +1228,35 @@ async function execute(
       );
     const review = async (): Promise<AgentMessage | undefined> => {
       if (!visualReview || !accepted) return undefined;
+      if (looks === 1) {
+        // The second and last look: the parts the correction changed, as they now render.
+        looks = 2;
+        if (!corrected || performance.now() - designerStart > reviewBudgetMs + 120_000)
+          return undefined;
+        const parts = await pageScreenshots(p.id, accepted.html, "[data-arrange], [data-reviewed]");
+        if (!parts.length) return undefined;
+        reviewing = true;
+        event("designer", `正在查看修改后的部分（${parts.length} 张）`);
+        return {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                `Your corrections were applied. Here are the parts of the page they changed, as they now render at 1440 px wide (${parts.length} screenshots, half size). This is the last look. ` +
+                "If a part now reads untidy (words squeezed into a narrow strip beside a picture, a picture out of line with the words' width, a gap or overlap), correct it with one review_patch call using the same operations; otherwise reply only: no changes.",
+            },
+            ...parts.map((data) => ({
+              type: "image" as const,
+              data: data.toString("base64"),
+              mimeType: "image/jpeg",
+            })),
+          ],
+          timestamp: Date.now(),
+        };
+      }
+      if (looks > 1) return undefined;
+      looks = 1;
       if (performance.now() - designerStart > reviewBudgetMs) {
         event("designer", "页面用时已超过审查预算，跳过截图审查");
         return undefined;
@@ -1256,7 +1291,7 @@ async function execute(
       () => Boolean(accepted),
       undefined,
       visualReview ? review : undefined,
-      () => reviewing,
+      () => reviewing && looks === 1,
     );
     controller.signal.throwIfAborted();
     if ((p.versions.at(-1)?.id || "") !== (existingPage?.id || ""))

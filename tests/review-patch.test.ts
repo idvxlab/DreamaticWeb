@@ -16,7 +16,7 @@ test("the review may rearrange: styles, classes, CSS rules, moving and markers",
   ]).html;
   assert.match(out, /float: left/);
   assert.match(out, /<style data-review[^>]*>[\s\S]*flow-root/);
-  assert.match(out, /<\/div><p id="p2">/);
+  assert.match(out, /<\/div><p id="p2" data-reviewed="">/);
   assert.match(out, /<span id="icon">01<\/span>/);
 });
 
@@ -42,8 +42,10 @@ test("arrange rebuilds one row as a Skill arrangement and keeps its words and pi
   const wrapped = reviewPatchHtml(row, [
     { action: "arrange", selector: "#r", picture: "#f", as: "wrapped", width: "45%", side: "left" },
   ]).html;
-  assert.match(wrapped, /<div class="row" id="r" data-arrange="review-1"><figure id="f" data-arrange-picture="">/);
-  assert.match(wrapped, /\[data-arrange="review-1"\] > \[data-arrange-picture\] \{ float: left !important; width: 45%/);
+  // The picture floats inside the words' own block, so it wraps within the words' measure.
+  assert.match(wrapped, /<div class="txt"><figure id="f" data-arrange-picture="">/);
+  assert.match(wrapped, /\[data-arrange="review-1"\] \[data-arrange-picture\] \{ float: left !important; width: min\(45%, 55%\)/);
+  assert.match(wrapped, /\[data-arrange="review-1"\] > :not\(\[data-arrange-picture\]\) \{ display: flow-root/);
   const stacked = reviewPatchHtml(row, [
     { action: "arrange", selector: "#r", picture: "figure img", as: "stacked", width: "720px", side: "below" },
   ]).html;
@@ -55,4 +57,14 @@ test("arrange rebuilds one row as a Skill arrangement and keeps its words and pi
   assert.throws(() =>
     reviewPatchHtml(row, [{ action: "arrange", selector: "main", picture: "#f", as: "stacked", width: "50%" }]),
   );
+});
+
+test("what the review changed is marked, for the one look at the changed parts", () => {
+  const page2 = `<html><head></head><body><main><div id="a"><p id="p">Words here.</p></div><div id="b"></div></main></body></html>`;
+  const out = reviewPatchHtml(page2, [
+    { action: "set_style", selector: "#a", name: "max-width", value: "680px" },
+    { action: "move", selector: "#p", target: "#b", position: "append" },
+  ]).html;
+  assert.match(out, /<div id="a" style="max-width: 680px;" data-reviewed="">/);
+  assert.match(out, /<p id="p" data-reviewed="">Words here\.<\/p>/);
 });

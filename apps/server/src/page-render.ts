@@ -12,7 +12,12 @@ const MAX_SLICES = 8;
  * halved in size. System Chrome is used when present, else Playwright's headless Chromium.
  * Returns no screenshots when no browser can start, so generation never depends on it.
  */
-export async function pageScreenshots(projectId: string, html: string) {
+export async function pageScreenshots(
+  projectId: string,
+  html: string,
+  /** Instead of the whole page: the bands of the page holding these elements (outermost only, at most six). */
+  units?: string,
+) {
   let chromium;
   try {
     ({ chromium } = await import("playwright-core"));
@@ -49,8 +54,40 @@ export async function pageScreenshots(projectId: string, html: string) {
     }
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(400);
+    const bands = units
+      ? await page.evaluate((selector) => {
+          const all = [...document.querySelectorAll(selector)];
+          return all
+            .filter((e) => !all.some((o) => o !== e && o.contains(e)))
+            .map((e) => {
+              const r = e.getBoundingClientRect();
+              return { top: r.top + window.scrollY, height: r.height };
+            })
+            .filter((b) => b.height > 4)
+            .slice(0, 6);
+        }, units)
+      : [];
+    if (units && !bands.length) return [];
     const full = await page.screenshot({ fullPage: true, type: "png" });
     const meta = await sharp(full).metadata();
+    if (units) {
+      const width = meta.width || WIDTH,
+        total = meta.height || 0,
+        out: Buffer[] = [];
+      for (const b of bands) {
+        const top = Math.max(0, Math.floor(b.top - 32));
+        const height = Math.min(SLICE, total - top, Math.ceil(b.height + 64));
+        if (height <= 0) continue;
+        out.push(
+          await sharp(full)
+            .extract({ left: 0, top, width, height })
+            .resize({ width: Math.round(width / 2) })
+            .jpeg({ quality: 78 })
+            .toBuffer(),
+        );
+      }
+      return out;
+    }
     const width = meta.width || WIDTH,
       total = meta.height || 0;
     const step = Math.max(SLICE, Math.ceil(total / MAX_SLICES));
