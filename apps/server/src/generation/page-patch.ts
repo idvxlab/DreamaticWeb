@@ -171,7 +171,7 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
         else row.prepend(col);
         css.push(
           `${r} { display: block !important; }`,
-          `${c} { float: none !important; position: static !important; width: ${width} !important; max-width: 100% !important; margin: ${side === "below" ? "1.5rem auto 0" : "0 auto 1.5rem"} !important; }`,
+          `${c} { display: block !important; float: none !important; position: static !important; width: ${width} !important; max-width: 100% !important; margin: ${side === "below" ? "1.5rem auto 0" : "0 auto 1.5rem"} !important; }`,
           media,
         );
       } else if (as === "wrapped") {
@@ -219,6 +219,8 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
     } else if (op.action === "add_css") {
       if (!value.trim()) throw new Error("add_css 需要 CSS 规则");
       if (/<\/?style|<script/i.test(value)) throw new Error("add_css 只写 CSS 规则");
+      if (/data-gap/.test(value))
+        throw new Error("data-gap 只是这次审查的临时标记，保存前会去掉；add_css 里用页面自己的类名、id 或 [data-arrange] 选择元素");
       if (HIDING.test(value)) throw new Error("审查不能隐藏内容");
       let style = $("style[data-review]");
       if (!style.length) {

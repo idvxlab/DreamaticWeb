@@ -92,7 +92,12 @@ const GAP_SCRIPT = `(() => {
     if (mr.width < 160 || mr.height < 160) continue;
     const fig = (m.closest("figure") || m).closest("[data-dn]");
     if (!fig || found.some((g) => g.el.contains(fig) || fig.contains(g.el))) continue;
-    const fr = fig.getBoundingClientRect();
+    // The pictures' own span, not the figure's box: a figure as wide as the column may hold a
+    // narrower picture, with its caption below.
+    const pr = (fig.matches(MEDIA) ? [fig] : [...fig.querySelectorAll(MEDIA)]).filter((x) => shown(x) && !(x.parentElement && x.parentElement.closest("svg"))).map((x) => x.getBoundingClientRect()).filter((r) => r.width >= 40 && r.height >= 40);
+    if (!pr.length) continue;
+    const fr = { left: Math.min(...pr.map((r) => r.left)), right: Math.max(...pr.map((r) => r.right)), top: Math.min(...pr.map((r) => r.top)), bottom: Math.max(...pr.map((r) => r.bottom)) };
+    fr.width = fr.right - fr.left; fr.height = fr.bottom - fr.top;
     let cont = fig.parentElement;
     while (cont && cont !== document.body && cont.getBoundingClientRect().width < 0.6 * innerWidth) cont = cont.parentElement;
     if (!cont) continue;

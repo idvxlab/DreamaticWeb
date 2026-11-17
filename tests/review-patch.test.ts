@@ -51,7 +51,7 @@ test("arrange rebuilds one row as a Skill arrangement and keeps its words and pi
     { action: "arrange", selector: "#r", picture: "figure img", as: "stacked", width: "720px", side: "below" },
   ]).html;
   assert.match(stacked, /<\/div><figure id="f" data-arrange-picture="">/);
-  assert.match(stacked, /width: 720px !important; max-width: 100% !important; margin: 1.5rem auto 0/);
+  assert.match(stacked, /display: block !important; float: none !important; position: static !important; width: 720px !important; max-width: 100% !important; margin: 1.5rem auto 0/);
   assert.throws(() =>
     reviewPatchHtml(row, [{ action: "arrange", selector: "#r", picture: "#f", as: "wrapped", width: "big" }]),
   );
@@ -97,6 +97,8 @@ test("measured blanks are written into the page by element index and removed at 
   assert.match(marked, /<div class="row" data-gap="1">/);
   assert.equal(stripGaps(marked).includes("data-gap"), false);
   assert.match(reviewPatchHtml(marked, [{ action: "set_style", selector: '[data-gap="1"]', name: "gap", value: "2rem" }]).html, /data-gap="1" style="gap: 2rem/);
+  // A stored rule would lose its element once the marks are removed.
+  assert.throws(() => reviewPatchHtml(marked, [{ action: "add_css", value: '[data-gap="1"] { display: flex; }' }]), /临时标记/);
 });
 
 test("the rendered page is measured for blanks beside pictures, and a balanced row is not one", async () => {
@@ -106,10 +108,11 @@ test("the rendered page is measured for blanks beside pictures, and a balanced r
 <h2>Tall picture</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start"><div>${words(4)}</div><div>${img(600, 900)}</div></div>
 <h2>Balanced</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start"><div>${words(26)}</div><div>${img(600, 400)}</div></div>
 <h2>Alone</h2><figure style="width:440px;margin:0">${img(440, 300)}</figure>
+<h2>Narrow in a wide figure</h2><figure style="margin:0">${img(720, 400).replace("width:100%", "width:100%;max-width:720px")}<figcaption>${"图注说明这张图的内容。".repeat(12)}</figcaption></figure>
 <h2>Wrapped</h2><div style="display:flow-root"><figure style="float:right;width:500px;margin:0 0 0 32px">${img(500, 700)}</figure>${words(3)}</div>
 </main></body></html>`;
   let gaps: PageGap[] = [];
   const shots = await pageScreenshots("no-such-project", tagElements(html), undefined, (g) => (gaps = g));
   if (!shots.length) return; // no browser on this machine
-  assert.deepEqual(gaps.map((g) => [g.kind, g.heading]), [["row", "Tall picture"], ["alone", "Alone"], ["wrapped", "Wrapped"]]);
+  assert.deepEqual(gaps.map((g) => [g.kind, g.heading]), [["row", "Tall picture"], ["alone", "Alone"], ["alone", "Narrow in a wide figure"], ["wrapped", "Wrapped"]]);
 });
