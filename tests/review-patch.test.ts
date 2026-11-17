@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reviewPatchHtml } from "../apps/server/src/generation/page-patch.js";
+import { markGaps, reviewPatchHtml, stripGaps, tagElements } from "../apps/server/src/generation/page-patch.js";
+import { pageScreenshots, type PageGap } from "../apps/server/src/page-render.js";
 
 const page = `<!doctype html><html><head><style>.row{display:grid}</style></head><body><main>
 <section id="a"><div class="row"><figure id="f"><img src="/assets/x/1.png"></figure><div id="t"><p id="p1">First paragraph.</p><p id="p2">Second paragraph.</p></div></div></section>
@@ -67,4 +68,48 @@ test("what the review changed is marked, for the one look at the changed parts",
   ]).html;
   assert.match(out, /<div id="a" style="max-width: 680px;" data-reviewed="">/);
   assert.match(out, /<p id="p" data-reviewed="">Words here\.<\/p>/);
+});
+
+test("a correction applies whole or not at all, listing every refused operation", () => {
+  assert.throws(
+    () =>
+      reviewPatchHtml(page, [
+        { action: "set_style", selector: "#f", name: "float", value: "left" },
+        { action: "set_style", selector: "p", name: "color", value: "red" },
+      ]),
+    /没有应用（1\/2 项被拒）[\s\S]*set_style p/,
+  );
+});
+
+test("a picture column beside words holds one picture", () => {
+  const two = page.replace('<figure id="f"><img src="/assets/x/1.png"></figure>', '<figure id="f"><img src="/assets/x/1.png"><img src="/assets/x/2.png"></figure>');
+  assert.throws(
+    () => reviewPatchHtml(two, [{ action: "arrange", selector: "#a .row", picture: "#f", as: "beside", width: "40%", side: "left" }]),
+    /图片那一列有 2 张图/,
+  );
+  assert.ok(reviewPatchHtml(two, [{ action: "arrange", selector: "#a .row", picture: "#f", as: "stacked", width: "720px" }]).html);
+});
+
+test("measured blanks are written into the page by element index and removed at the end", () => {
+  const tagged = tagElements(page);
+  const dn = tagged.match(/<div class="row" data-dn="(\d+)"/)![1];
+  const marked = markGaps(page, [+dn]);
+  assert.match(marked, /<div class="row" data-gap="1">/);
+  assert.equal(stripGaps(marked).includes("data-gap"), false);
+  assert.match(reviewPatchHtml(marked, [{ action: "set_style", selector: '[data-gap="1"]', name: "gap", value: "2rem" }]).html, /data-gap="1" style="gap: 2rem/);
+});
+
+test("the rendered page is measured for blanks beside pictures, and a balanced row is not one", async () => {
+  const img = (w: number, h: number) => `<img src="data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'><rect width='100%' height='100%' fill='gray'/></svg>`)}" style="width:100%;display:block">`;
+  const words = (n: number) => "<p>" + "设计空间把有哪些可能外化了。".repeat(n) + "</p>";
+  const html = `<!doctype html><html><body style="margin:0;font:17px/30px sans-serif"><main style="width:1120px;margin:0 auto">
+<h2>Tall picture</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start"><div>${words(4)}</div><div>${img(600, 900)}</div></div>
+<h2>Balanced</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start"><div>${words(26)}</div><div>${img(600, 400)}</div></div>
+<h2>Alone</h2><figure style="width:440px;margin:0">${img(440, 300)}</figure>
+<h2>Wrapped</h2><div style="display:flow-root"><figure style="float:right;width:500px;margin:0 0 0 32px">${img(500, 700)}</figure>${words(3)}</div>
+</main></body></html>`;
+  let gaps: PageGap[] = [];
+  const shots = await pageScreenshots("no-such-project", tagElements(html), undefined, (g) => (gaps = g));
+  if (!shots.length) return; // no browser on this machine
+  assert.deepEqual(gaps.map((g) => [g.kind, g.heading]), [["row", "Tall picture"], ["alone", "Alone"], ["wrapped", "Wrapped"]]);
 });

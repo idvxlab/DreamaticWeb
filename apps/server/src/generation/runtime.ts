@@ -5,8 +5,8 @@ import {
   type StreamFn,
   type AgentMessage,
 } from "@earendil-works/pi-agent-core";
-import { pageScreenshots } from "../page-render.js";
-import { reviewPatchHtml, type ReviewOperation } from "./page-patch.js";
+import { pageScreenshots, type PageGap } from "../page-render.js";
+import { markGaps, reviewPatchHtml, stripGaps, tagElements, type ReviewOperation } from "./page-patch.js";
 import { Type } from "typebox";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -1146,7 +1146,29 @@ async function execute(
     // Two looks at most: the whole page, then (only after a correction) the parts it changed.
     let reviewing = false,
       looks = 0,
-      corrected = false;
+      corrected = false,
+      blanks = 0;
+    // The host measures the rendered page for blanks beside pictures, marks them on the screenshots
+    // and writes [data-gap="N"] into the page; the Designer decides how to close each one.
+    const measured = async (units?: string) => {
+      let gaps: PageGap[] = [];
+      const shots = await pageScreenshots(p.id, tagElements(accepted!.html), units, (g) => (gaps = g));
+      accepted = { ...accepted!, html: markGaps(accepted!.html, gaps.map((g) => g.dn)) };
+      return { shots, gaps };
+    };
+    const gapList = (gaps: PageGap[]) =>
+      gaps
+        .map(
+          (g, i) =>
+            g.kind === "alone"
+              ? `BLANK ${i + 1}, [data-gap="${i + 1}"], under «${g.heading || "no heading"}»: a ${g.sides[0].what}, ${g.sides[0].height}px tall, alone at one side of the content width, with about ${g.gap}px of empty width beside it.`
+              : `BLANK ${i + 1}, [data-gap="${i + 1}"], under «${g.heading || "no heading"}»: ${
+                  g.kind === "row" ? "a row side by side" : "a picture floated in its words"
+                }, ${g.sides.map((s) => `${s.what} ${s.height}px tall`).join(" beside ")}; about ${g.gap}px of empty space beside the shorter side.`,
+        )
+        .join("\n");
+    const closing =
+      "Close a blank by changing that unit, not by hiding or removing anything: when the picture side is taller, move the paragraphs that follow it in the same section into the words' side, wrap the words around the picture (they then continue below it), narrow the picture, or stack it at the width its detail needs; when the words run much longer, make the picture sticky or wrap the words around it; when one column holds two or more pictures, set them side by side as one set or stack them; when two pictures of different heights share a row, give them one height or stack them; when a picture stands alone at one side, centre it at the width its detail needs, or set beside it the words or the other picture it belongs with.";
     if (visualReview)
       tools.push(
         tool(
@@ -1221,9 +1243,7 @@ async function execute(
             metrics.patchOperations += patched.operations;
             reviewing = false;
             corrected = true;
-            return patched.skipped.length
-              ? `Corrections applied, except these, which were refused and not applied: ${patched.skipped.join("; ")}`
-              : "Corrections applied";
+            return "Corrections applied";
           },
           true,
         ),
@@ -1233,20 +1253,25 @@ async function execute(
       if (looks === 1) {
         // The second and last look: the parts the correction changed, as they now render.
         looks = 2;
-        if (!corrected || performance.now() - designerStart > reviewBudgetMs + 120_000)
+        if ((!corrected && !blanks) || performance.now() - designerStart > reviewBudgetMs + 120_000)
           return undefined;
-        const parts = await pageScreenshots(p.id, accepted.html, "[data-arrange], [data-reviewed]");
+        const { shots: parts, gaps } = await measured("[data-arrange], [data-reviewed]");
         if (!parts.length) return undefined;
         reviewing = true;
-        event("designer", `正在查看修改后的部分（${parts.length} 张）`);
+        event("designer", `正在查看修改后的部分（${parts.length} 张，测得 ${gaps.length} 处空白）`);
         return {
           role: "user",
           content: [
             {
               type: "text",
               text:
-                `Your corrections were applied. Here are the parts of the page they changed, as they now render at 1440 px wide (${parts.length} screenshots, half size). This is the last look. ` +
-                "If a part now reads untidy (words squeezed into a narrow strip beside a picture, a picture out of line with the words' width, a gap or overlap), correct it with one review_patch call using the same operations; otherwise reply only: no changes.",
+                (corrected
+                  ? `Your corrections were applied. Here are the parts of the page they changed, as they now render at 1440 px wide (${parts.length} screenshots, half size). This is the last look. `
+                  : `The blanks listed before are still on the page. Here are the parts of the page holding them (${parts.length} screenshots, half size). This is the last look. `) +
+                (gaps.length
+                  ? `The host measured the page again; these blanks remain, outlined and labelled on the screenshots, and each must be closed now:\n${gapList(gaps)}\n${closing} `
+                  : "The host measured the page again and found no blank beside a picture. ") +
+                "If a part reads untidy (a listed blank, words squeezed into a narrow strip beside a picture, a picture out of line with the words' width, an overlap), correct it with one review_patch call using the same operations; otherwise reply only: no changes.",
             },
             ...parts.map((data) => ({
               type: "image" as const,
@@ -1263,10 +1288,11 @@ async function execute(
         event("designer", "页面用时已超过审查预算，跳过截图审查");
         return undefined;
       }
-      const shots = await pageScreenshots(p.id, accepted.html);
+      const { shots, gaps } = await measured();
       if (!shots.length) return undefined;
+      blanks = gaps.length;
       reviewing = true;
-      event("designer", `正在查看已提交页面的截图（${shots.length} 张）`);
+      event("designer", `正在查看已提交页面的截图（${shots.length} 张，测得 ${gaps.length} 处空白）`);
       return {
         role: "user",
         content: [
@@ -1274,8 +1300,11 @@ async function execute(
             type: "text",
             text:
               `Your page was accepted. Here it is as rendered at 1440 px wide, top to bottom in ${shots.length} screenshots (shown at half size). ` +
+              (gaps.length
+                ? `The host measured the rendered page: where pictures and words sit side by side, it compared how far the content of each side runs. These ${gaps.length} blanks are unintended empty space, outlined and labelled BLANK N on the screenshots; [data-gap="N"] selects the unit. Each must be closed in your correction; the page is not finished while one remains:\n${gapList(gaps)}\n${closing}\n`
+                : "The host measured the rendered page and found no blank beside a picture; still look for any other untidiness. ") +
               "Look at it as its designer would, for what reads as untidy on screen: beside a picture, one side running clearly longer and leaving an empty area; a picture too small to read, larger than its own pixels, or a simple picture blown up far beyond what its detail needs; anything wider than the page; emoji; an empty or broken frame; a picture showing a whole set placed inside one item. " +
-              "Rows that already read well stay as they are. Correct only the untidy units, with one review_patch call, mainly through arrange and move, shaping both sides as a designer would: keep a moderately wide, square or tall picture beside its words and fit the words to it (move the later paragraphs below the row, adjust the proportions, or wrap the words around it); keep one picture that explains a long section in view (sticky); stack a picture only when it needs width to be read. Give each picture a width that suits its detail and never larger than its own pixels: a stacked diagram or photo is often about the reading width (680–760px), only a wide, detailed figure the full content width; a wrapped picture about 40–50%. Use the other operations for anything else; replace emoji with set_marker. Keep the rest of the design, the story, every word and every picture; do not turn the whole page into one column. If nothing reads as untidy, reply only: no changes.",
+              "Rows that already read well stay as they are. Correct only the untidy units, with one review_patch call, mainly through arrange and move, shaping both sides as a designer would: keep a moderately wide, square or tall picture beside its words and fit the words to it (move the later paragraphs below the row, adjust the proportions, or wrap the words around it); keep one picture that explains a long section in view (sticky); stack a picture only when it needs width to be read. Give each picture a width that suits its detail and never larger than its own pixels: a stacked diagram or photo is often about the reading width (680–760px), only a wide, detailed figure the full content width; a wrapped picture about 40–50%. Use the other operations for anything else; replace emoji with set_marker. Keep the rest of the design, the story, every word and every picture; do not turn the whole page into one column. Only when no blank is listed and nothing reads as untidy, reply only: no changes.",
           },
           ...shots.map((data) => ({
             type: "image" as const,
@@ -1298,7 +1327,7 @@ async function execute(
     controller.signal.throwIfAborted();
     if ((p.versions.at(-1)?.id || "") !== (existingPage?.id || ""))
       throw new Error("页面已更改，未覆盖现有版本");
-    const result = accepted!;
+    const result = { ...accepted!, html: stripGaps(accepted!.html) };
     const versionId =
       result.html === existingPage?.html
         ? existingPage.id

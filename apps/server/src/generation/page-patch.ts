@@ -122,7 +122,8 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       throw new Error("审查不改这个元素：" + selector);
     return node;
   };
-  // An operation that cannot apply is skipped and reported; the others still apply.
+  // The operations are one correction: if any cannot apply, none is applied and every refusal is
+  // reported, so the review can send the whole correction again with those fixed.
   const skipped: string[] = [];
   for (const op of operations) {
    try {
@@ -150,6 +151,13 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       const others = row.children().not(col);
       if ((as === "beside" || as === "sticky") && others.length !== 1)
         throw new Error("beside、sticky 需要这一行只有图片和一个文字块；先用 move 整理");
+      const pictures = col.is("img, video, picture, svg, canvas")
+        ? 1
+        : col.find("img, video, picture, canvas").length || col.find("svg").length;
+      if (as !== "stacked" && pictures > 1)
+        throw new Error(
+          `图片那一列有 ${pictures} 张图；beside、sticky、wrapped 的图片列只放一张图。同一幅图的几张图做成一组用 stacked，或先用 move 把其余的图移出这一行`,
+        );
       let id = `review-${++arranged}`;
       while ($(`[data-arrange="${id}"]`).length) id = `review-${++arranged}`;
       row.attr("data-arrange", id);
@@ -252,8 +260,11 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
     skipped.push(`${op.action} ${op.selector || ""}: ${(e as Error).message}`);
    }
   }
-  if (operations.length && skipped.length === operations.length)
-    throw new Error("没有一项修改能应用：" + skipped.join("；"));
+  if (skipped.length)
+    throw new Error(
+      `这次修改没有应用（${skipped.length}/${operations.length} 项被拒）。改正这些项后把整组修改重新发一次：` +
+        skipped.join("；"),
+    );
   if (css.length) {
     let style = $("style[data-review]");
     if (!style.length) {
@@ -273,7 +284,28 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
     throw new Error("审查不能增删文字，只能调整排列");
   return {
     html: "<!doctype html>\n" + $("html").toString(),
-    operations: operations.length - skipped.length,
-    skipped,
+    operations: operations.length,
   };
 }
+
+/** Every element in the body numbered (data-dn) in document order, for measuring the rendered page. */
+export function tagElements(html: string) {
+  const $ = cheerio.load(html);
+  $("body *").each((i, e) => {
+    $(e).attr("data-dn", String(i));
+  });
+  return "<!doctype html>\n" + $("html").toString();
+}
+
+/** The measured blanks written into the page as [data-gap="N"], by their data-dn index in the same page. */
+export function markGaps(html: string, dns: number[]) {
+  const $ = cheerio.load(html);
+  $("[data-gap]").removeAttr("data-gap");
+  const all = $("body *").toArray();
+  dns.forEach((d, k) => {
+    if (all[d]) $(all[d]).attr("data-gap", String(k + 1));
+  });
+  return "<!doctype html>\n" + $("html").toString();
+}
+
+export const stripGaps = (html: string) => html.replace(/ data-gap="\d+"/g, "");
