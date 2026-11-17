@@ -378,7 +378,7 @@ async function execute(
       takeProse?: (text: string) => boolean,
       /** Once, after the result is accepted: a further message (the visual review) or none. */
       afterSubmit?: () => Promise<AgentMessage | undefined>,
-      /** During the review, whether a correction is still pending (a failed one may be retried once). */
+      /** During the review, whether a correction is still pending (a failed one may be retried once in each look). */
       reviewPending?: () => boolean,
     ) {
       controller.signal.throwIfAborted();
@@ -481,6 +481,7 @@ async function execute(
               reviewed = true;
               const review = await afterSubmit();
               if (review) {
+                retried = false;
                 agent.followUp(review);
                 return { action: "continue" };
               }
@@ -1161,14 +1162,14 @@ async function execute(
         .map(
           (g, i) =>
             g.kind === "alone"
-              ? `BLANK ${i + 1}, [data-gap="${i + 1}"], under «${g.heading || "no heading"}»: a ${g.sides[0].what}, ${g.sides[0].height}px tall, alone at one side of the content width, with about ${g.gap}px of empty width beside it.`
+              ? `BLANK ${i + 1}, [data-gap="${i + 1}"], under «${g.heading || "no heading"}»: a ${g.sides[0].what}, ${g.sides[0].height}px tall, alone at one side of the content width, with about ${g.gap}px of empty width beside it; centre it, or set it beside the words or the picture it belongs with.`
               : `BLANK ${i + 1}, [data-gap="${i + 1}"], under «${g.heading || "no heading"}»: ${
                   g.kind === "row" ? "a row side by side" : "a picture floated in its words"
                 }, ${g.sides.map((s) => `${s.what} ${s.height}px tall`).join(" beside ")}; about ${g.gap}px of empty space beside the shorter side.`,
         )
         .join("\n");
     const closing =
-      "Close a blank by changing that unit, not by hiding or removing anything: when the picture side is taller, move the paragraphs that follow it in the same section into the words' side, wrap the words around the picture (they then continue below it), narrow the picture, or stack it at the width its detail needs; when the words run much longer, make the picture sticky or wrap the words around it; when one column holds two or more pictures, set them side by side as one set or stack them; when two pictures of different heights share a row, give them one height or stack them; when a picture stands alone at one side, centre it at the width its detail needs, or set beside it the words or the other picture it belongs with.";
+      "Close a blank by changing that unit, not by hiding or removing anything: when the picture side is taller, move the paragraphs that follow it in the same section into the words' side, wrap the words around the picture (they then continue below it), narrow the picture, or stack it at the width its detail needs; when the words run much longer, make the picture sticky or wrap the words around it; when one column holds two or more pictures, set them side by side as one set or stack them; when two pictures of different heights share a row, give them one height or stack them; when a picture stands alone at one side, centre it at the width its detail needs, or set beside it the words or the other picture it belongs with; a picture taken out of a row is never left alone at one side.";
     if (visualReview)
       tools.push(
         tool(
@@ -1322,7 +1323,7 @@ async function execute(
       () => Boolean(accepted),
       undefined,
       visualReview ? review : undefined,
-      () => reviewing && looks === 1,
+      () => reviewing,
     );
     controller.signal.throwIfAborted();
     if ((p.versions.at(-1)?.id || "") !== (existingPage?.id || ""))
