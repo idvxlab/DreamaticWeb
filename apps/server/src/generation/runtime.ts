@@ -540,7 +540,10 @@ async function execute(
       try {
         await agent.prompt(input);
         controller.signal.throwIfAborted();
-        if (agent.state.errorMessage) {
+        if (agent.state.errorMessage && reviewed && submitted())
+          // The page was accepted before the review; a failed review request leaves it as it is.
+          event(role, `截图审查时模型请求失败，保留已通过的页面：${agent.state.errorMessage}`, "status");
+        else if (agent.state.errorMessage) {
           const requestNumber = metrics.modelCalls - callStart;
           throw new ModelRequestError(
             `${role} 模型请求失败（${runtime.model.api}，第 ${requestNumber} 轮，最近工具：${lastTool}）：${agent.state.errorMessage}`,
