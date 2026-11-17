@@ -1141,7 +1141,7 @@ async function execute(
       profile("designer").vision &&
       process.env.DREAMATIC_VISUAL_REVIEW === "true";
     const reviewBudgetMs =
-      Number(process.env.DREAMATIC_REVIEW_BUDGET_MS) || 300_000;
+      Number(process.env.DREAMATIC_REVIEW_BUDGET_MS) || 600_000;
     const designerStart = performance.now();
     // Two looks at most: the whole page, then (only after a correction) the parts it changed.
     let reviewing = false,
@@ -1221,7 +1221,9 @@ async function execute(
             metrics.patchOperations += patched.operations;
             reviewing = false;
             corrected = true;
-            return "Corrections applied";
+            return patched.skipped.length
+              ? `Corrections applied, except these, which were refused and not applied: ${patched.skipped.join("; ")}`
+              : "Corrections applied";
           },
           true,
         ),

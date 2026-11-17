@@ -122,7 +122,10 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       throw new Error("审查不改这个元素：" + selector);
     return node;
   };
+  // An operation that cannot apply is skipped and reported; the others still apply.
+  const skipped: string[] = [];
   for (const op of operations) {
+   try {
     const value = op.value || "";
     if (op.action === "arrange") {
       // One row of a picture and its words, rearranged as one of the Skill's arrangements.
@@ -137,6 +140,8 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       const pic = inside.length ? inside : one(op.picture);
       const col = row.children().filter((_i, c) => c === pic[0] || $(c).find(pic as never).length > 0);
       if (col.length !== 1) throw new Error("picture 必须在 selector 指定的那一行里面");
+      if (!(pic.is("img, video, picture, svg, canvas") || pic.find("img, video, picture, svg, canvas").length))
+        throw new Error("arrange 的 picture 必须是图片或包含图片；没有图片的卡片、列表不是 picture");
       const as = op.as || "";
       if (!["stacked", "wrapped", "beside", "sticky"].includes(as))
         throw new Error("as 只能是 stacked、wrapped、beside、sticky");
@@ -145,7 +150,8 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       const others = row.children().not(col);
       if ((as === "beside" || as === "sticky") && others.length !== 1)
         throw new Error("beside、sticky 需要这一行只有图片和一个文字块；先用 move 整理");
-      const id = `review-${++arranged}`;
+      let id = `review-${++arranged}`;
+      while ($(`[data-arrange="${id}"]`).length) id = `review-${++arranged}`;
       row.attr("data-arrange", id);
       col.attr("data-arrange-picture", "");
       const r = `[data-arrange="${id}"]`,
@@ -172,6 +178,10 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
         css.push(
           `${r} { display: block !important; }`,
           `${r} > :not([data-arrange-picture]) { display: flow-root !important; overflow: visible !important; }`,
+          // A reading width set on each paragraph would leave only a strip beside the float;
+          // the words' block keeps the measure, so lines run beside the picture and then below it.
+          `${r} > :not([data-arrange-picture]) > :not([data-arrange-picture]) { max-width: none !important; }`,
+          `${r} > :not([data-arrange-picture]) { max-width: ${width.endsWith("%") ? "min(100%, 70em)" : `min(100%, calc(40em + ${width} + 2rem))`} !important; }`,
           `${w} { float: ${left ? "left" : "right"} !important; width: min(${width}, 55%) !important; max-width: none !important; margin: ${left ? "0.3rem 2rem 1rem 0" : "0.3rem 0 1rem 2rem"} !important; position: static !important; }`,
           `${w} img, ${w} video { width: 100%; height: auto; max-width: 100%; }`,
           `@container (max-width: 30em) { ${w} { float: none !important; width: auto !important; margin: 0 0 1rem !important; } }`,
@@ -238,7 +248,12 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
         node.text(v);
       });
     } else throw new Error("审查不支持这个操作：" + op.action);
+   } catch (e) {
+    skipped.push(`${op.action} ${op.selector || ""}: ${(e as Error).message}`);
+   }
   }
+  if (operations.length && skipped.length === operations.length)
+    throw new Error("没有一项修改能应用：" + skipped.join("；"));
   if (css.length) {
     let style = $("style[data-review]");
     if (!style.length) {
@@ -258,6 +273,7 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
     throw new Error("审查不能增删文字，只能调整排列");
   return {
     html: "<!doctype html>\n" + $("html").toString(),
-    operations: operations.length,
+    operations: operations.length - skipped.length,
+    skipped,
   };
 }
