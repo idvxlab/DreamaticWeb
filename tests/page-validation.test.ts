@@ -98,3 +98,17 @@ test("visible CSS source is rejected while intentional code samples and prose re
     await removeProject(project.id);
   }
 });
+
+test("a mistyped catalog address is answered with the closest catalog address", async () => {
+  const project = await create();
+  try {
+    const url = `/assets/${project.id}/7f8a61e3-b003-4a1d-8ebe-281e67a243ff.png`;
+    project.sources = [{ assets: [{ url }] }] as unknown as typeof project.sources;
+    const typo = url.replace(project.id.slice(0, 13), project.id.slice(0, 9) + project.id.slice(0, 13));
+    const result = await validatePage(project, `<html><body><h1>P</h1><img alt="p" src="${typo}"></body></html>`);
+    const issue = result.issues.find((i) => i.code === "asset_scope");
+    assert.ok(issue?.message.endsWith(`did you mean ${url}?`), issue?.message);
+  } finally {
+    await removeProject(project.id);
+  }
+});

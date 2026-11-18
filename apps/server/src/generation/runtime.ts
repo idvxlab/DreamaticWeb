@@ -1288,12 +1288,16 @@ async function execute(
       }
       if (looks > 1) return undefined;
       looks = 1;
-      if (performance.now() - designerStart > reviewBudgetMs) {
-        event("designer", "页面用时已超过审查预算，跳过截图审查");
-        return undefined;
-      }
       const { shots, gaps } = await measured();
       if (!shots.length) return undefined;
+      // Past the budget, the page is still looked at once when it was measured with blanks.
+      if (performance.now() - designerStart > reviewBudgetMs) {
+        if (!gaps.length) {
+          event("designer", "页面用时已超过审查预算，未测得空白，跳过截图审查");
+          return undefined;
+        }
+        looks = 2;
+      }
       blanks = gaps.length;
       reviewing = true;
       event("designer", `正在查看已提交页面的截图（${shots.length} 张，测得 ${gaps.length} 处空白）`);

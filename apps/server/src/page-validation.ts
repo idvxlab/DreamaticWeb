@@ -164,7 +164,7 @@ export async function validatePage(
       issues.push({
         severity: "error",
         code: "asset_scope",
-        message: `Asset is not in this project's source catalog: ${url}`,
+        message: `Asset is not in this project's source catalog: ${url}${nearestAsset(project, url)}`,
       });
     else if (
       project.sources.some((s) =>
@@ -210,4 +210,30 @@ export async function validatePage(
     issues: issues.slice(0, 100),
     html,
   };
+}
+
+/** A mistyped catalog address: the closest catalog address, when one is close. */
+function nearestAsset(project: Project, url: string) {
+  const urls = project.sources.flatMap((s) => s.assets.map((a) => a.url));
+  const base = url.split("/").pop();
+  const same = urls.find((u) => u.split("/").pop() === base);
+  if (same) return `; did you mean ${same}?`;
+  let best = "", bestD = Infinity;
+  for (const u of urls) {
+    if (Math.abs(u.length - url.length) > 12) continue;
+    const d = editDistance(u, url);
+    if (d < bestD) [best, bestD] = [u, d];
+  }
+  return bestD <= 12 ? `; did you mean ${best}?` : "";
+}
+
+function editDistance(a: string, b: string) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++)
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
 }
