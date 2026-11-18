@@ -112,11 +112,31 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
   let markerChars = 0,
     arranged = 0;
   const css: string[] = [];
+  // A selector that matches one element of several, written so the review can use it as given:
+  // from the nearest element with an id or a blank mark, down by :nth-of-type.
+  const pathOf = (el: unknown): string => {
+    const steps: string[] = [];
+    let node = $(el as never) as ReturnType<typeof $>;
+    while (node.length && !["body", "html"].includes(node.prop("tagName")?.toLowerCase() || "")) {
+      const id = node.attr("id"), gap = node.attr("data-gap");
+      if (id && /^[A-Za-z][\w-]*$/.test(id)) return ["#" + id, ...steps].join(" > ");
+      if (gap) return [`[data-gap="${gap}"]`, ...steps].join(" > ");
+      const tag = node.prop("tagName")!.toLowerCase();
+      const same = node.parent().children(tag);
+      steps.unshift(same.length > 1 ? `${tag}:nth-of-type(${same.index(node) + 1})` : tag);
+      node = node.parent() as ReturnType<typeof $>;
+    }
+    return ["body", ...steps].join(" > ");
+  };
+  const options = (nodes: ReturnType<typeof $>) =>
+    nodes.toArray().slice(0, 4).map((e) => pathOf(e)).join("、");
   const one = (selector: string | undefined) => {
     if (!selector) throw new Error("缺少 selector");
     const node = $(selector);
-    if (node.length !== 1)
-      throw new Error("选择器必须精确匹配一个元素：" + selector);
+    if (node.length === 0)
+      throw new Error("选择器没有匹配到元素：" + selector);
+    if (node.length > 1)
+      throw new Error(`选择器必须精确匹配一个元素，${selector} 匹配到 ${node.length} 个；可改用其中之一：${options(node)}`);
     const tag = node.prop("tagName")?.toLowerCase() || "";
     if (["html", "head", "style", "script"].includes(tag))
       throw new Error("审查不改这个元素：" + selector);
@@ -133,20 +153,33 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       const row = one(op.selector);
       if (["body", "main"].includes(row.prop("tagName")?.toLowerCase() || ""))
         throw new Error("arrange 的 selector 是包含图片和文字的那一行，不是整页");
-      // The picture selector is read inside the row first (such as "figure img"), then page-wide.
-      if (!op.picture) throw new Error("arrange 需要 picture");
-      const inside = row.find(op.picture);
-      if (inside.length > 1)
-        throw new Error("picture 在这一行里匹配到多个元素：" + op.picture);
-      const pic = inside.length ? inside : one(op.picture);
+      // The picture is read inside the row (such as "figure img"), then page-wide; without one,
+      // the row's pictures are taken when they sit in one of its columns.
+      const rowMedia = row.find("img, video, canvas, picture").filter((_i, e) => !$(e).parent().is("picture"));
+      const columnOf = (nodes: ReturnType<typeof $>) => {
+        const cols = row.children().filter((_i, c) => nodes.toArray().some((n) => c === n || $(c).find(n as never).length > 0));
+        return cols.length === 1 ? cols : undefined;
+      };
+      let pic: ReturnType<typeof $>;
+      const inside = op.picture ? row.find(op.picture) : rowMedia;
+      if (!inside.length && !op.picture) throw new Error("这一行里没有图片，arrange 只用于图片和文字的一行");
+      if (inside.length > 1) {
+        // Several pictures in one column are that column's set; elsewhere one must be named.
+        const set = columnOf(inside);
+        if (!set)
+          throw new Error(`picture ${op.picture || "（未写）"} 在这一行的不同列里匹配到 ${inside.length} 张图；写明其中一张：${options(inside)}`);
+        pic = set;
+      } else pic = inside.length ? inside : one(op.picture);
       const col = row.children().filter((_i, c) => c === pic[0] || $(c).find(pic as never).length > 0);
-      if (col.length !== 1) throw new Error("picture 必须在 selector 指定的那一行里面");
+      if (col.length !== 1)
+        throw new Error(`picture 必须在 selector 指定的那一行里面；这一行里的图片：${options(rowMedia) || "没有"}`);
       if (!(pic.is("img, video, picture, svg, canvas") || pic.find("img, video, picture, svg, canvas").length))
         throw new Error("arrange 的 picture 必须是图片或包含图片；没有图片的卡片、列表不是 picture");
       const as = op.as || "";
       if (!["stacked", "wrapped", "beside", "sticky"].includes(as))
         throw new Error("as 只能是 stacked、wrapped、beside、sticky");
-      const width = (op.width || "").trim();
+      // Without a width: a stacked picture at the reading width, a wrapped one at 42%, a beside or sticky one at 45%.
+      const width = (op.width || (as === "stacked" ? "760px" : as === "wrapped" ? "42%" : "45%")).trim();
       if (!LENGTH.test(width)) throw new Error("width 需要一个长度，如 720px 或 45%");
       const others = row.children().not(col);
       if ((as === "beside" || as === "sticky") && others.length !== 1)
@@ -154,10 +187,9 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       const pictures = col.is("img, video, picture, svg, canvas")
         ? 1
         : col.find("img, video, picture, canvas").length || col.find("svg").length;
-      if (as !== "stacked" && pictures > 1)
-        throw new Error(
-          `图片那一列有 ${pictures} 张图；beside、sticky、wrapped 的图片列只放一张图。同一幅图的几张图做成一组用 stacked，或先用 move 把其余的图移出这一行`,
-        );
+      // Several pictures in a beside, sticky or wrapped column are set side by side as one set,
+      // never stacked in a narrow column beside the words.
+      const asSet = as !== "stacked" && pictures > 1;
       let id = `review-${++arranged}`;
       while ($(`[data-arrange="${id}"]`).length) id = `review-${++arranged}`;
       row.attr("data-arrange", id);
@@ -165,7 +197,9 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
       const r = `[data-arrange="${id}"]`,
         c = `${r} > [data-arrange-picture]`,
         side = op.side || (as === "stacked" ? "above" : "right");
-      const media = `${c} img, ${c} video { width: 100%; height: auto; max-width: 100%; }`;
+      const media =
+        `${c} img, ${c} video { width: 100%; height: auto; max-width: 100%; }` +
+        (asSet ? ` ${c} { display: flex !important; gap: 12px; align-items: flex-start; } ${c} > * { flex: 1 1 0; min-width: 0; }` : "");
       if (as === "stacked") {
         if (side === "below") row.append(col);
         else row.prepend(col);
@@ -191,7 +225,8 @@ export function reviewPatchHtml(html: string, operations: ReviewOperation[]) {
           `${r} > :not([data-arrange-picture]) > :not([data-arrange-picture]) { max-width: none !important; }`,
           `${r} > :not([data-arrange-picture]) { max-width: ${width.endsWith("%") ? "min(100%, 70em)" : `min(100%, calc(40em + ${width} + 2rem))`} !important; }`,
           `${w} { float: ${left ? "left" : "right"} !important; width: min(${width}, 55%) !important; max-width: none !important; margin: ${left ? "0.3rem 2rem 1rem 0" : "0.3rem 0 1rem 2rem"} !important; position: static !important; }`,
-          `${w} img, ${w} video { width: 100%; height: auto; max-width: 100%; }`,
+          `${w} img, ${w} video { width: 100%; height: auto; max-width: 100%; }` +
+            (asSet ? ` ${w} { display: flex !important; gap: 12px; align-items: flex-start; } ${w} > * { flex: 1 1 0; min-width: 0; }` : ""),
           `@container (max-width: 30em) { ${w} { float: none !important; width: auto !important; margin: 0 0 1rem !important; } }`,
           `${r} > :not([data-arrange-picture]) { container-type: inline-size; }`,
           `@media (max-width: 720px) { ${w} { float: none !important; width: auto !important; max-width: 100% !important; margin: 0 0 1rem !important; } }`,

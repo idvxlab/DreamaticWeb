@@ -81,13 +81,23 @@ test("a correction applies whole or not at all, listing every refused operation"
   );
 });
 
-test("a picture column beside words holds one picture", () => {
+test("several pictures in a picture column beside words are set side by side as one set", () => {
   const two = page.replace('<figure id="f"><img src="/assets/x/1.png"></figure>', '<figure id="f"><img src="/assets/x/1.png"><img src="/assets/x/2.png"></figure>');
-  assert.throws(
-    () => reviewPatchHtml(two, [{ action: "arrange", selector: "#a .row", picture: "#f", as: "beside", width: "40%", side: "left" }]),
-    /图片那一列有 2 张图/,
-  );
+  const set = reviewPatchHtml(two, [{ action: "arrange", selector: "#a .row", picture: "#f", as: "beside", width: "40%", side: "left" }]).html;
+  assert.match(set, /> \[data-arrange-picture\] \{ display: flex !important; gap: 12px;/);
   assert.ok(reviewPatchHtml(two, [{ action: "arrange", selector: "#a .row", picture: "#f", as: "stacked", width: "720px" }]).html);
+});
+
+test("arrange finds the row's pictures and a width by itself, and a refused selector names ones that match one element", () => {
+  const two = page.replace('<figure id="f"><img src="/assets/x/1.png"></figure>', '<figure id="f"><img src="/assets/x/1.png"><img src="/assets/x/2.png"></figure>');
+  // No picture and no width: the pictures sit in one column, so that column is the picture set.
+  assert.match(reviewPatchHtml(two, [{ action: "arrange", selector: "#a .row", as: "beside" }]).html, /grid-template-columns: minmax\(0, 1fr\) 45%/);
+  assert.match(reviewPatchHtml(page, [{ action: "arrange", selector: "#a .row", as: "stacked" }]).html, /width: 760px !important/);
+  assert.throws(
+    () => reviewPatchHtml(two, [{ action: "set_style", selector: "#f img", name: "border-radius", value: "4px" }]),
+    /#f img 匹配到 2 个；可改用其中之一：#f > img:nth-of-type\(1\)、#f > img:nth-of-type\(2\)/,
+  );
+  assert.match(reviewPatchHtml(two, [{ action: "set_style", selector: "#f > img:nth-of-type(2)", name: "border-radius", value: "4px" }]).html, /2\.png" style="border-radius: 4px/);
 });
 
 test("measured blanks are written into the page by element index and removed at the end", () => {
