@@ -866,12 +866,13 @@ async function execute(
         }
       | undefined;
     // A page wider than the window is never accepted: the Designer is told which elements reach past the edge.
+    const OVERFLOW = "页面比窗口宽，出现横向滚动：";
+    let held: { html: string; operations: number; usedFactIds?: string[] } | undefined;
     async function refuseOverflow(html: string) {
       const wide = await pageOverflow(p.id, html);
       if (wide.length)
         throw new Error(
-          "页面比窗口宽，出现横向滚动；改正后重新提交（例如给图片 max-width: 100%、height: auto，表格或代码放进可横向滚动的容器，去掉固定的大宽度）：" +
-            wide.join("；"),
+          OVERFLOW + wide.join("；") + "。改正这几处（例如给图片 max-width: 100%、height: auto，表格或代码放进可横向滚动的容器，去掉固定的大宽度）。",
         );
     }
     async function accept(
@@ -901,7 +902,20 @@ async function execute(
           "页面结构需要修正：" +
             JSON.stringify(report.issues.filter((i) => i.severity === "error")),
         );
-      await refuseOverflow(report.html);
+      // A page refused only for its width is kept, and fixed with small changes instead of rewritten.
+      const wide = await pageOverflow(p.id, report.html);
+      if (wide.length) {
+        const patchable = tools.some((t) => t.name === "review_patch");
+        held = patchable ? { html: report.html, operations, usedFactIds } : undefined;
+        throw new Error(
+          OVERFLOW +
+            wide.join("；") +
+            (patchable
+              ? "。这份页面已保留：用 review_patch 只改这几处（例如 add_css 给图片 max-width: 100%、height: auto，把固定宽度改成 max-width，窄屏下让列堆叠），不必重写整页；改完会再检查一次宽度。"
+              : "。改正这几处后重新提交（例如给图片 max-width: 100%、height: auto，把固定宽度改成 max-width，窄屏下让列堆叠）。"),
+        );
+      }
+      held = undefined;
       if (anchors.repaired.length)
         report.issues.push({
           severity: "warning",
@@ -1187,7 +1201,7 @@ async function execute(
       tools.push(
         tool(
           "review_patch",
-          "Only after the screenshots of your submitted page: rearrange what they show needs it, then finish. Operations: arrange(selector of the row holding a picture and its words, picture selector, read inside that row first (such as figure img), as stacked|wrapped|beside|sticky, width of the picture such as 720px or 42%, side left|right, or above|below for stacked) rebuilds that row as one of the visual design Skill's arrangements, desktop and mobile; set_style(selector, name, value) inline CSS; set_class(selector, value) replace the class list; add_css(value) append CSS rules to the page; move(selector, target, position before|after|prepend|append) move an element; set_marker(selector, value) rewrite markers of at most three characters, such as emoji used as icons (the selector may match all markers of a set; '01|02|03' gives each its own). Other selectors match exactly one element. Nothing may be hidden. Every word and picture stays.",
+          "Only after the screenshots of your submitted page, or when a submitted page was refused only for being wider than the window: rearrange what needs it, then finish. Operations: arrange(selector of the row holding a picture and its words, picture selector, read inside that row first (such as figure img), as stacked|wrapped|beside|sticky, width of the picture such as 720px or 42%, side left|right, or above|below for stacked) rebuilds that row as one of the visual design Skill's arrangements, desktop and mobile; set_style(selector, name, value) inline CSS; set_class(selector, value) replace the class list; add_css(value) append CSS rules to the page; move(selector, target, position before|after|prepend|append) move an element; set_marker(selector, value) rewrite markers of at most three characters, such as emoji used as icons (the selector may match all markers of a set; '01|02|03' gives each its own). Other selectors match exactly one element. Nothing may be hidden. Every word and picture stays.",
           Type.Object({
             operations: Type.Array(
               Type.Object({
@@ -1234,6 +1248,12 @@ async function execute(
             ),
           }),
           async ({ operations }) => {
+            if (!accepted && held) {
+              // The submitted page was refused only for its width: these changes fix it in place.
+              const patched = reviewPatchHtml(held.html, operations as ReviewOperation[]);
+              metrics.patchOperations += patched.operations;
+              return accept(patched.html, held.operations + patched.operations, held.usedFactIds);
+            }
             if (!reviewing || !accepted)
               throw new Error("review_patch 只在看过已提交页面的截图之后使用");
             const patched = reviewPatchHtml(

@@ -714,6 +714,47 @@ test("raw-text patches preserve style/script tags and failed batches never publi
   }
 });
 
+test("a page refused only for being wider than the window is fixed with small changes, not rewritten", async () => {
+  const p = await create();
+  let designerCalls = 0;
+  const wide = '<html><head><style>.band{width:2400px}</style></head><body><h1 id="title">Wide</h1><div class="band">Band</div></body></html>';
+  const streamFn: StreamFn = (model, context) => {
+    const sys = getCurrentSystemMessage(context.messages)!;
+    const prompt = typeof sys.content === "string" ? sys.content : sys.content.map((c) => c.text).join("\n");
+    if (prompt.includes("# Orchestrator")) return answer(model, "submit_intent", brief);
+    if (prompt.includes("# Analyst")) return answer(model, "submit_facts", { summary: "Facts", facts: [], limitations: [] });
+    designerCalls++;
+    if (designerCalls === 1) return answer(model, "submit_page", { html: wide, usedFactIds: [] });
+    if (designerCalls === 2) {
+      assert.match(JSON.stringify(context.messages), /页面比窗口宽.*div\.band 2400px wide.*这份页面已保留/);
+      return answer(model, "review_patch", { operations: [{ action: "add_css", value: ".band { width: auto !important; max-width: 100%; }" }] });
+    }
+    const stream = createAssistantMessageEventStream();
+    const message: AssistantMessage = {
+      role: "assistant", api: model.api, provider: model.provider, model: model.id, content: [],
+      stopReason: "error", errorMessage: "review not needed in this test", timestamp: Date.now(),
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    };
+    queueMicrotask(() => { stream.push({ type: "error", reason: "error", error: message }); stream.end(message); });
+    return stream;
+  };
+  const before = process.env.DREAMATIC_VISUAL_REVIEW;
+  process.env.DREAMATIC_VISUAL_REVIEW = "true";
+  try {
+    const vision = { ...config, models: { ...config.models, reasoning: { ...config.models.reasoning!, vision: true } } };
+    await runProject(p, requestSchema.parse({ text: "创建新网站" }), save, () => {}, { config: vision, streamFn });
+    if (designerCalls < 2) return; // no browser on this machine: nothing is measured
+    assert.equal(p.status, "complete", p.error);
+    assert.equal(p.versions.length, 1);
+    assert.match(p.versions[0].html, /\.band \{ width: auto !important; max-width: 100%; \}/);
+    assert.match(p.versions[0].html, /Band/);
+  } finally {
+    if (before === undefined) delete process.env.DREAMATIC_VISUAL_REVIEW;
+    else process.env.DREAMATIC_VISUAL_REVIEW = before;
+    await removeProject(p.id);
+  }
+});
+
 test("a failed request during the visual review keeps the accepted page", async () => {
   const p = await create();
   let designerCalls = 0;
