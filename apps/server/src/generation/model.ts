@@ -17,7 +17,7 @@ const openaiCatalog = new Map(
 
 export function modelRuntime(profile: ModelProfile) {
   if (!profile.model || !profile.baseUrl)
-    throw new Error("请先在模型与设置中填写模型名称和调用 URL");
+    throw new Error("服务器 .env 里还没有配置模型名称和调用 URL（DREAMATIC_MODEL、DREAMATIC_BASE_URL）");
   const api =
     profile.mode === "openai" ? "openai-responses" : "openai-completions";
   // Public, local Pi catalog: do not mislabel known reasoning models as text-only.

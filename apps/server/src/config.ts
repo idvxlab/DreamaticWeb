@@ -1,6 +1,4 @@
-import { readFile, writeFile, rename } from "node:fs/promises";
-import path from "node:path";
-import { DATA, SETTINGS_ROOT, switchWorkspace } from "./store.js";
+import { DATA } from "./store.js";
 import {
   configSchema,
   normalizeEndpoint,
@@ -12,8 +10,6 @@ export {
   configSchema,
   type RuntimeConfig,
 } from "../../../packages/shared/config.js";
-const ROOT_PATH = process.cwd();
-const file = path.join(SETTINGS_ROOT, "settings.json");
 let current: RuntimeConfig | undefined;
 function envProfile(prefix: string): ModelProfile {
   return {
@@ -68,62 +64,18 @@ export function readConfig(): PublicConfig {
     },
   };
 }
+/**
+ * The configuration is read from the server's environment (.env) at start and only there: the
+ * browser shows it and never changes it. Restart the server after changing .env.
+ */
 export async function initConfig() {
-  try {
-    current = configSchema.parse(JSON.parse(await readFile(file, "utf8")));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    current = initial();
+  const c = initial();
+  for (const key of ["reasoning", "analyst", "designer"] as const) {
+    const profile = c.models[key];
+    if (profile) profile.baseUrl = normalizeEndpoint(profile.baseUrl);
   }
-  if (current.workspace) await switchWorkspace(current.workspace);
+  current = configSchema.parse(c);
   current.workspace = DATA;
-}
-export let configUpdating = false;
-export async function writeConfig(input: unknown) {
-  if (configUpdating) throw new Error("配置正在保存，请稍后重试");
-  configUpdating = true;
-  try {
-    const c = configSchema.parse(input);
-    c.workspace = c.workspace || DATA;
-    if (!path.isAbsolute(c.workspace))
-      throw new Error("Workspace 路径必须是绝对路径");
-    c.workspace = path.resolve(c.workspace);
-    if (
-      c.workspace === path.parse(c.workspace).root ||
-      c.workspace === ROOT_PATH
-    )
-      throw new Error("请选择独立的 Workspace 目录");
-    const old = current || initial();
-    for (const key of ["reasoning", "analyst", "designer"] as const) {
-      const profile = c.models[key];
-      if (!profile) continue;
-      if (
-        (profile.model && !profile.baseUrl) ||
-        (!profile.model && profile.baseUrl) ||
-        (key !== "reasoning" && !profile.model)
-      )
-        throw new Error("请同时填写模型调用 URL 和模型名称");
-      profile.baseUrl = normalizeEndpoint(profile.baseUrl);
-      profile.apiKey = profile.clearApiKey
-        ? ""
-        : profile.apiKey?.trim() || old.models[key]?.apiKey || "";
-      delete profile.clearApiKey;
-    }
-    const temp = file + "." + crypto.randomUUID() + ".tmp";
-    await writeFile(temp, JSON.stringify(c, null, 2), { mode: 0o600 });
-    const previousWorkspace = DATA;
-    try {
-      await switchWorkspace(c.workspace);
-      await rename(temp, file);
-    } catch (error) {
-      await switchWorkspace(previousWorkspace);
-      throw error;
-    }
-    current = c;
-    return readConfig();
-  } finally {
-    configUpdating = false;
-  }
 }
 
 /** Request-local snapshot. Never expose this through an HTTP response. */

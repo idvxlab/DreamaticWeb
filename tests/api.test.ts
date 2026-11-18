@@ -82,6 +82,7 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       versions: [],
     }),
   );
+  const secret = "test-private-key-not-for-browser";
   const server = spawn(
     process.execPath,
     ["--import", "tsx", "apps/server/src/index.ts"],
@@ -91,7 +92,12 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
         PORT: "0",
         HOST: "127.0.0.1",
         DREAMATIC_WORKSPACE: workspace,
-        DREAMATIC_MODE: "demo",
+        // The model configuration comes only from the server's environment (.env).
+        DREAMATIC_MODE: "live",
+        DREAMATIC_MODEL_MODE: "openai-compatible",
+        DREAMATIC_BASE_URL: upstream.baseUrl + "/chat/completions",
+        DREAMATIC_MODEL: "test-model",
+        DREAMATIC_API_KEY: secret,
         DREAMATIC_ACCESS_TOKEN: "test-access",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -147,54 +153,24 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       (await (await request("/projects/" + interrupted)).json()).status,
       "error",
     );
+    // Read from .env: shown without the key, and never changed from the browser.
     const cfg = await (await request("/config")).json();
-    const secret = "test-private-key-not-for-browser";
-    const saved = await request("/config", {
-      method: "PUT",
-      body: JSON.stringify({
-        ...cfg,
-        mode: "live",
-        models: {
-          ...cfg.models,
-          reasoning: {
-            ...cfg.models.reasoning,
-            mode: "openai-compatible",
-            baseUrl: upstream.baseUrl,
-            model: "test-model",
-            apiKey: secret,
-          },
-        },
-      }),
-    });
-    assert.equal(saved.status, 200);
-    assert.equal((await saved.json()).models.reasoning.hasApiKey, true);
+    assert.equal(cfg.mode, "live");
+    assert.equal(cfg.models.reasoning.model, "test-model");
+    assert.equal(cfg.models.reasoning.baseUrl, upstream.baseUrl);
+    assert.equal(cfg.models.reasoning.hasApiKey, true);
     assert.ok(!(await (await request("/config")).text()).includes(secret));
-    assert.equal(
-      (await stat(path.join(workspace, "settings.json"))).mode & 0o777,
-      0o600,
-    );
-    assert.match(
-      await readFile(path.join(workspace, "settings.json"), "utf8"),
-      new RegExp(secret),
-    );
     assert.equal(
       (
         await request("/config", {
           method: "PUT",
-          body: JSON.stringify({
-            ...cfg,
-            models: {
-              ...cfg.models,
-              reasoning: {
-                ...cfg.models.reasoning,
-                baseUrl: "file:///etc/passwd",
-              },
-            },
-          }),
+          body: JSON.stringify({ ...cfg, models: { ...cfg.models, reasoning: { ...cfg.models.reasoning, model: "other" } } }),
         })
       ).status,
-      400,
+      405,
     );
+    assert.equal((await (await request("/config")).json()).models.reasoning.model, "test-model");
+    await assert.rejects(() => stat(path.join(workspace, "settings.json")), { code: "ENOENT" });
     const p = await (await request("/projects", { method: "POST" })).json();
     const form = new FormData();
     form.append(
@@ -406,42 +382,6 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
     assert.deepEqual(
       await readdir(path.join(workspace, "trash")).catch(() => []),
       [],
-    );
-    const alternate = path.join(workspace, "alternate");
-    const currentConfig = await (await request("/config")).json();
-    assert.equal(
-      (
-        await request("/config", {
-          method: "PUT",
-          body: JSON.stringify({ ...currentConfig, workspace: alternate }),
-        })
-      ).status,
-      200,
-    );
-    assert.equal(
-      (await (await request("/config")).json()).workspace,
-      alternate,
-    );
-    const other = await (await request("/projects", { method: "POST" })).json();
-    assert.ok(
-      await stat(path.join(alternate, "projects", other.id, "project.json")),
-    );
-    assert.equal(
-      (
-        await request("/config", {
-          method: "PUT",
-          body: JSON.stringify({ ...currentConfig, workspace }),
-        })
-      ).status,
-      200,
-    );
-    assert.ok(
-      !(await (await request("/projects")).json()).some(
-        (item: any) => item.id === other.id,
-      ),
-    );
-    assert.ok(
-      await stat(path.join(alternate, "projects", other.id, "project.json")),
     );
   } finally {
     const exit = new Promise((r) => server.once("exit", r));
