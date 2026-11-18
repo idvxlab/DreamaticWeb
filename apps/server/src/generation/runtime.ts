@@ -211,7 +211,9 @@ async function execute(
     patchOperations: 0,
     fullPageWrites: 0,
     inputTokens: 0,
+    cachedInputTokens: 0,
     outputTokens: 0,
+    reasoningTokens: 0,
     skillCharacters: 0,
     skillLoads: 0,
     skillReads: 0,
@@ -530,8 +532,14 @@ async function execute(
           event.type === "message_end" &&
           event.message.role === "assistant"
         ) {
-          metrics.inputTokens += event.message.usage.input;
-          metrics.outputTokens += event.message.usage.output;
+          // The whole prompt as the provider counts it: Pi reports the part read from the
+          // provider's cache (and written to it) apart from the rest.
+          const u = event.message.usage;
+          const cached = (u.cacheRead || 0) + (u.cacheWrite || 0);
+          metrics.inputTokens += u.input + cached;
+          metrics.cachedInputTokens += cached;
+          metrics.outputTokens += u.output;
+          metrics.reasoningTokens += (u as { reasoning?: number }).reasoning || 0;
         }
         if (event.type === "tool_execution_end") lastTool = event.toolName;
       });

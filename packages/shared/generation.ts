@@ -78,8 +78,14 @@ export interface GenerationState {
     skills?: { analyst: string[]; designer: string[] };
   };
   metrics?: {
+    /** Every prompt token the provider counted, including those read from its cache. */
     inputTokens?: number;
+    /** Of inputTokens, those read from or written to the provider's prompt cache. */
+    cachedInputTokens?: number;
+    /** Output tokens, including reasoning. */
     outputTokens?: number;
+    /** Of outputTokens, those spent on reasoning. */
+    reasoningTokens?: number;
     skillCharacters?: number;
     skillLoads?: number;
     skillReads?: number;

@@ -78,7 +78,7 @@ function answer(model: Parameters<StreamFn>[0], name: string, args: unknown) {
     usage: {
       input: 10,
       output: 10,
-      cacheRead: 0,
+      cacheRead: 4,
       cacheWrite: 0,
       totalTokens: 20,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
@@ -252,7 +252,10 @@ test("real Pi stages: first generation 3 calls, selected-fact edit 1, duplicate 
         .skills!.includes("analyst-information-extraction"),
     );
     assert.ok(p.generation!.metrics!.skillCharacters! > 0);
-    assert.equal(p.generation!.metrics!.inputTokens, 30);
+    // Three requests of 10 uncached and 4 cached prompt tokens: all 14 of each count as input.
+    assert.equal(p.generation!.metrics!.inputTokens, 42);
+    assert.equal(p.generation!.metrics!.cachedInputTokens, 12);
+    assert.equal(p.generation!.metrics!.outputTokens, 30);
     await run("创建品牌网页");
     assert.equal(
       seen.length,
