@@ -10,8 +10,8 @@ export function setLanguage(next: Language) {
   for (const listener of listeners) listener();
 }
 const english: Record<string, string> = {
-  "由服务器配置": "Configured on the server",
-  "模型与系统设置来自服务器的 .env 文件，修改后重启服务生效；这里只能查看。": "Model and system settings come from the server's .env file and apply after a restart; they can only be viewed here.",
+  "模型由服务器配置": "Models configured on the server",
+  "模型设置来自服务器的 .env 文件，修改后重启服务生效，这里只能查看；系统设置可以在这里修改。": "Model settings come from the server's .env file and apply after a restart; they can only be viewed here. System settings can be changed here.",
   "已配置": "Configured",
   "是": "Yes",
   "否": "No",

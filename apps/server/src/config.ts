@@ -1,4 +1,6 @@
-import { DATA } from "./store.js";
+import { readFile, writeFile, rename } from "node:fs/promises";
+import path from "node:path";
+import { DATA, SETTINGS_ROOT, switchWorkspace } from "./store.js";
 import {
   configSchema,
   normalizeEndpoint,
@@ -10,6 +12,11 @@ export {
   configSchema,
   type RuntimeConfig,
 } from "../../../packages/shared/config.js";
+const ROOT_PATH = process.cwd();
+const file = path.join(SETTINGS_ROOT, "settings.json");
+/** The settings the browser may change; the models stay in .env. Unknown keys (models) are dropped. */
+const systemSchema = configSchema.pick({ mode: true, workspace: true, language: true });
+type SystemSettings = ReturnType<typeof systemSchema.parse>;
 let current: RuntimeConfig | undefined;
 function envProfile(prefix: string): ModelProfile {
   return {
@@ -65,8 +72,9 @@ export function readConfig(): PublicConfig {
   };
 }
 /**
- * The configuration is read from the server's environment (.env) at start and only there: the
- * browser shows it and never changes it. Restart the server after changing .env.
+ * Models come only from the server's environment (.env): the browser shows them and never changes
+ * them; restart the server after editing .env. The system settings (workspace, language, mode) start
+ * from .env and may be changed in the browser; those changes are saved in settings.json.
  */
 export async function initConfig() {
   const c = initial();
@@ -74,8 +82,44 @@ export async function initConfig() {
     const profile = c.models[key];
     if (profile) profile.baseUrl = normalizeEndpoint(profile.baseUrl);
   }
-  current = configSchema.parse(c);
+  let saved: Partial<SystemSettings> = {};
+  try {
+    saved = systemSchema.partial().parse(JSON.parse(await readFile(file, "utf8")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (saved.workspace) await switchWorkspace(saved.workspace);
+  current = configSchema.parse({ ...c, ...saved, models: c.models });
   current.workspace = DATA;
+}
+export let configUpdating = false;
+/** Saves the system settings only; any model fields in the input are ignored. */
+export async function writeSystemSettings(input: unknown) {
+  if (configUpdating) throw new Error("配置正在保存，请稍后重试");
+  configUpdating = true;
+  try {
+    const s = systemSchema.parse(input);
+    s.workspace = s.workspace || DATA;
+    if (!path.isAbsolute(s.workspace))
+      throw new Error("Workspace 路径必须是绝对路径");
+    s.workspace = path.resolve(s.workspace);
+    if (s.workspace === path.parse(s.workspace).root || s.workspace === ROOT_PATH)
+      throw new Error("请选择独立的 Workspace 目录");
+    const temp = file + "." + crypto.randomUUID() + ".tmp";
+    await writeFile(temp, JSON.stringify(s, null, 2), { mode: 0o600 });
+    const previousWorkspace = DATA;
+    try {
+      await switchWorkspace(s.workspace);
+      await rename(temp, file);
+    } catch (error) {
+      await switchWorkspace(previousWorkspace);
+      throw error;
+    }
+    current = { ...(current || initial()), ...s };
+    return readConfig();
+  } finally {
+    configUpdating = false;
+  }
 }
 
 /** Request-local snapshot. Never expose this through an HTTP response. */

@@ -23,7 +23,12 @@ import { activeRuns, runProject } from "./generation/runtime.js";
 import { requestSchema } from "../../../packages/shared/generation.js";
 import type { RunEvent } from "../../../packages/shared/project.js";
 import { ingest } from "./ingest.js";
-import { initConfig, readConfig } from "./config.js";
+import {
+  initConfig,
+  readConfig,
+  writeSystemSettings,
+  configUpdating,
+} from "./config.js";
 import { pageChecks } from "./page-checks.js";
 import { validatePage } from "./page-validation.js";
 import { APP_VERSION } from "../../../packages/shared/app-info.js";
@@ -97,15 +102,23 @@ app.get("/api/health", (_req, res) =>
   }),
 );
 app.get("/api/config", (_req, res) => res.json(readConfig()));
-app.put("/api/config", (_req, res) =>
-  res.status(405).json({ error: "配置来自服务器的 .env 文件，修改后重启服务生效；页面上不能修改" }),
-);
+// Only the system settings (workspace, language, mode) are saved; the models stay in .env.
+app.put("/api/config", async (req, res) => {
+  if (activeRuns.size || sourceJobs.size)
+    return res.status(409).json({ error: "请等待资料解析结束后再修改配置" });
+  res.json(await writeSystemSettings(req.body));
+});
 app.get("/api/skills/diagnostics", async (_req, res) =>
   res.json((await skillLibrary.catalog()).diagnostics),
 );
 app.get("/api/skills", async (_req, res) =>
   res.json(await skillLibrary.list()),
 );
+app.use("/api/projects", (_req, res, next) => {
+  if (configUpdating)
+    return res.status(409).json({ error: "工作目录正在切换，请稍后重试" });
+  next();
+});
 app.get("/api/projects", async (_req, res) => {
   const list = [];
   for (const name of await projectIds()) {

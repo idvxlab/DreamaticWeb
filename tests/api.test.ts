@@ -153,24 +153,34 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       (await (await request("/projects/" + interrupted)).json()).status,
       "error",
     );
-    // Read from .env: shown without the key, and never changed from the browser.
+    // Models are read from .env: shown without the key, and never changed from the browser.
     const cfg = await (await request("/config")).json();
     assert.equal(cfg.mode, "live");
     assert.equal(cfg.models.reasoning.model, "test-model");
     assert.equal(cfg.models.reasoning.baseUrl, upstream.baseUrl);
     assert.equal(cfg.models.reasoning.hasApiKey, true);
     assert.ok(!(await (await request("/config")).text()).includes(secret));
+    // The system settings can be saved; model fields sent along are ignored.
+    const saved = await request("/config", {
+      method: "PUT",
+      body: JSON.stringify({
+        ...cfg,
+        language: "en",
+        models: { ...cfg.models, reasoning: { ...cfg.models.reasoning, model: "other", apiKey: "x" } },
+      }),
+    });
+    assert.equal(saved.status, 200);
+    const applied = await saved.json();
+    assert.equal(applied.language, "en");
+    assert.equal(applied.models.reasoning.model, "test-model");
+    const settingsFile = path.join(workspace, "settings.json");
+    assert.equal((await stat(settingsFile)).mode & 0o777, 0o600);
+    const settingsText = await readFile(settingsFile, "utf8");
+    assert.ok(!settingsText.includes("models") && !settingsText.includes(secret));
     assert.equal(
-      (
-        await request("/config", {
-          method: "PUT",
-          body: JSON.stringify({ ...cfg, models: { ...cfg.models, reasoning: { ...cfg.models.reasoning, model: "other" } } }),
-        })
-      ).status,
-      405,
+      (await request("/config", { method: "PUT", body: JSON.stringify({ ...cfg, workspace: "relative" }) })).status,
+      400,
     );
-    assert.equal((await (await request("/config")).json()).models.reasoning.model, "test-model");
-    await assert.rejects(() => stat(path.join(workspace, "settings.json")), { code: "ENOENT" });
     const p = await (await request("/projects", { method: "POST" })).json();
     const form = new FormData();
     form.append(
@@ -383,6 +393,20 @@ test("HTTP ingestion, model configuration persistence, authorization, conflict a
       await readdir(path.join(workspace, "trash")).catch(() => []),
       [],
     );
+    const alternate = path.join(workspace, "alternate");
+    const currentConfig = await (await request("/config")).json();
+    assert.equal(
+      (await request("/config", { method: "PUT", body: JSON.stringify({ ...currentConfig, workspace: alternate }) })).status,
+      200,
+    );
+    assert.equal((await (await request("/config")).json()).workspace, alternate);
+    const other = await (await request("/projects", { method: "POST" })).json();
+    assert.ok(await stat(path.join(alternate, "projects", other.id, "project.json")));
+    assert.equal(
+      (await request("/config", { method: "PUT", body: JSON.stringify({ ...currentConfig, workspace }) })).status,
+      200,
+    );
+    assert.ok(!(await (await request("/projects")).json()).some((item: any) => item.id === other.id));
   } finally {
     const exit = new Promise((r) => server.once("exit", r));
     server.kill();

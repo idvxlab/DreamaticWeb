@@ -2250,6 +2250,13 @@ a:focus-visible {
   color: #ab4029;
   background: #fff0e9;
 }
+.config-saved {
+  margin: 0;
+  padding: 10px 20px;
+  font-size: 12px;
+  color: #59674b;
+  background: #f1f4e6;
+}
 .config-modal footer {
   flex-shrink: 0;
 }

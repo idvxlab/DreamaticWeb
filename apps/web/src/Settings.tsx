@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { SlidersHorizontal, X } from "lucide-react";
+import { Save, SlidersHorizontal, X } from "lucide-react";
 import { api, token } from "./api";
 import { useI18n } from "./i18n";
 import { APP_NAME, APP_VERSION } from "../../../packages/shared/app-info";
@@ -7,10 +7,11 @@ import type { PublicConfig } from "../../../packages/shared/config";
 type Profile = PublicConfig["models"]["reasoning"];
 type Tab = "reasoning" | "analyst" | "designer" | "system";
 
-/** The server's configuration, read from its .env file: shown here, never changed from the browser. */
+/** Models come from the server's .env and are only shown here; the system settings can be changed and saved. */
 export default function Settings({
   onApplied,
   onClose,
+  running,
 }: {
   onApplied: () => void;
   onClose: () => void;
@@ -21,10 +22,46 @@ export default function Settings({
   const [tab, setTab] = useState<Tab>("reasoning");
   const [error, setError] = useState("");
   const [accessToken, setAccessToken] = useState(token());
+  const [saved, setSaved] = useState<PublicConfig>();
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const dirty =
+    !!config &&
+    !!saved &&
+    (config.workspace !== saved.workspace ||
+      config.language !== saved.language ||
+      config.mode !== saved.mode);
+  async function submit() {
+    if (!config || saving || running || !dirty) return;
+    setSaving(true);
+    setError("");
+    setDone(false);
+    try {
+      const applied = await api<PublicConfig>("/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          workspace: config.workspace,
+          language: config.language,
+          mode: config.mode,
+        }),
+      });
+      setConfig(applied);
+      setSaved(applied);
+      setDone(true);
+      onApplied();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
   const dialog = useRef<HTMLElement>(null);
   useEffect(() => {
     api<PublicConfig>("/config")
-      .then(setConfig)
+      .then((c) => {
+        setConfig(c);
+        setSaved(c);
+      })
       .catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
@@ -56,7 +93,7 @@ export default function Settings({
         aria-labelledby="settings-title"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
+          if (e.key === "Escape" && !saving) onClose();
         }}
       >
         <header>
@@ -65,7 +102,7 @@ export default function Settings({
           </div>
           <span>
             <strong id="settings-title">{t("系统设置")}</strong>
-            <small>{t("由服务器配置")}</small>
+            <small>{t("模型由服务器配置")}</small>
           </span>
           <button type="button" aria-label={t("关闭设置")} onClick={onClose}>
             <X size={16} />
@@ -76,7 +113,7 @@ export default function Settings({
             {APP_NAME} v{APP_VERSION}
           </code>
           <span>
-            {t("模型与系统设置来自服务器的 .env 文件，修改后重启服务生效；这里只能查看。")}
+            {t("模型设置来自服务器的 .env 文件，修改后重启服务生效，这里只能查看；系统设置可以在这里修改。")}
           </span>
         </div>
         <div className="config-tabs" role="tablist" aria-label={t("配置模块")}>
@@ -95,7 +132,12 @@ export default function Settings({
             </button>
           ))}
         </div>
-        <form onSubmit={(e) => e.preventDefault()}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
           <div
             className="config-form"
             role="tabpanel"
@@ -125,9 +167,47 @@ export default function Settings({
               <>
                 {config && (
                   <>
-                    {field(t("Workspace 路径"), config.workspace, true)}
-                    {field(t("界面语言"), config.language === "en" ? "English" : "简体中文")}
-                    {field(t("运行模式"), config.mode === "demo" ? t("本地演示 · 不调用 AI") : t("实时模型"))}
+                    <label className="config-wide">
+                      <span>{t("Workspace 路径")}</span>
+                      <input
+                        aria-label={t("Workspace 路径")}
+                        value={config.workspace}
+                        disabled={saving}
+                        placeholder="/absolute/path/to/workspace"
+                        onChange={(e) => setConfig({ ...config, workspace: e.target.value })}
+                      />
+                      <small className="config-help">
+                        {t("保存后切换工作目录，原目录中的项目保留在原位置。")}
+                      </small>
+                    </label>
+                    <label>
+                      <span>{t("界面语言")}</span>
+                      <select
+                        aria-label={t("界面语言")}
+                        value={config.language}
+                        disabled={saving}
+                        onChange={(e) =>
+                          setConfig({ ...config, language: e.target.value as "zh" | "en" })
+                        }
+                      >
+                        <option value="zh">简体中文</option>
+                        <option value="en">English</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t("运行模式")}</span>
+                      <select
+                        aria-label={t("运行模式")}
+                        value={config.mode}
+                        disabled={saving}
+                        onChange={(e) =>
+                          setConfig({ ...config, mode: e.target.value as "live" | "demo" })
+                        }
+                      >
+                        <option value="live">{t("实时模型")}</option>
+                        <option value="demo">{t("本地演示 · 不调用 AI")}</option>
+                      </select>
+                    </label>
                   </>
                 )}
                 <label className="config-wide">
@@ -157,10 +237,24 @@ export default function Settings({
               {t(error)}
             </p>
           )}
+          {done && !error && <p className="config-saved" role="status">{t("配置已保存")}</p>}
+          {running && tab === "system" && (
+            <p className="config-error">{t("生成期间不能更换配置，请先停止任务。")}</p>
+          )}
           <footer>
-            <button type="button" onClick={onClose}>
+            <button type="button" disabled={saving} onClick={onClose}>
               {t("关闭")}
             </button>
+            {tab === "system" && (
+              <button
+                type="submit"
+                className="primary"
+                disabled={saving || running || !config || !dirty}
+              >
+                <Save size={14} />
+                {saving ? t("保存中…") : t("保存")}
+              </button>
+            )}
           </footer>
         </form>
       </section>
