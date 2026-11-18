@@ -5,7 +5,7 @@ import {
   type StreamFn,
   type AgentMessage,
 } from "@earendil-works/pi-agent-core";
-import { pageScreenshots, type PageGap } from "../page-render.js";
+import { pageOverflow, pageScreenshots, type PageGap } from "../page-render.js";
 import { markGaps, reviewPatchHtml, stripGaps, tagElements, type ReviewOperation } from "./page-patch.js";
 import { Type } from "typebox";
 import { readFile, stat } from "node:fs/promises";
@@ -865,6 +865,15 @@ async function execute(
           appliedFactIds?: string[];
         }
       | undefined;
+    // A page wider than the window is never accepted: the Designer is told which elements reach past the edge.
+    async function refuseOverflow(html: string) {
+      const wide = await pageOverflow(p.id, html);
+      if (wide.length)
+        throw new Error(
+          "页面比窗口宽，出现横向滚动；改正后重新提交（例如给图片 max-width: 100%、height: auto，表格或代码放进可横向滚动的容器，去掉固定的大宽度）：" +
+            wide.join("；"),
+        );
+    }
     async function accept(
       html: string,
       operations: number,
@@ -892,6 +901,7 @@ async function execute(
           "页面结构需要修正：" +
             JSON.stringify(report.issues.filter((i) => i.severity === "error")),
         );
+      await refuseOverflow(report.html);
       if (anchors.repaired.length)
         report.issues.push({
           severity: "warning",
@@ -1238,6 +1248,7 @@ async function execute(
                 "修改后的页面结构需要修正：" +
                   JSON.stringify(report.issues.filter((i) => i.severity === "error")),
               );
+            await refuseOverflow(report.html);
             accepted = {
               ...accepted,
               html: report.html,

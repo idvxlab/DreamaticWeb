@@ -234,3 +234,58 @@ export async function pageScreenshots(
     await browser.close().catch(() => {});
   }
 }
+
+/** In the page: the outermost elements reaching past the right edge, when the page scrolls sideways. */
+const OVERFLOW_SCRIPT = `(() => {
+  const W = document.documentElement.clientWidth;
+  if (document.documentElement.scrollWidth <= W + 1) return [];
+  const clipped = (e) => { for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) if (/hidden|clip|auto|scroll/.test(getComputedStyle(a).overflowX)) return true; return false; };
+  const out = [];
+  for (const e of document.querySelectorAll("body *")) {
+    const r = e.getBoundingClientRect();
+    if (r.width > 0 && r.right > W + 1 && !clipped(e) && !out.some((o) => o.contains(e))) out.push(e);
+  }
+  return out.slice(0, 6).map((e) => {
+    const r = e.getBoundingClientRect();
+    const alt = (e.getAttribute("alt") || "").trim();
+    const name = e.tagName.toLowerCase() + (e.id ? "#" + e.id : "") + [...e.classList].slice(0, 3).map((c) => "." + c).join("") + (alt ? " (alt «" + alt.slice(0, 40) + "»)" : "");
+    return name + " " + Math.round(r.width) + "px wide, reaching " + Math.round(r.right) + "px";
+  });
+})()`;
+
+/**
+ * Whether the rendered page is wider than the window, at desktop and phone width: the elements
+ * that reach past the right edge (outermost only), described so the Designer can find them.
+ * Empty when nothing overflows or no browser is available.
+ */
+export async function pageOverflow(projectId: string, html: string) {
+  let chromium;
+  try {
+    ({ chromium } = await import("playwright-core"));
+  } catch {
+    return [];
+  }
+  let browser;
+  try {
+    browser = await chromium.launch({ channel: "chrome", headless: true }).catch(() => chromium.launch({ headless: true }));
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  try {
+    const content = await inlinePageAssets(projectId, html);
+    for (const width of [WIDTH, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.route("**/*", (route) =>
+        route.request().url().startsWith("data:") ? route.continue() : route.abort(),
+      );
+      await page.setContent(content, { waitUntil: "load", timeout: 20000 });
+      const wide = (await page.evaluate(OVERFLOW_SCRIPT)) as string[];
+      await page.close();
+      if (wide.length) found.push(`at ${width}px wide: ` + wide.join("; "));
+    }
+  } finally {
+    await browser.close().catch(() => {});
+  }
+  return found;
+}

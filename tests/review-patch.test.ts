@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { markGaps, reviewPatchHtml, stripGaps, tagElements } from "../apps/server/src/generation/page-patch.js";
-import { pageScreenshots, type PageGap } from "../apps/server/src/page-render.js";
+import { pageOverflow, pageScreenshots, type PageGap } from "../apps/server/src/page-render.js";
 
 const page = `<!doctype html><html><head><style>.row{display:grid}</style></head><body><main>
 <section id="a"><div class="row"><figure id="f"><img src="/assets/x/1.png"></figure><div id="t"><p id="p1">First paragraph.</p><p id="p2">Second paragraph.</p></div></div></section>
@@ -115,4 +115,18 @@ test("the rendered page is measured for blanks beside pictures, and a balanced r
   const shots = await pageScreenshots("no-such-project", tagElements(html), undefined, (g) => (gaps = g));
   if (!shots.length) return; // no browser on this machine
   assert.deepEqual(gaps.map((g) => [g.kind, g.heading]), [["row", "Tall picture"], ["alone", "Alone"], ["alone", "Narrow in a wide figure"], ["wrapped", "Wrapped"]]);
+});
+
+test("a page wider than the window is found at desktop and phone width, with the element that reaches past the edge", async () => {
+  const wide = `<!doctype html><html><body><h1>Wide</h1><img id="big" alt="A wide banner" src="data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='2400' height='300'/>")}"></body></html>`;
+  let found: string[];
+  try {
+    found = await pageOverflow("no-such-project", wide);
+  } catch {
+    return; // no browser on this machine
+  }
+  assert.equal(found.length, 2);
+  assert.match(found[0], /^at 1440px wide: img#big \(alt «A wide banner»\) 2400px wide/);
+  assert.match(found[1], /^at 390px wide: img#big/);
+  assert.deepEqual(await pageOverflow("no-such-project", wide.replace('<img id="big"', '<img id="big" style="max-width:100%"')), []);
 });
