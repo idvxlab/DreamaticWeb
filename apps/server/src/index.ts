@@ -5,7 +5,7 @@ import { readSourceMarkdown } from "./source-content.js";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir, mkdtemp, rm, readdir } from "node:fs/promises";
 import { z } from "zod";
 import {
   create,
@@ -16,6 +16,7 @@ import {
   projectDir,
   projectIds,
   publicProject,
+  DATA,
 } from "./store.js";
 import { extractUrl, FORMATS } from "./extract.js";
 import { skillLibrary } from "./generation/skills.js";
@@ -28,12 +29,42 @@ import {
   readConfig,
   writeConfig,
   configUpdating,
+  runtimeConfig,
 } from "./config.js";
 import { pageChecks } from "./page-checks.js";
 import { validatePage } from "./page-validation.js";
 import { APP_VERSION } from "../../../packages/shared/app-info.js";
+import {
+  CapacityError,
+  generationQueue,
+  importQueue,
+  uploadSlots,
+  integerEnv,
+} from "./capacity.js";
+import { modelCapacity } from "./generation/model-capacity.js";
+import {
+  authenticate,
+  checkProjectOwner,
+  HttpError,
+  initUsers,
+  multiUser,
+} from "./users.js";
+import {
+  readUserConfig,
+  userRuntimeConfig,
+  writeUserConfig,
+  requireUserModel,
+} from "./user-config.js";
+import type { RuntimeConfig } from "../../../packages/shared/config.js";
 await initStore();
-await initConfig();
+if (!multiUser) await initConfig();
+await initUsers();
+// Only our disposable upload directories are removed after an interrupted upload.
+const incoming = path.join(DATA, ".incoming");
+await mkdir(incoming, { recursive: true });
+for (const entry of await readdir(incoming))
+  if (/^upload-[a-zA-Z0-9]{6}$/.test(entry))
+    await rm(path.join(incoming, entry), { recursive: true, force: true });
 await skillLibrary.catalog();
 // Interrupted runs retain persisted artifacts and the pending request for explicit resume.
 for (const name of await projectIds()) {
@@ -57,6 +88,7 @@ app.use(express.json({ limit: "6mb" }));
 const listeners = new Map<string, Set<express.Response>>();
 app.use("/api", (req, res, next) => {
   if (
+    !multiUser &&
     !process.env.DREAMATIC_ACCESS_TOKEN &&
     !["127.0.0.1", "localhost", "[::1]", "::1"].includes(req.hostname)
   )
@@ -70,12 +102,18 @@ app.use("/api", (req, res, next) => {
       return res.status(403).end();
     }
   }
+  if (multiUser) {
+    authenticate(req, res);
+    return next();
+  }
   const token = process.env.DREAMATIC_ACCESS_TOKEN;
   if (token && req.headers.authorization !== "Bearer " + token)
     return res.status(401).json({ error: "请输入访问令牌" });
   next();
 });
-app.get("/assets/:project/:file", (req, res) => {
+app.get("/assets/:project/:file", async (req, res) => {
+  authenticate(req, res, true);
+  await checkProjectOwner(req.params.project, res.locals.userId);
   if (!/^[a-f\d-]{36}\.[a-z\d]+$/i.test(req.params.file))
     return res.status(404).end();
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -84,25 +122,40 @@ app.get("/assets/:project/:file", (req, res) => {
     root: path.join(projectDir(req.params.project), "assets"),
   });
 });
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024, files: 12, fields: 2 },
-});
-app.get("/api/health", (_req, res) =>
+app.get("/api/health", async (_req, res) => {
+  const config = multiUser
+    ? await readUserConfig(res.locals.userId)
+    : readConfig();
   res.json({
     ok: true,
     version: APP_VERSION,
-    language: readConfig().language,
-    mode: readConfig().mode,
+    language: config.language,
+    mode: config.mode,
+    userId: config.userId,
+    multiUser,
     generationAvailable: true,
     harness: "pi-agent-core@1.3.0",
-    provider: readConfig().models.reasoning.mode,
-    model: readConfig().models.reasoning.model,
+    provider: config.models.reasoning.mode,
+    model: config.models.reasoning.model,
     formats: FORMATS,
+  });
+});
+app.get("/api/config", async (_req, res) =>
+  res.json(multiUser ? await readUserConfig(res.locals.userId) : readConfig()),
+);
+app.get("/api/capacity", (_req, res) =>
+  res.json({
+    uploads: uploadSlots.snapshot(),
+    imports: importQueue.snapshot(),
+    generation: generationQueue.snapshot(),
+    models: modelCapacity.snapshot(),
   }),
 );
-app.get("/api/config", (_req, res) => res.json(readConfig()));
 app.put("/api/config", async (req, res) => {
+  if (multiUser) {
+    res.json(await writeUserConfig(res.locals.userId, req.body));
+    return;
+  }
   if (activeRuns.size || sourceJobs.size)
     return res.status(409).json({ error: "请等待资料解析结束后再修改配置" });
   res.json(await writeConfig(req.body));
@@ -123,6 +176,7 @@ app.get("/api/projects", async (_req, res) => {
   for (const name of await projectIds()) {
     try {
       const p = await get(name);
+      if (multiUser && p.ownerId !== res.locals.userId) continue;
       list.push({
         id: p.id,
         title: p.title,
@@ -135,12 +189,25 @@ app.get("/api/projects", async (_req, res) => {
 });
 
 app.post("/api/projects", async (_req, res) =>
-  res.status(201).json(await create()),
+  res.status(201).json(await create(res.locals.userId)),
 );
+// One ownership gate covers reads, events, files, generation, resume, edits and deletion.
+app.use("/api/projects/:id", async (req, res, next) => {
+  await checkProjectOwner(String(req.params.id), res.locals.userId);
+  next();
+});
 app.get("/api/projects/:id", async (req, res) =>
   res.json(publicProject(await get(req.params.id))),
 );
+app.get("/api/projects/:id/scheduling", async (req, res) => {
+  await get(req.params.id);
+  res.json({
+    generation: generationQueue.state(req.params.id),
+    importing: sourceJobs.has(req.params.id),
+  });
+});
 const sourceJobs = new Set<string>();
+const sourceControllers = new Map<string, AbortController>();
 function mutable(id: string) {
   if (sourceJobs.has(id)) throw new Error("资料正在解析，请完成后再继续");
   if (activeRuns.has(id))
@@ -169,45 +236,88 @@ app.delete("/api/projects/:id", async (req, res) => {
     sourceJobs.delete(p.id);
   }
 });
-app.post(
-  "/api/projects/:id/sources",
-  upload.array("files", 12),
-  async (req, res) => {
-    const p = await get(String(req.params.id));
-    mutable(p.id);
-    sourceJobs.add(p.id);
-    const results = [];
-    const errors = [];
-    try {
-      for (const f of (req.files as Express.Multer.File[]) || []) {
-        try {
-          const name = Buffer.from(f.originalname, "latin1").toString("utf8");
-          const s = await ingest(f.buffer, name, p.id, p.sources);
-          if (!p.sources.some((source) => source.id === s.id))
-            p.sources.push(s);
-          results.push(s);
-          delete p.sourceRecoveryWarning;
-        } catch (e) {
-          errors.push({
-            name: f.originalname,
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
+app.post("/api/projects/:id/sources", async (req, res) => {
+  const p = await get(String(req.params.id));
+  mutable(p.id);
+  // Admission happens before receiving the body. Files waiting to parse stay on disk.
+  const uploadTicket = uploadSlots.acquire();
+  sourceJobs.add(p.id);
+  const controller = new AbortController();
+  sourceControllers.set(p.id, controller);
+  const disconnected = () => {
+    if (!res.writableEnded) controller.abort(new Error("上传连接已断开"));
+  };
+  res.once("close", disconnected);
+  req.once("aborted", disconnected);
+  const releaseUpload = await uploadTicket.ready;
+  let tempDir: string | undefined;
+  const results = [];
+  const errors = [];
+  try {
+    const root = path.join(DATA, ".incoming");
+    await mkdir(root, { recursive: true });
+    tempDir = await mkdtemp(path.join(root, "upload-"));
+    const receive = multer({
+      dest: tempDir,
+      limits: { fileSize: 30 * 1024 * 1024, files: 12, fields: 2 },
+    }).array("files", 12);
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        req.unpipe();
+        reject(controller.signal.reason);
+      };
+      controller.signal.addEventListener("abort", abort, { once: true });
+      if (controller.signal.aborted) {
+        abort();
+        return;
       }
-      await save(p);
-      res.json({ sources: results, errors });
-    } finally {
-      sourceJobs.delete(p.id);
+      receive(req, res, (error) => {
+        controller.signal.removeEventListener("abort", abort);
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    releaseUpload();
+    for (const f of (req.files as Express.Multer.File[]) || []) {
+      try {
+        const name = Buffer.from(f.originalname, "latin1").toString("utf8");
+        const s = await importQueue.run(async () => {
+          const buffer = await readFile(f.path, { signal: controller.signal });
+          return ingest(buffer, name, p.id, p.sources, controller.signal);
+        }, controller.signal);
+        if (!p.sources.some((source) => source.id === s.id)) p.sources.push(s);
+        results.push(s);
+        delete p.sourceRecoveryWarning;
+      } catch (e) {
+        if (e instanceof CapacityError || controller.signal.aborted) throw e;
+        errors.push({
+          name: f.originalname,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
     }
-  },
-);
+    await save(p);
+    res.json({ sources: results, errors });
+  } catch (error) {
+    if (results.length) await save(p);
+    throw error;
+  } finally {
+    controller.abort();
+    res.removeListener("close", disconnected);
+    req.removeListener("aborted", disconnected);
+    releaseUpload();
+    sourceJobs.delete(p.id);
+    sourceControllers.delete(p.id);
+    if (tempDir) await rm(tempDir, { recursive: true, force: true });
+  }
+});
 app.post("/api/projects/:id/url", async (req, res) => {
   const p = await get(req.params.id);
   mutable(p.id);
   const { url } = z.object({ url: z.url().max(2048) }).parse(req.body);
   sourceJobs.add(p.id);
   try {
-    const s = await extractUrl(url, p.id, p.sources);
+    const s = await importQueue.run(() => extractUrl(url, p.id, p.sources));
     if (!p.sources.some((source) => source.id === s.id)) p.sources.push(s);
     await save(p);
     res.json(s);
@@ -239,24 +349,36 @@ function emit(id: string, event: RunEvent) {
 function start(
   p: Awaited<ReturnType<typeof get>>,
   input: unknown,
+  config: RuntimeConfig,
   resume = false,
 ) {
   const request = requestSchema.parse(input);
-  void runProject(p, request, save, (event) => emit(p.id, event), {
+  const done = runProject(p, request, save, (event) => emit(p.id, event), {
     resume,
-  }).catch((error) =>
+    config,
+  });
+  void done.catch((error) =>
     console.error(
       "任务保存失败：",
       error instanceof Error ? error.message : String(error),
     ),
   );
+  return generationQueue.state(p.id);
+}
+async function requestConfig(res: express.Response) {
+  if (!multiUser) return runtimeConfig();
+  const config = await userRuntimeConfig(res.locals.userId);
+  requireUserModel(config);
+  return config;
 }
 app.post("/api/projects/:id/run", async (req, res) => {
+  const config = await requestConfig(res);
   const p = await get(req.params.id);
   mutable(p.id);
   const request = requestSchema.parse(req.body);
   if (p.status === "needs_input")
     return res.status(409).json({ error: "请先回答待确认的问题" });
+  generationQueue.ensureCapacity();
   p.messages.push({
     role: "user",
     text: request.text,
@@ -264,22 +386,25 @@ app.post("/api/projects/:id/run", async (req, res) => {
   });
   if (!p.titleEdited && p.title === "未命名网页")
     p.title = request.text.slice(0, 28);
-  start(p, request);
-  res.status(202).json({ ok: true });
+  const scheduling = start(p, request, config);
+  res.status(202).json({ ok: true, scheduling });
 });
 app.post("/api/projects/:id/resume", async (req, res) => {
+  const config = await requestConfig(res);
   const p = await get(req.params.id);
   if (activeRuns.has(p.id))
     return res.status(202).json({ ok: true, alreadyRunning: true });
   mutable(p.id);
   if (!p.generation?.pending || !["error", "cancelled"].includes(p.status))
     return res.status(409).json({ error: "没有可继续的任务" });
-  start(p, p.generation.pending, true);
-  res.status(202).json({ ok: true });
+  const scheduling = start(p, p.generation.pending, config, true);
+  res.status(202).json({ ok: true, scheduling });
 });
 app.post("/api/projects/:id/questions/:question/answer", async (req, res) => {
+  const config = await requestConfig(res);
   const p = await get(req.params.id);
   mutable(p.id);
+  generationQueue.ensureCapacity();
   const question = p.questions?.find((q) => q.id === req.params.question);
   if (
     !question ||
@@ -316,12 +441,13 @@ app.post("/api/projects/:id/questions/:question/answer", async (req, res) => {
       .join("\n"),
     time: question.answeredAt,
   });
-  start(p, p.generation.pending, true);
+  start(p, p.generation.pending, config, true);
   res.status(202).json({ ok: true });
 });
 app.post("/api/projects/:id/cancel", async (req, res) => {
   await get(req.params.id);
   activeRuns.get(req.params.id)?.abort();
+  sourceControllers.get(req.params.id)?.abort(new Error("已取消资料解析"));
   res.json({ ok: true });
 });
 app.get("/api/projects/:id/sources/:source/original", async (req, res) => {
@@ -430,7 +556,12 @@ app.get("/api/projects/:id/export", async (req, res) => {
   );
   res.type("html").send(html);
 });
-registerBrowserPreview(app);
+app.use("/browser-preview/:project/:snapshot", async (req, res, next) => {
+  authenticate(req, res, true);
+  await checkProjectOwner(String(req.params.project), res.locals.userId);
+  next();
+});
+registerBrowserPreview(app, undefined, { remote: multiUser });
 app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
 app.use(express.static(path.resolve("dist/web")));
 app.get("/{*path}", (_req, res) =>
@@ -443,6 +574,16 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
+    if (res.headersSent || res.destroyed) return;
+    if (err instanceof HttpError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    if (err instanceof CapacityError) {
+      res.setHeader("Retry-After", String(err.retryAfter));
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
     console.error(err instanceof Error ? err.message : err);
     res
       .status(
@@ -458,11 +599,42 @@ app.use(
 const host = process.env.HOST || "127.0.0.1";
 if (
   !["127.0.0.1", "localhost", "::1"].includes(host) &&
-  !process.env.DREAMATIC_ACCESS_TOKEN
+  !process.env.DREAMATIC_ACCESS_TOKEN &&
+  !multiUser
 )
-  throw new Error("对外监听必须设置 DREAMATIC_ACCESS_TOKEN");
+  throw new Error(
+    "对外监听必须设置 DREAMATIC_ACCESS_TOKEN 或 DREAMATIC_USERS_FILE",
+  );
 const server = app.listen(Number(process.env.PORT || 4310), host, () =>
   console.log(
     `Dreamatic · Web http://${host}:${(server.address() as { port: number }).port} (Pi 1.3.0)`,
   ),
 );
+server.requestTimeout = integerEnv(
+  "DREAMATIC_UPLOAD_TIMEOUT_MS",
+  120000,
+  1000,
+  3600000,
+);
+let stopping = false;
+for (const signal of ["SIGINT", "SIGTERM"] as const)
+  process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    generationQueue.close();
+    importQueue.close();
+    uploadSlots.close();
+    for (const controller of activeRuns.values()) controller.abort();
+    for (const controller of sourceControllers.values())
+      controller.abort(new Error("服务正在停止"));
+    server.close();
+    server.closeIdleConnections();
+    const end = Date.now() + 10000;
+    const timer = setInterval(() => {
+      if ((!activeRuns.size && !sourceJobs.size) || Date.now() >= end) {
+        clearInterval(timer);
+        server.closeAllConnections();
+        process.exit(0);
+      }
+    }, 50);
+  });

@@ -582,16 +582,47 @@ export default function Editor({
   // Without manual edits, Preview and Open show the saved page itself, exactly as
   // exported; the editor's re-serialization is only needed for unsaved changes.
   const currentHtml = () => (modified ? getHtml() : html);
+  const [previewHtml, setPreviewHtml] = useState("");
+  useEffect(() => {
+    if (!preview) {
+      setPreviewHtml("");
+      return;
+    }
+    const controller = new AbortController();
+    setPreviewHtml("");
+    void api<{ html: string }>(`/projects/${projectId}/preview-document`, {
+      method: "POST",
+      body: JSON.stringify({ html: currentHtml() }),
+      signal: controller.signal,
+    })
+      .then((result) => {
+        if (!controller.signal.aborted) setPreviewHtml(result.html);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setOpenError(error.message);
+      });
+    return () => controller.abort();
+  }, [preview, projectId, html, modified]);
   async function openInBrowser() {
     if (opening) return;
     setOpening(true);
     setOpenError("");
+    const popup = window.open("about:blank", "_blank");
+    if (popup) popup.opener = null;
     try {
-      await api(`/projects/${projectId}/open`, {
-        method: "POST",
-        body: JSON.stringify({ html: currentHtml() }),
-      });
+      const result = await api<{ url?: string }>(
+        `/projects/${projectId}/open`,
+        {
+          method: "POST",
+          body: JSON.stringify({ html: currentHtml() }),
+        },
+      );
+      if (result.url?.startsWith("/browser-preview/")) {
+        if (!popup) throw new Error(t("请允许弹出窗口后重试"));
+        popup.location.replace(result.url);
+      } else popup?.close();
     } catch (error) {
+      popup?.close();
       setOpenError((error as Error).message);
     } finally {
       setOpening(false);
@@ -737,7 +768,7 @@ export default function Editor({
           <iframe
             title="网页交互预览"
             sandbox="allow-scripts"
-            srcDoc={serializePreviewDocument(currentHtml())}
+            srcDoc={previewHtml ? serializePreviewDocument(previewHtml) : ""}
             style={{
               border: 0,
               height: "100%",

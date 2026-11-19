@@ -16,7 +16,24 @@ const ROOT_PATH = process.cwd();
 const file = path.join(SETTINGS_ROOT, "settings.json");
 let current: RuntimeConfig | undefined;
 function envProfile(prefix: string): ModelProfile {
+  let apiKeys: string[] | undefined;
+  if (process.env[prefix + "_API_KEYS"]) {
+    try {
+      const value = JSON.parse(process.env[prefix + "_API_KEYS"]!);
+      if (
+        !Array.isArray(value) ||
+        !value.length ||
+        value.length > 16 ||
+        value.some((k) => typeof k !== "string" || !k.trim() || k.length > 4096)
+      )
+        throw new Error();
+      apiKeys = [...new Set<string>(value.map((k) => k.trim()))];
+    } catch {
+      throw new Error(prefix + "_API_KEYS 必须是包含 1–16 把密钥的 JSON 数组");
+    }
+  }
   return {
+    ...(apiKeys ? { apiKeys } : {}),
     mode:
       process.env[prefix + "_MODEL_MODE"] === "openai"
         ? "openai"
@@ -60,14 +77,14 @@ function initial(): RuntimeConfig {
     },
   };
 }
-export function readConfig(): PublicConfig {
-  const c = current || initial();
+export function publicConfig(c: RuntimeConfig): PublicConfig {
   const redact = (p: ModelProfile) => ({
     mode: p.mode,
     baseUrl: p.baseUrl,
     model: p.model,
     vision: p.vision,
-    hasApiKey: Boolean(p.apiKey),
+    ...(p.thinking ? { thinking: p.thinking } : {}),
+    hasApiKey: Boolean(p.apiKey || p.apiKeys?.length),
   });
   return {
     workspace: c.workspace || DATA,
@@ -80,6 +97,10 @@ export function readConfig(): PublicConfig {
     },
   };
 }
+export function readConfig(): PublicConfig {
+  return publicConfig(current || initial());
+}
+
 export async function initConfig() {
   try {
     current = configSchema.parse(JSON.parse(await readFile(file, "utf8")));
@@ -90,6 +111,40 @@ export async function initConfig() {
   if (current.workspace) await switchWorkspace(current.workspace);
   current.workspace = DATA;
 }
+export function resolveModelProfiles(next: RuntimeConfig, old: RuntimeConfig) {
+  for (const key of ["reasoning", "analyst", "designer"] as const) {
+    const profile = next.models[key];
+    if (!profile) continue;
+    // Public config never contains the pool. Preserve it for ordinary settings updates.
+    if (
+      profile.apiKeys === undefined &&
+      normalizeEndpoint(profile.baseUrl) ===
+        normalizeEndpoint(old.models[key]?.baseUrl || "") &&
+      profile.mode === old.models[key]?.mode &&
+      profile.model === old.models[key]?.model &&
+      (!profile.apiKey || profile.apiKey === old.models[key]?.apiKey)
+    )
+      profile.apiKeys = old.models[key]?.apiKeys;
+    if (profile.clearApiKey) delete profile.apiKeys;
+    if (
+      (profile.model && !profile.baseUrl) ||
+      (!profile.model && profile.baseUrl) ||
+      (key !== "reasoning" && !profile.model)
+    )
+      throw new Error("请同时填写模型调用 URL 和模型名称");
+    profile.baseUrl = normalizeEndpoint(profile.baseUrl);
+    const sameEndpoint =
+      profile.mode === old.models[key]?.mode &&
+      profile.baseUrl === normalizeEndpoint(old.models[key]?.baseUrl || "");
+    profile.apiKey = profile.clearApiKey
+      ? ""
+      : profile.apiKey?.trim() ||
+        (sameEndpoint ? old.models[key]?.apiKey : "") ||
+        "";
+    delete profile.clearApiKey;
+  }
+}
+
 export let configUpdating = false;
 export async function writeConfig(input: unknown) {
   if (configUpdating) throw new Error("配置正在保存，请稍后重试");
@@ -106,21 +161,7 @@ export async function writeConfig(input: unknown) {
     )
       throw new Error("请选择独立的 Workspace 目录");
     const old = current || initial();
-    for (const key of ["reasoning", "analyst", "designer"] as const) {
-      const profile = c.models[key];
-      if (!profile) continue;
-      if (
-        (profile.model && !profile.baseUrl) ||
-        (!profile.model && profile.baseUrl) ||
-        (key !== "reasoning" && !profile.model)
-      )
-        throw new Error("请同时填写模型调用 URL 和模型名称");
-      profile.baseUrl = normalizeEndpoint(profile.baseUrl);
-      profile.apiKey = profile.clearApiKey
-        ? ""
-        : profile.apiKey?.trim() || old.models[key]?.apiKey || "";
-      delete profile.clearApiKey;
-    }
+    resolveModelProfiles(c, old);
     const temp = file + "." + crypto.randomUUID() + ".tmp";
     await writeFile(temp, JSON.stringify(c, null, 2), { mode: 0o600 });
     const previousWorkspace = DATA;

@@ -35,6 +35,8 @@ export const modelProfileSchema = z.object({
     })
     .optional(),
   apiKey: z.string().max(4096).optional(),
+  /** Equivalent credentials for this endpoint only. Never returned to the browser. */
+  apiKeys: z.array(z.string().trim().min(1).max(4096)).max(16).optional(),
   clearApiKey: z.boolean().optional(),
 });
 export const configSchema = z.object({
@@ -49,10 +51,15 @@ export const configSchema = z.object({
 });
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
 export type RuntimeConfig = z.infer<typeof configSchema>;
-export type PublicProfile = Omit<ModelProfile, "apiKey" | "clearApiKey"> & {
+export type PublicProfile = Omit<
+  ModelProfile,
+  "apiKey" | "apiKeys" | "clearApiKey"
+> & {
   hasApiKey: boolean;
 };
 export type PublicConfig = Omit<RuntimeConfig, "models"> & {
+  userId?: string;
+  workspaceLocked?: boolean;
   models: {
     reasoning: PublicProfile;
     analyst: PublicProfile | null;

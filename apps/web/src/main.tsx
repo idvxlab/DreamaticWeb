@@ -177,7 +177,10 @@ function App() {
     if (project) localStorage.setItem("dreamatic-project", project.id);
   }, [project?.id]);
   useEffect(() => {
+    const identityToken = token();
     const warn = (e: BeforeUnloadEvent) => {
+      // Connecting as another user deliberately clears the old user's drafts.
+      if (token() !== identityToken) return;
       if (dirty || drafts.current.size > 0) {
         e.preventDefault();
         e.returnValue = "";

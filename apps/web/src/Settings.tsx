@@ -10,6 +10,8 @@ import type {
 } from "../../../packages/shared/config";
 type Profile = ModelProfile & { hasApiKey?: boolean };
 type Draft = Omit<RuntimeConfig, "models"> & {
+  userId?: string;
+  workspaceLocked?: boolean;
   models: {
     reasoning: Profile;
     analyst: Profile | null;
@@ -156,7 +158,11 @@ export default function Settings({
           <code>
             {APP_NAME} v{APP_VERSION}
           </code>
-          <span>{t("保存后自动应用于后续任务。密钥仅保存在本机服务端。")}</span>
+          <span>
+            {config?.userId
+              ? `${t("当前用户")}：${config.userId} · ${t("只修改自己的模型配置")}`
+              : t("保存后自动应用于后续任务。密钥仅保存在本机服务端。")}
+          </span>
         </div>
         <div className="config-tabs" role="tablist" aria-label={t("配置模块")}>
           {tabs.map((item, index) => (
@@ -365,14 +371,22 @@ export default function Settings({
                       <input
                         aria-label={t("Workspace 路径")}
                         value={config.workspace}
-                        disabled={saving}
-                        placeholder="/absolute/path/to/workspace"
+                        disabled={saving || config.workspaceLocked}
+                        placeholder={
+                          config.workspaceLocked
+                            ? t("由服务器管理")
+                            : "/absolute/path/to/workspace"
+                        }
                         onChange={(e) =>
                           setConfig({ ...config, workspace: e.target.value })
                         }
                       />
                       <small className="config-help">
-                        {t("保存后切换工作目录，原目录中的项目保留在原位置。")}
+                        {t(
+                          config.workspaceLocked
+                            ? "模型配置与项目按用户隔离，工作目录由服务器管理。"
+                            : "保存后切换工作目录，原目录中的项目保留在原位置。",
+                        )}
                       </small>
                     </label>
 
@@ -415,7 +429,7 @@ export default function Settings({
                   </>
                 )}
                 <label className="config-wide">
-                  <span>{t("服务访问令牌（可选）")}</span>
+                  <span>{t("个人 / 服务访问令牌")}</span>
                   <input
                     type="password"
                     value={accessToken}
@@ -429,8 +443,13 @@ export default function Settings({
                   type="button"
                   disabled={saving}
                   onClick={() => {
-                    sessionStorage.setItem("dreamatic-token", accessToken);
-                    onApplied();
+                    sessionStorage.setItem(
+                      "dreamatic-token",
+                      accessToken.trim(),
+                    );
+                    localStorage.removeItem("dreamatic-project");
+                    // Clear all loaded projects, drafts and unsaved model credentials on identity change.
+                    window.location.reload();
                   }}
                 >
                   {t("链接服务")}

@@ -46,6 +46,7 @@ import { withStyle } from "./style-kit.js";
 import { lenientList } from "./lenient-json.js";
 import { skillLibrary, selectSkills, type SkillLibrary } from "./skills.js";
 import { modelRuntime } from "./model.js";
+import { generationQueue } from "../capacity.js";
 import {
   imagePreview,
   contactSheet,
@@ -190,11 +191,71 @@ export function runProject(
   if (activeRuns.has(project.id))
     throw new Error("该项目正在生成，请先停止或等待完成");
   request = requestSchema.parse(request);
+  if (project.ownerId && !options.config)
+    throw new Error("用户任务缺少专属模型配置");
+  const taskOptions = {
+    ...options,
+    config: structuredClone(options.config || runtimeConfig()),
+  };
   const controller = new AbortController();
+  const ticket = generationQueue.acquire(controller.signal, project.id);
   activeRuns.set(project.id, controller);
-  return execute(project, request, save, emit, controller, options).finally(
-    () => activeRuns.delete(project.id),
-  );
+  // Keep the existing public "running" status so existing clients can cancel a queued run.
+  const submittedAt = performance.now();
+  project.status = "running";
+  (project.generation ||= {}).pending = request;
+  delete project.error;
+  if (ticket.waiting) {
+    const event: RunEvent = {
+      id: crypto.randomUUID(),
+      role: "system",
+      kind: "status",
+      text: "生成任务已排队，轮到后会自动开始，可随时取消。",
+      time: new Date().toISOString(),
+    };
+    project.events.push(event);
+    emit(event);
+  }
+  // Capture this task's profile at admission, not when a queued job finally starts.
+  const persisted = save(project);
+  void persisted.catch((error) => controller.abort(error));
+  return ticket.ready
+    .then(async (release) => {
+      try {
+        await persisted;
+        controller.signal.throwIfAborted();
+        return await execute(
+          project,
+          request,
+          save,
+          emit,
+          controller,
+          taskOptions,
+          Math.round(performance.now() - submittedAt),
+        );
+      } finally {
+        release();
+      }
+    })
+    .catch(async (error) => {
+      project.status = controller.signal.aborted ? "cancelled" : "error";
+      project.error = controller.signal.aborted
+        ? "已取消等待中的生成任务。"
+        : error instanceof Error
+          ? error.message
+          : "生成任务未能启动";
+      const event: RunEvent = {
+        id: crypto.randomUUID(),
+        role: "system",
+        kind: "error",
+        text: project.error,
+        time: new Date().toISOString(),
+      };
+      project.events.push(event);
+      emit(event);
+      await save(project);
+    })
+    .finally(() => activeRuns.delete(project.id));
 }
 async function execute(
   p: Project,
@@ -203,11 +264,13 @@ async function execute(
   emit: (e: RunEvent) => void,
   controller: AbortController,
   options: RunOptions,
+  queueWaitMs = 0,
 ) {
   const started = performance.now();
   const cfg = options.config || runtimeConfig();
   const state = (p.generation ||= {});
   const metrics = (state.metrics = {
+    queueWaitMs,
     elapsedMs: 0,
     modelCalls: 0,
     sourceReads: 0,
@@ -584,6 +647,7 @@ async function execute(
       const abort = () => agent.abort();
       controller.signal.addEventListener("abort", abort, { once: true });
       try {
+        controller.signal.throwIfAborted();
         await agent.prompt(input);
         controller.signal.throwIfAborted();
         if (agent.state.errorMessage) {
@@ -969,7 +1033,10 @@ async function execute(
           message: "Repaired in-page links: " + anchors.repaired.join("; "),
         });
       const overrides = kitLayoutOverrides(report.html);
-      if (overrides.length && (loadedSkills.designer || []).includes("designer-taste"))
+      if (
+        overrides.length &&
+        (loadedSkills.designer || []).includes("designer-taste")
+      )
         report.issues.push({
           severity: "warning",
           code: "kit_layout_override",

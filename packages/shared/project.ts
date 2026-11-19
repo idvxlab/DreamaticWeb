@@ -38,11 +38,7 @@ export interface Asset {
 }
 /** graphic: flat low-detail artwork (a logo, emblem or badge), shown at icon size only. */
 export type AssetFlag =
-  | "flat"
-  | "frame-only"
-  | "fragment"
-  | "page-background"
-  | "graphic";
+  "flat" | "frame-only" | "fragment" | "page-background" | "graphic";
 export interface Source {
   id: string;
   name: string;
@@ -91,6 +87,8 @@ export interface Version {
 }
 export interface Project {
   id: string;
+  /** Set by the authenticated server identity; never accepted from the request body. */
+  ownerId?: string;
   title: string;
   titleEdited?: boolean;
   messages: Message[];

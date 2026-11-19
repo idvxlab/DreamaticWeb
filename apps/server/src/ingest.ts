@@ -13,7 +13,9 @@ export async function ingest(
   name: string,
   projectId: string,
   previous: Source[] = [],
+  signal?: AbortSignal,
 ): Promise<Source> {
+  signal?.throwIfAborted();
   const fingerprint = sourceFingerprint(buffer);
   const format = path.extname(name).slice(1).toLowerCase();
   const cached = previous.find(
@@ -48,26 +50,34 @@ export async function ingest(
         resourceLimits: { maxOldGenerationSizeMb: 384 },
       },
     );
-    const timer = setTimeout(() => {
-      void worker.terminate();
-      reject(new Error("文档解析超过 45 秒，请拆分文件后重试"));
-    }, 45000);
+    let finished = false;
+    const finish = (error?: unknown, source?: Source) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      // A parser slot is released only after its worker has actually stopped.
+      void worker.terminate().then(() => {
+        if (error) reject(error);
+        else resolve(source!);
+      }, reject);
+    };
+    const timer = setTimeout(
+      () => finish(new Error("文档解析超过 45 秒，请拆分文件后重试")),
+      45000,
+    );
+    const abort = () => finish(signal?.reason || new Error("资料解析已取消"));
+    signal?.addEventListener("abort", abort, { once: true });
     worker.on("message", (result) => {
       if (result?.type !== "dreamatic:extraction") return;
-      clearTimeout(timer);
-      void worker.terminate();
-      if (result.error) reject(new Error(String(result.error)));
+      if (result.error) finish(new Error(String(result.error)));
       else if (!validSource(result.source))
-        reject(new Error("文档解析返回无效资料"));
-      else resolve(result.source);
+        finish(new Error("文档解析返回无效资料"));
+      else finish(undefined, result.source);
     });
-    worker.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
+    worker.once("error", (error) => finish(error));
     worker.once("exit", (code) => {
-      clearTimeout(timer);
-      reject(new Error(`解析进程已退出（${code}），未收到有效解析结果`));
+      finish(new Error(`解析进程已退出（${code}），未收到有效解析结果`));
     });
   });
 }

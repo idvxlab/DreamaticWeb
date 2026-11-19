@@ -184,9 +184,10 @@ export function publicProject(
       : undefined,
   };
 }
-export async function create() {
+export async function create(ownerId?: string) {
   const p: Project = {
     id: crypto.randomUUID(),
+    ...(ownerId ? { ownerId } : {}),
     title: "未命名网页",
     messages: [],
     sources: [],

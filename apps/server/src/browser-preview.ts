@@ -29,7 +29,23 @@ async function openSystemBrowser(url: string) {
   await execute(command, args, { timeout: 10000 });
 }
 /** Local application: the OS opener runs on the machine hosting this service. */
-export function registerBrowserPreview(app: Express, open = openSystemBrowser) {
+export function registerBrowserPreview(
+  app: Express,
+  open = openSystemBrowser,
+  options: { remote?: boolean } = {},
+) {
+  // Authenticated HTML preparation keeps asset credentials outside the script sandbox.
+  app.post("/api/projects/:id/preview-document", async (req, res) => {
+    const project = await get(req.params.id);
+    const { html } = z
+      .object({ html: z.string().min(20).max(2500000) })
+      .parse(req.body);
+    const result = await validatePage(project, html);
+    if (!result.valid)
+      return res.status(400).json({ error: "页面验证未通过，无法预览" });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ html: await inlinePageAssets(project.id, result.html) });
+  });
   app.post("/api/projects/:id/open", async (req, res) => {
     const project = await get(req.params.id);
     const { html } = z
@@ -62,7 +78,12 @@ export function registerBrowserPreview(app: Express, open = openSystemBrowser) {
     // longer matches /assets/: embed the pictures, as the exported file does.
     await writeFile(file, await inlinePageAssets(project.id, result.html), {
       flag: "wx",
+      mode: 0o600,
     });
+    if (options.remote) {
+      res.json({ url: `/browser-preview/${project.id}/${snapshot}` });
+      return;
+    }
     // Use the listening socket, never an untrusted Host header or user-supplied URL.
     const url = `http://127.0.0.1:${req.socket.localPort}/browser-preview/${project.id}/${snapshot}`;
     try {

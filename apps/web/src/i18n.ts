@@ -10,6 +10,13 @@ export function setLanguage(next: Language) {
   for (const listener of listeners) listener();
 }
 const english: Record<string, string> = {
+  当前用户: "Current user",
+  只修改自己的模型配置: "Changes apply only to your model settings",
+  由服务器管理: "Managed by the server",
+  "模型配置与项目按用户隔离，工作目录由服务器管理。":
+    "Model settings and projects are private to each user. The workspace is managed by the server.",
+  "个人 / 服务访问令牌": "Personal / service access token",
+  请允许弹出窗口后重试: "Allow pop-ups and try again",
   "原始文件 /": "Original files /",
   "Markdown 解析文档 /": "Parsed Markdown /",
   已选事实: "Selected facts",

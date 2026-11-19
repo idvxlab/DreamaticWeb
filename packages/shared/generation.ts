@@ -76,6 +76,7 @@ export interface GenerationState {
     skills?: { analyst: string[]; designer: string[] };
   };
   metrics?: {
+    queueWaitMs?: number;
     inputTokens?: number;
     outputTokens?: number;
     skillCharacters?: number;
